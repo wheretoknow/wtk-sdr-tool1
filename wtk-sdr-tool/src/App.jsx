@@ -567,6 +567,12 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                   <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
                 </div>
               )}
+              {isClosed && stage === "won" && (
+                <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                  <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>← Back to Demo</button>
+                  <button className="act-btn danger" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
+                </div>
+              )}
               {isClosed && stage === "dead" && (
                 <div className="card-actions" onClick={e=>e.stopPropagation()}>
                   <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
