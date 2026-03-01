@@ -1,29 +1,79 @@
-const SDR_SYSTEM_PROMPT = `You are an expert SDR research agent for Where to know Insights GmbH. Use web search to find CURRENT verified information.
+export const config = { runtime: 'edge' }
 
-CRITICAL: Return ONLY a raw JSON array. Start with [ end with ]. No markdown, no backticks, no explanation.
+const SDR_SYSTEM_PROMPT = `You are an expert SDR research agent for Where to know Insights GmbH, a Berlin-based hospitality intelligence platform.
 
-For each hotel search for:
-1. Current official website and brand/ownership
-2. Current GM name via hotel website and recent press releases
-3. Public email from hotel website contact page or TripAdvisor management responses
-4. GM LinkedIn profile URL (must be real, verified)
-5. Guest experience patterns from recent Google/TripAdvisor reviews
+Use web search to find CURRENT, VERIFIED information for each hotel. Search for:
+1. The hotel's official website to confirm it exists and get current brand/ownership
+2. Current GM name - search "[hotel name] general manager 2024 2025" and check hotel website, LinkedIn, press releases
+3. GM email - check hotel website contact page, TripAdvisor management responses, press releases
+4. GM LinkedIn - search "[GM full name] [hotel name] LinkedIn" and return the exact profile URL
+5. Guest experience patterns - search "[hotel name] reviews" on Google/TripAdvisor to find recurring themes
 
-Never invent emails or LinkedIn URLs. Use null if not found.
+CRITICAL RULES:
+- NEVER invent or guess email addresses or LinkedIn URLs
+- If you cannot find a verified email, set email to null
+- If you cannot find the actual LinkedIn profile URL, set linkedin to null
+- Only return information you actually found via search
+- GM names and emails change - always verify current status
 
-Each hotel JSON:
-{"hotel_name":"","brand":"","segment":"Luxury or Upper Scale","city":"","country":"","address":"","website":"","rooms":0,"current_provider":null,"gm_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"H or M or L","outreach_email_subject":"","outreach_email_body":"100-130 words, pattern-visibility framing, sign off: Where to know Insights | zishuo@wheretoknow.com","linkedin_dm":"under 280 chars","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":""}`
+Return ONLY a valid JSON array. No markdown, no backticks. Start with [ end with ].
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+Each hotel:
+{
+  "hotel_name": "Full current hotel name",
+  "brand": "Current brand/management company",
+  "segment": "Luxury or Upper Scale",
+  "city": "City",
+  "country": "Country", 
+  "address": "Street address",
+  "website": "Official website URL",
+  "rooms": 200,
+  "current_provider": "Known review tool or null",
+  "gm_name": "Verified current GM name or null",
+  "gm_title": "Exact title",
+  "email": "Verified public email or null",
+  "linkedin": "Verified LinkedIn profile URL or null",
+  "phone": "Hotel phone or null",
+  "email_source": "Where you found the email or null",
+  "contact_confidence": "H if GM+email verified / M if name only / L if uncertain",
+  "outreach_email_subject": "Compelling subject line",
+  "outreach_email_body": "100-130 words. Pattern-visibility framing. Reference specific guest experience pattern found in reviews. Sign off: Where to know Insights | zishuo@wheretoknow.com",
+  "linkedin_dm": "Under 280 characters",
+  "engagement_strategy": "DIRECT-TO-GM or THROUGH-REGIONAL-SPONSOR or STRATEGIC-HOLD or HOLD",
+  "strategy_reason": "1-2 sentences",
+  "research_notes": "What you found and any important context"
+}`
 
-  if (req.method === 'OPTIONS') return res.status(200).end()
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+export default async function handler(req) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    })
+  }
+
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 })
+  }
 
   try {
-    const { city, segment, count } = req.body
+    const { city, segment, count } = await req.json()
+
+    const prompt = `Research ${count} ${segment} hotels currently operating in ${city}.
+
+For each hotel, use web search to find:
+- Current hotel name and brand (some may have rebranded recently)
+- Current General Manager (search the hotel website and recent news)
+- Verified public email address
+- Actual LinkedIn profile URL for the GM
+- Guest experience patterns from recent reviews
+
+Avoid hotels already working with Where to know Insights: Kimpton Maa-Lai Bangkok, Anantara Bangkok.
+
+Return exactly ${count} hotels as a JSON array. Start with [ and end with ]. No other text.`
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -37,21 +87,36 @@ export default async function handler(req, res) {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 16000,
         system: SDR_SYSTEM_PROMPT,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 15 }],
-        messages: [{ role: 'user', content: `Research ${count} ${segment} hotels in ${city}. Use web search for each hotel. Return JSON array only, start with [` }],
+        tools: [{
+          type: 'web_search_20250305',
+          name: 'web_search',
+          max_uses: 20,
+        }],
+        messages: [{ role: 'user', content: prompt }],
       }),
     })
 
-    const data = await response.json()
-
     if (!response.ok) {
-      return res.status(500).json({ error: data.error?.message || 'API error' })
+      const err = await response.json()
+      return new Response(JSON.stringify({ error: err.error?.message || 'API error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      })
     }
 
-    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('')
-    res.status(200).json({ result: text })
+    const data = await response.json()
+    const text = data.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
 
+    return new Response(JSON.stringify({ result: text }), {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    })
   }
 }
