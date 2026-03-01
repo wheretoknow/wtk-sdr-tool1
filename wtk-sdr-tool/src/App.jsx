@@ -170,7 +170,8 @@ const css = `
   .field-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
   .field input, .field select { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text); outline: none; transition: all 0.15s; height: 34px; }
   .field input:focus, .field select:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-  .geo-row { display: flex; gap: 8px; align-items: center; }
+  .geo-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .geo-row select { height: 34px; vertical-align: middle; }
   .tier-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .tier-btn { padding: 6px 14px; border: 1px solid var(--border2); border-radius: 6px; background: var(--surface); font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; }
   .tier-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -326,7 +327,9 @@ const css = `
   .touch-hdr { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .touch-hdr .tag { background: var(--accent); color: white; font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
   .subject-line { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-  .email-body { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-size: 13px; line-height: 1.75; color: var(--text2); white-space: pre-wrap; }
+  .email-body { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-size: 13px; line-height: 1.75; color: var(--text2); }
+  .email-para { margin-bottom: 12px; }
+  .email-para:last-child { margin-bottom: 0; }
   .copy-btn { margin-top: 7px; padding: 4px 12px; border: 1px solid var(--border2); border-radius: 5px; background: var(--surface); font-size: 11px; font-weight: 600; color: var(--text3); cursor: pointer; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.15s; }
   .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
   .copy-btn.copied { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
@@ -360,12 +363,18 @@ function fmtDateShort(d) { if (!d) return null; return new Date(d).toLocaleDateS
 const TODAY = new Date();
 function isOverdue(d) { return d && new Date(d) < TODAY; }
 
+// Supabase returns done as JSON array or string - parse safely
+function parseDone(done) {
+  if (!done) return [];
+  if (Array.isArray(done)) return done;
+  try { return JSON.parse(done); } catch { return []; }
+}
+
 function getTouchState(t, tc) {
-  const done = t.done || [];
+  const done = parseDone(t.done);
   const stage = t.pipeline_stage || "active";
   if (stage === "dead" || stage === "won") return "t-skipped";
   if (done.includes(tc.n)) return "t-done";
-  // locked if previous not done
   const prevDone = tc.n === 1 || done.includes(tc.n - 1);
   if (!prevDone) return "t-locked";
   if (!t.d1) return tc.n === 1 ? "t-upcoming" : "t-locked";
@@ -375,7 +384,7 @@ function getTouchState(t, tc) {
 
 function getTouchDueStr(t, tc) {
   if (!t.d1) return null;
-  const done = t.done || [];
+  const done = parseDone(t.done);
   if (done.includes(tc.n)) return { str: fmtDate(t[`d${tc.n}`]), cls: "ok" };
   const due = addDays(new Date(t.d1), tc.day + 1);
   return isOverdue(due) ? { str: `Due ${fmtDate(due)}`, cls: "od" } : { str: `Due ${fmtDate(due)}`, cls: "up" };
@@ -383,14 +392,13 @@ function getTouchDueStr(t, tc) {
 
 function getPipelineStatus(t) {
   const stage = t.pipeline_stage || "active";
-  const done = t.done || [];
-  if (stage === "won") return { label: "🏆 Demo booked", cls: "ps-won" };
+  const done = parseDone(t.done);
+  if (stage === "won") return { label: "🏆 Won", cls: "ps-won" };
   if (stage === "dead") return { label: `✕ Closed${t.rejection_reason ? ` · ${t.rejection_reason.split("(")[0].trim()}` : ""}`, cls: "ps-dead" };
   if (stage === "reopen") return { label: "⟳ Re-engage in 3 months", cls: "ps-reopen" };
   if (stage === "demo") return { label: "📅 Demo scheduled", cls: "ps-demo" };
   if (done.length === 0) return { label: "Not started", cls: "ps-active" };
   if (done.length === 4) return { label: "Sequence complete", cls: "ps-active" };
-  // Check for overdue
   if (t.d1) {
     const nextTc = TOUCH_CONFIG.find(tc => !done.includes(tc.n));
     if (nextTc) {
@@ -411,6 +419,16 @@ function touch3Body(sel) {
 }
 function touch4Body(sel) {
   return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nI'll pause outreach after this — I don't want to keep landing in your inbox without purpose.\n\nIf the timing isn't right, I completely understand.\n\nOne thought to leave with you: the GMs who find this most useful tend to be the ones who engage before a score change, not after. If anything shifts — a competitive concern, a score movement, or a change in review volume — I'm easy to reach.\n\nWishing you and the team a strong season ahead.\n\nZishuo Wang | Where to know`;
+}
+
+function EmailBody({ text }) {
+  if (!text) return null;
+  const paras = text.split(/\n\n+/).filter(Boolean);
+  return (
+    <div className="email-body">
+      {paras.map((p, i) => <div key={i} className="email-para">{p}</div>)}
+    </div>
+  );
 }
 
 function ResearchNotes({ text }) {
@@ -627,7 +645,7 @@ export default function App() {
     const stage = t.pipeline_stage || "active";
     if (stage === "dead" || stage === "won") return;
     // Lock: can't click n if n-1 not done
-    const done = [...(t.done || [])];
+    const done = [...parseDone(t.done)];
     if (n > 1 && !done.includes(n - 1)) return;
     const i = done.indexOf(n);
     if (i < 0) done.push(n); else done.splice(i, 1);
@@ -713,16 +731,25 @@ export default function App() {
                 <div className="field">
                   <span className="field-label">Market</span>
                   <div className="geo-row">
-                    <select value={region} onChange={e=>{setRegion(e.target.value);const cs=Object.keys(GEO[e.target.value]||{});setCountry(cs[0]||"");setCityInput((GEO[e.target.value]||{})[cs[0]]?.[0]||"")}} style={{width:130}}>
-                      {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
-                    </select>
-                    <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} style={{width:130}}>
-                      {countries.map(c=><option key={c}>{c}</option>)}
-                    </select>
-                    <select value={cityInput} onChange={e=>setCityInput(e.target.value)} style={{width:130}}>
-                      {cities.map(c=><option key={c}>{c}</option>)}
-                      <option value="">All cities</option>
-                    </select>
+                    <div className="field" style={{gap:3}}>
+                      <span className="field-label">Region</span>
+                      <select value={region} onChange={e=>{setRegion(e.target.value);const cs=Object.keys(GEO[e.target.value]||{});setCountry(cs[0]||"");setCityInput((GEO[e.target.value]||{})[cs[0]]?.[0]||"")}} style={{width:110}}>
+                        {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div className="field" style={{gap:3}}>
+                      <span className="field-label">Country</span>
+                      <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} style={{width:130}}>
+                        {countries.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="field" style={{gap:3}}>
+                      <span className="field-label">City</span>
+                      <select value={cityInput} onChange={e=>setCityInput(e.target.value)} style={{width:120}}>
+                        <option value="">All cities</option>
+                        {cities.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <button style={{marginTop:4,background:"none",border:"none",fontSize:11,color:"var(--accent)",cursor:"pointer",textAlign:"left",padding:0}} onClick={()=>setMultiMode(true)}>+ Multi-market / custom</button>
                 </div>
@@ -781,7 +808,7 @@ export default function App() {
           ) : (
             <div className="table-card">
               <table>
-                <thead><tr><th>Hotel</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Rating</th><th>Provider</th><th>SDR</th><th>Added</th></tr></thead>
+                <thead><tr><th>Hotel</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Provider</th><th>SDR</th><th>Added</th></tr></thead>
                 <tbody>
                   {filteredP.map(p=>{
                     const trackRec = tracking.find(t=>t.prospect_id===p.id);
@@ -789,7 +816,7 @@ export default function App() {
                     return (
                     <tr key={p.id} onClick={()=>setSelected(p.id)}>
                       <td><div className="hotel-name">{p.hotel_name}</div><div className="hotel-sub">{p.city}, {p.country}</div></td>
-                      <td><div className="gm-name" style={{fontWeight:500,fontSize:12}}>{p.brand||"—"}</div></td>
+                      <td><div style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{p.brand||"—"}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name">{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title}</div></td>
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
@@ -797,7 +824,6 @@ export default function App() {
                       <td><span className="cell-muted">{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted">{p.restaurants||"—"}</span></td>
                       <td><span className="cell-muted">{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
-                      <td><span className="cell-muted">{p.rating||"—"}</span></td>
                       <td><span className="cell-muted">{p.current_provider || inferProvider(p.brand, p.hotel_name) || "—"}</span></td>
                       <td><div className="sdr-tag">{p.sdr||"—"}</div>{firstContact&&<div style={{fontSize:10,color:"var(--text3)"}}>contacted {fmtDate(firstContact)}</div>}</td>
                       <td><span className="cell-muted">{fmtDateShort(p.created_at)}</span></td>
@@ -861,24 +887,24 @@ export default function App() {
                 <div className="email-touch">
                   <div className="touch-hdr">Touch 1 <span className="tag">Day 1 · Initial</span></div>
                   <div className="subject-line">Subject: {sel.outreach_email_subject}</div>
-                  <div className="email-body">{sel.outreach_email_body}</div>
+                  <EmailBody text={sel.outreach_email_body} />
                   <button className={`copy-btn ${copied==="e1"?"copied":""}`} onClick={()=>copy(`Subject: ${sel.outreach_email_subject}\n\n${sel.outreach_email_body}`,"e1")}>{copied==="e1"?"✓ Copied":"Copy"}</button>
                 </div>
                 <div className="email-touch">
                   <div className="touch-hdr">Touch 2 <span className="tag">Day 4 · Reply in thread</span></div>
                   <div className="subject-line">Subject: Re: {sel.outreach_email_subject}</div>
-                  <div className="email-body">{touch2Body(sel)}</div>
+                  <EmailBody text={touch2Body(sel)} />
                   <button className={`copy-btn ${copied==="e2"?"copied":""}`} onClick={()=>copy(touch2Body(sel),"e2")}>{copied==="e2"?"✓ Copied":"Copy"}</button>
                 </div>
                 <div className="email-touch">
                   <div className="touch-hdr">Touch 3 <span className="tag">Day 9 · New angle</span></div>
-                  <div className="email-body">{touch3Body(sel)}</div>
+                  <EmailBody text={touch3Body(sel)} />
                   <button className={`copy-btn ${copied==="e3"?"copied":""}`} onClick={()=>copy(touch3Body(sel),"e3")}>{copied==="e3"?"✓ Copied":"Copy"}</button>
                 </div>
                 <div className="email-touch">
                   <div className="touch-hdr">Touch 4 <span className="tag">Day 16 · Close out</span></div>
                   <div className="subject-line">Subject: {sel.hotel_name} — closing the loop</div>
-                  <div className="email-body">{touch4Body(sel)}</div>
+                  <EmailBody text={touch4Body(sel)} />
                   <button className={`copy-btn ${copied==="e4"?"copied":""}`} onClick={()=>copy(touch4Body(sel),"e4")}>{copied==="e4"?"✓ Copied":"Copy"}</button>
                 </div>
               </div>
