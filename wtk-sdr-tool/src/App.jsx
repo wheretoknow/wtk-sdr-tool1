@@ -752,6 +752,8 @@ export default function App() {
     } catch(e) { console.error(e); }
     setEditingNote(null);
   }
+
+  async function runDeepResearch(prospectId) {
     const p = prospects.find(x => x.id === prospectId);
     if (!p) return;
     setDeepLoading(prospectId);
@@ -1105,3 +1107,4 @@ export default function App() {
     </>
   );
 
+}
