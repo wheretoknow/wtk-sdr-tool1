@@ -79,7 +79,6 @@ Return exactly ${count} hotels as a JSON array. No markdown, just JSON.`
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'interleaved-thinking-2025-01-14',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
