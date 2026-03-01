@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "wtk-sdr-tool/api/research.js": {
+    "api/research.js": {
       "maxDuration": 60
     }
   }
