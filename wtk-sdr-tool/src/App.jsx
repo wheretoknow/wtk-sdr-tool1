@@ -165,14 +165,14 @@ const css = `
 
   .cmd-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; box-shadow: var(--shadow-sm); }
   .cmd-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px; }
-  .cmd-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-  .cmd-row .field { justify-content: flex-end; }
+  .cmd-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .cmd-row > .field { display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
   .field input, .field select { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text); outline: none; transition: all 0.15s; height: 34px; }
   .field input:focus, .field select:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-  .geo-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .geo-row select { height: 34px; vertical-align: middle; }
+  .geo-row { display: flex; gap: 8px; align-items: flex-end; }
+  .geo-row .field { gap: 3px; min-width: 0; }
   .tier-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .tier-btn { padding: 6px 14px; border: 1px solid var(--border2); border-radius: 6px; background: var(--surface); font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; }
   .tier-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -346,6 +346,13 @@ function parseJSON(raw) {
 }
 
 
+
+const TOUCH_CONFIG = [
+  { n: 1, label: "Touch 1", day: 0, desc: "Initial outreach" },
+  { n: 2, label: "Touch 2", day: 4, desc: "Day 4 reply in thread" },
+  { n: 3, label: "Touch 3", day: 9, desc: "Day 9 new angle" },
+  { n: 4, label: "Touch 4", day: 16, desc: "Day 16 close out" },
+];
 
 const REJECTION_REASONS = [
   "Not interested (no reason given)",
@@ -644,7 +651,14 @@ export default function App() {
       if (!raw.length) throw new Error("No hotels returned. Try a different market.");
       const sdr = sdrName || "Unknown";
       const batch = `${market} · ${fmtDateShort(new Date())}`;
-      const enriched = raw.map(p => ({ ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr }));
+      const PROSPECT_FIELDS = ["id","hotel_name","brand","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
+      const enriched = raw.map(p => {
+        const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
+        // Only keep known DB columns to avoid schema cache errors
+        const safe = {};
+        PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
+        return safe;
+      });
       const newT = enriched.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
       await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched) });
       await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT) });
@@ -744,10 +758,9 @@ export default function App() {
             <div className="cmd-row">
               {/* Geography */}
               {!multiMode ? (
-                <div className="field">
-                  <span className="field-label">Market</span>
+                <div>
                   <div className="geo-row">
-                    <div className="field" style={{gap:3}}>
+                    <div className="field">
                       <span className="field-label">Region</span>
                       <select value={region} onChange={e=>{setRegion(e.target.value);const cs=Object.keys(GEO[e.target.value]||{});setCountry(cs[0]||"");setCityInput((GEO[e.target.value]||{})[cs[0]]?.[0]||"")}} style={{width:110}}>
                         {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
