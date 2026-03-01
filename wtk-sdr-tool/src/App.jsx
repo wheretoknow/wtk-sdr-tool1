@@ -163,10 +163,16 @@ const css = `
 
   .main { padding: 24px 28px; }
 
-  .cmd-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; box-shadow: var(--shadow-sm); }
-  .cmd-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px; }
-  .cmd-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
-  .cmd-row > .field { display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; }
+  .cmd-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
+  .cmd-inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .cmd-geo { display: flex; align-items: center; gap: 4px; }
+  .cmd-input { background: var(--bg); border: 1px solid var(--border2); border-radius: 5px; padding: 5px 8px; font-family: 'Inter',sans-serif; font-size: 12px; color: var(--text); outline: none; height: 30px; }
+  .cmd-input:focus { border-color: var(--accent); }
+  .cmd-link { background: none; border: none; font-size: 11px; color: var(--accent); cursor: pointer; padding: 0 2px; white-space: nowrap; }
+  .cmd-divider { width: 1px; height: 20px; background: var(--border2); margin: 0 2px; }
+  .tier-btn { padding: 4px 10px; border: 1px solid var(--border2); border-radius: 5px; background: var(--surface); font-family: 'Inter',sans-serif; font-size: 11px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; height: 30px; }
+  .tier-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tier-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
   .field input, .field select { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text); outline: none; transition: all 0.15s; height: 34px; }
@@ -239,6 +245,30 @@ const css = `
   .empty-sub { font-size: 13px; color: var(--text3); }
 
   /* Outreach tracker - pipeline view */
+  .view-toggle { display: flex; gap: 4px; }
+  .view-btn { padding: 4px 10px; border: 1px solid var(--border2); border-radius: 5px; background: var(--surface); font-size: 11px; color: var(--text2); cursor: pointer; }
+  .view-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .outreach-list { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .outreach-list th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  .outreach-list td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .outreach-list tr:hover td { background: var(--bg); }
+  .touch-mini { display: flex; gap: 3px; }
+  .touch-dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: var(--text3); flex-shrink: 0; }
+  .touch-dot.done { background: var(--green); border-color: var(--green); color: white; }
+  .touch-dot.overdue { border-color: var(--red); color: var(--red); }
+  .touch-dot.upcoming { border-color: var(--amber); color: var(--amber); }
+  .notes-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text3); font-style: italic; cursor: pointer; }
+  .notes-cell:hover { color: var(--accent); }
+  .note-input { width: 100%; font-size: 12px; border: 1px solid var(--accent); border-radius: 4px; padding: 4px 6px; font-family: 'Inter',sans-serif; resize: vertical; min-height: 48px; box-sizing: border-box; }
+  .del-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 2px 5px; border-radius: 3px; line-height: 1; }
+  .del-btn:hover { color: var(--red); background: #fee2e2; }
+  .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .confirm-box { background: white; border-radius: 10px; padding: 24px 28px; max-width: 380px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }
+  .confirm-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .confirm-sub { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; }
+  .confirm-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .confirm-cancel { padding: 7px 16px; border: 1px solid var(--border2); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 13px; }
+  .confirm-del { padding: 7px 16px; border-radius: 6px; background: var(--red); color: white; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
   .pipeline-legend { font-size: 12px; color: var(--text3); margin-bottom: 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .legend-item { display: flex; align-items: center; gap: 5px; }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -507,13 +537,26 @@ class ErrorBoundary extends Component {
   }
 }
 
-function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence }) {
+function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote }) {
   if (filteredT.length === 0) {
     return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
   const stageGroups = { all: filteredT.length, active: 0, demo: 0, won: 0, dead: 0 };
   filteredT.forEach(t => { const s = t.pipeline_stage || "active"; if (stageGroups[s] !== undefined) stageGroups[s]++; else stageGroups.active++; });
   const visibleT = stageFilter === "all" ? filteredT : filteredT.filter(t => (t.pipeline_stage || "active") === stageFilter);
+
+  function MiniTouches({ t }) {
+    return (
+      <div className="touch-mini">
+        {TOUCH_CONFIG.map(tc => {
+          const ts = getTouchState(t, tc);
+          const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
+          return <div key={tc.n} className={`touch-dot ${cls}`}>{ts === "t-done" ? "✓" : tc.n}</div>;
+        })}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="pipeline-legend">
@@ -522,6 +565,10 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         <span className="legend-item"><span className="legend-dot" style={{background:"var(--amber)"}}/>Due soon</span>
         <span className="legend-item"><span className="legend-dot" style={{background:"var(--green)"}}/>Sent</span>
         <span className="legend-item"><span className="legend-dot" style={{background:"var(--text3)"}}/>Locked</span>
+        <div style={{marginLeft:"auto"}} className="view-toggle">
+          <button className={`view-btn ${outreachView==="card"?"active":""}`} onClick={()=>setOutreachView("card")}>⊞ Cards</button>
+          <button className={`view-btn ${outreachView==="list"?"active":""}`} onClick={()=>setOutreachView("list")}>☰ List</button>
+        </div>
       </div>
       <div className="stage-tabs">
         {[["all","All"],["active","Active"],["demo","Demo"],["won","Won"],["dead","Closed"]].map(([v,l])=>(
@@ -530,67 +577,130 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
           </button>
         ))}
       </div>
-      <div className="cards-grid">
-        {visibleT.map(t => {
-          const stage = t.pipeline_stage || "active";
-          const status = getPipelineStatus(t);
-          const isClosed = stage === "dead" || stage === "won";
-          return (
-            <div key={t.id} className={`track-card ${isClosed?"closed":""}`} onClick={()=>setSelected(t.prospect_id)}>
-              <div className="track-hotel">{t.hotel}</div>
-              <div className="track-gm">{t.gm||"—"}{t.d1?` · First contact: ${fmtDate(t.d1)}`:""}</div>
-              <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
-                {TOUCH_CONFIG.map(tc => {
-                  const tstate = getTouchState(t, tc);
-                  const dateInfo = getTouchDueStr(t, tc);
-                  return (
-                    <div key={tc.n} className={`touch-node ${tstate==="t-done"?"t-done":""}`}>
-                      <div className={`touch-circle ${tstate}`}
-                        onClick={(e)=>{ if(tstate!=="t-locked" && !isClosed) touchToggle(t.id,tc.n,e); else e.stopPropagation(); }}
-                        title={tstate==="t-locked"?"Complete previous touch first":tc.desc}>
-                        {tstate==="t-done" ? "✓" : tc.n}
+
+      {outreachView === "list" ? (
+        <div style={{overflowX:"auto"}}>
+          <table className="outreach-list">
+            <thead><tr>
+              <th>Hotel</th><th>GM</th><th>Stage</th><th>Touches</th><th>Status</th><th>Notes</th><th>SDR</th><th></th>
+            </tr></thead>
+            <tbody>
+              {visibleT.map(t => {
+                const stage = t.pipeline_stage || "active";
+                const status = getPipelineStatus(t);
+                return (
+                  <tr key={t.id}>
+                    <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)"}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+                    <td style={{color:"var(--text2)"}}>{t.gm||"—"}</td>
+                    <td><span className={`pipeline-status ${status.cls}`} style={{fontSize:10}}>{stage}</span></td>
+                    <td onClick={e=>e.stopPropagation()}><MiniTouches t={t}/></td>
+                    <td style={{color:"var(--text3)",fontSize:11,whiteSpace:"nowrap"}}>{status.label}</td>
+                    <td onClick={e=>e.stopPropagation()}>
+                      {editingNote === t.id ? (
+                        <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
+                          <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus/>
+                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                            <button className="act-btn success" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>saveNote(t.id)}>Save</button>
+                            <button className="act-btn" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>setEditingNote(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="notes-cell" title={t.sales_notes||"Click to add note"} onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
+                          {t.sales_notes || <span style={{color:"var(--border2)"}}>+ add note</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td><span className="sdr-tag">{t.sdr||"—"}</span></td>
+                    <td onClick={e=>e.stopPropagation()}>
+                      <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)} title="Delete">🗑</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="cards-grid">
+          {visibleT.map(t => {
+            const stage = t.pipeline_stage || "active";
+            const status = getPipelineStatus(t);
+            const isClosed = stage === "dead" || stage === "won";
+            return (
+              <div key={t.id} className={`track-card ${isClosed?"closed":""}`} onClick={()=>setSelected(t.prospect_id)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div className="track-hotel">{t.hotel}</div>
+                  <button className="del-btn" onClick={e=>{e.stopPropagation();setDeleteConfirm(t.prospect_id);}}>🗑</button>
+                </div>
+                <div className="track-gm">{t.gm||"—"}{t.d1?` · First contact: ${fmtDate(t.d1)}`:""}</div>
+                <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
+                  {TOUCH_CONFIG.map(tc => {
+                    const tstate = getTouchState(t, tc);
+                    const dateInfo = getTouchDueStr(t, tc);
+                    return (
+                      <div key={tc.n} className={`touch-node ${tstate==="t-done"?"t-done":""}`}>
+                        <div className={`touch-circle ${tstate}`}
+                          onClick={(e)=>{ if(tstate!=="t-locked" && !isClosed) touchToggle(t.id,tc.n,e); else e.stopPropagation(); }}
+                          title={tstate==="t-locked"?"Complete previous touch first":tc.desc}>
+                          {tstate==="t-done" ? "✓" : tc.n}
+                        </div>
+                        <div className="touch-lbl">{tc.label}</div>
+                        {dateInfo && <div className={`touch-date ${dateInfo.cls}`}>{dateInfo.str}</div>}
                       </div>
-                      <div className="touch-lbl">{tc.label}</div>
-                      {dateInfo && <div className={`touch-date ${dateInfo.cls}`}>{dateInfo.str}</div>}
+                    );
+                  })}
+                </div>
+                {/* Sales note in card */}
+                <div onClick={e=>e.stopPropagation()} style={{marginBottom:8}}>
+                  {editingNote === t.id ? (
+                    <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
+                      <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Sales notes..." autoFocus/>
+                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                        <button className="act-btn success" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>saveNote(t.id)}>Save</button>
+                        <button className="act-btn" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>setEditingNote(null)}>✕</button>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              {!isClosed && (
-                <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                  {stage !== "demo" && stage !== "won" && (
-                    <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo booked</button>
+                  ) : (
+                    <div style={{fontSize:11,color:t.sales_notes?"var(--text2)":"var(--border2)",cursor:"pointer",fontStyle:t.sales_notes?"normal":"italic"}} onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
+                      {t.sales_notes || "+ add sales note"}
+                    </div>
                   )}
-                  {stage === "demo" && (
-                    <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Mark Won</button>
-                  )}
-                  <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
                 </div>
-              )}
-              {isClosed && stage === "won" && (
-                <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                  <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>← Back to Demo</button>
-                  <button className="act-btn danger" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
+                {!isClosed && (
+                  <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                    {stage !== "demo" && stage !== "won" && (
+                      <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo booked</button>
+                    )}
+                    {stage === "demo" && (
+                      <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Mark Won</button>
+                    )}
+                    <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
+                  </div>
+                )}
+                {isClosed && stage === "won" && (
+                  <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                    <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>← Back to Demo</button>
+                    <button className="act-btn danger" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
+                  </div>
+                )}
+                {isClosed && stage === "dead" && (
+                  <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                    <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
+                    <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"reopen"},e)}>⏰ Re-engage in 3 months</button>
+                  </div>
+                )}
+                <div className="card-footer">
+                  <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
+                  {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
                 </div>
-              )}
-              {isClosed && stage === "dead" && (
-                <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                  <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
-                  <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"reopen"},e)}>⏰ Re-engage in 3 months</button>
-                </div>
-              )}
-              <div className="card-footer">
-                <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
-                {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
-
 export default function App() {
   const [tab, setTab] = useState("hotels");
   // Geo state
@@ -618,6 +728,45 @@ export default function App() {
   const [tracking, setTracking] = useState([]);
   const [rejectModal, setRejectModal] = useState(null); // { tid, stage: 'dead'|'reopen' }
   const [rejectReason, setRejectReason] = useState("");
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [outreachView, setOutreachView] = useState("card");
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteText, setNoteText] = useState("");
+
+  async function deleteProspect(pid) {
+    try {
+      await sbFetch(`/tracking?prospect_id=eq.${pid}`, { method: "DELETE", prefer: "return=minimal" });
+      await sbFetch(`/prospects?id=eq.${pid}`, { method: "DELETE", prefer: "return=minimal" });
+      setProspects(prev => prev.filter(p => p.id !== pid));
+      setTracking(prev => prev.filter(t => t.prospect_id !== pid));
+      if (selected === pid) setSelected(null);
+    } catch(e) { alert("Delete failed: " + e.message); }
+    setDeleteConfirm(null);
+  }
+
+  async function saveNote(tid) {
+    try {
+      await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ sales_notes: noteText }) });
+      setTracking(prev => prev.map(t => t.id === tid ? { ...t, sales_notes: noteText } : t));
+    } catch(e) { console.error(e); }
+    setEditingNote(null);
+  }
+    const p = prospects.find(x => x.id === prospectId);
+    if (!p) return;
+    setDeepLoading(prospectId);
+    try {
+      const res = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "deep", hotel_name: `${p.hotel_name}, ${p.city}, ${p.country}` }) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const upd = JSON.parse(data.result);
+      const safe = {};
+      ["adr_usd","rating","review_count","research_notes"].forEach(k => { if (upd[k] != null) safe[k] = upd[k]; });
+      setProspects(prev => prev.map(x => x.id === prospectId ? { ...x, ...safe } : x));
+      await sbFetch(`/prospects?id=eq.${prospectId}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(safe) });
+    } catch(e) { alert("Deep research failed: " + e.message); }
+    setDeepLoading(false);
+  }
 
   useEffect(() => {
     const n = localStorage.getItem("wtk_sdr_name"); if (n) setSdrName(n);
@@ -657,7 +806,7 @@ export default function App() {
       if (!raw.length) throw new Error("No hotels returned. Try a different market.");
       const sdr = sdrName || "Unknown";
       const batch = `${market} · ${fmtDateShort(new Date())}`;
-      const PROSPECT_FIELDS = ["id","hotel_name","brand","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
+      const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
       const enriched = raw.map(p => {
         const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
         // Only keep known DB columns to avoid schema cache errors
@@ -760,70 +909,42 @@ export default function App() {
 
         <div className="main">
           <div className="cmd-panel">
-            <div className="cmd-title">Research Command</div>
-            <div className="cmd-row">
-              {/* Geography */}
+            <div className="cmd-inline">
               {!multiMode ? (
-                <div>
-                  <div className="geo-row">
-                    <div className="field">
-                      <span className="field-label">Region</span>
-                      <select value={region} onChange={e=>{setRegion(e.target.value);const cs=Object.keys(GEO[e.target.value]||{});setCountry(cs[0]||"");setCityInput((GEO[e.target.value]||{})[cs[0]]?.[0]||"")}} style={{width:110}}>
-                        {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
-                      </select>
-                    </div>
-                    <div className="field" style={{gap:3}}>
-                      <span className="field-label">Country</span>
-                      <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} style={{width:130}}>
-                        {countries.map(c=><option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div className="field" style={{gap:3}}>
-                      <span className="field-label">City</span>
-                      <select value={cityInput} onChange={e=>setCityInput(e.target.value)} style={{width:120}}>
-                        <option value="">All cities</option>
-                        {cities.map(c=><option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <button style={{marginTop:4,background:"none",border:"none",fontSize:11,color:"var(--accent)",cursor:"pointer",textAlign:"left",padding:0}} onClick={()=>setMultiMode(true)}>+ Multi-market / custom</button>
+                <div className="cmd-geo">
+                  <select value={region} onChange={e=>{setRegion(e.target.value);const cs=Object.keys(GEO[e.target.value]||{});setCountry(cs[0]||"");setCityInput((GEO[e.target.value]||{})[cs[0]]?.[0]||"")}} title="Region" className="cmd-input">
+                    {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
+                  </select>
+                  <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} title="Country" className="cmd-input">
+                    {countries.map(c=><option key={c}>{c}</option>)}
+                  </select>
+                  <select value={cityInput} onChange={e=>setCityInput(e.target.value)} title="City" className="cmd-input">
+                    <option value="">All cities</option>
+                    {cities.map(c=><option key={c}>{c}</option>)}
+                  </select>
+                  <button className="cmd-link" onClick={()=>setMultiMode(true)}>custom ▾</button>
                 </div>
               ) : (
-                <div className="field">
-                  <span className="field-label">Custom Market (multi-country OK)</span>
-                  <input value={customMarket} onChange={e=>setCustomMarket(e.target.value)} placeholder="e.g. Europe, or China + Japan, or UK" style={{width:320}} />
-                  <button style={{marginTop:4,background:"none",border:"none",fontSize:11,color:"var(--text3)",cursor:"pointer",textAlign:"left",padding:0}} onClick={()=>setMultiMode(false)}>← Use region/country picker</button>
+                <div className="cmd-geo">
+                  <input value={customMarket} onChange={e=>setCustomMarket(e.target.value)} placeholder="e.g. Europe, China + Japan" className="cmd-input" style={{width:200}} />
+                  <button className="cmd-link" onClick={()=>setMultiMode(false)}>← picker</button>
                 </div>
               )}
-              <div className="field">
-                <span className="field-label">Brand (optional)</span>
-                <input value={brand} onChange={e=>setBrand(e.target.value)} placeholder="IHG, Kempinski..." style={{width:150}} />
-              </div>
-              <div className="field">
-                <span className="field-label">Count (max 50)</span>
-                <input type="number" min="1" max="50" value={count} onChange={e=>setCount(e.target.value)} style={{width:80}} />
-              </div>
-              <div className="field">
-                <span className="field-label">Your Name (SDR)</span>
-                <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="e.g. Vincent" style={{width:120}} />
-              </div>
-              <button className="run-btn" onClick={run} disabled={running} style={{marginTop:20}}>
-                {running ? <><div className="spinner"/>Researching...</> : "▶ Run Research"}
+              <div className="cmd-divider"/>
+              {TIER_OPTIONS.map(t=>(
+                <button key={t.value} className={`tier-btn ${tier===t.value?"active":""}`} onClick={()=>setTier(t.value)} title={t.desc}>{t.label}</button>
+              ))}
+              <div className="cmd-divider"/>
+              <input value={brand} onChange={e=>setBrand(e.target.value)} placeholder="Brand" className="cmd-input" style={{width:100}} />
+              <input type="number" min="1" max="50" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count" />
+              <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="Your name" className="cmd-input" style={{width:90}} />
+              <button className="run-btn" onClick={run} disabled={running}>
+                {running ? <><div className="spinner"/>Searching...</> : "▶ Run"}
               </button>
             </div>
-
-            {/* Tier selector */}
-            <div style={{marginTop:14}}>
-              <div className="field-label" style={{marginBottom:8}}>Hotel Tier</div>
-              <div className="tier-grid">
-                {TIER_OPTIONS.map(t => <button key={t.value} className={`tier-btn ${tier===t.value?"active":""}`} onClick={()=>setTier(t.value)}>{t.label}</button>)}
-              </div>
-              {selectedTierObj && <div className="tier-desc">{selectedTierObj.desc}</div>}
-            </div>
-
-            {running && <div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{width:`${progress}%`}}/></div><div className="progress-text">› {log}</div></div>}
-            {!running && log && !error && (<div><div className="success-msg">✓ {log}</div><div className="db-note"><div className="db-dot"/>Saved to shared database — visible to all team members</div></div>)}
-            {error && <div className="error-msg">⚠ {error}</div>}
+            {running && <div className="progress-wrap" style={{marginTop:8}}><div className="progress-bar"><div className="progress-fill" style={{width:`${progress}%`}}/></div><div className="progress-text">› {log}</div></div>}
+            {!running && log && !error && <div className="success-msg" style={{marginTop:6}}>✓ {log}</div>}
+            {error && <div className="error-msg" style={{marginTop:6}}>⚠ {error}</div>}
           </div>
 
           <div className="toolbar">
@@ -843,15 +964,18 @@ export default function App() {
           ) : (
             <div className="table-card">
               <table>
-                <thead><tr><th>Hotel</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Provider</th><th>SDR</th><th>Added</th></tr></thead>
+                <thead><tr><th>Hotel</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Provider</th><th>SDR</th><th>Added</th></tr></thead>
                 <tbody>
                   {filteredP.map(p=>{
                     const trackRec = tracking.find(t=>t.prospect_id===p.id);
                     const firstContact = trackRec?.d1;
+                    const grp = p.hotel_group || p.brand || "Independent";
+                    const isIndependent = !p.hotel_group && !p.brand;
                     return (
                     <tr key={p.id} onClick={()=>setSelected(p.id)}>
                       <td><div className="hotel-name">{p.hotel_name}</div><div className="hotel-sub">{p.city}, {p.country}</div></td>
-                      <td><div style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{p.brand||"—"}</div></td>
+                      <td><div style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{isIndependent?"Independent":p.brand||"—"}</div></td>
+                      <td><div style={{fontSize:12,color:"var(--text3)"}}>{isIndependent?"Independent":grp===p.brand?"—":grp}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name">{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title}</div></td>
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
@@ -869,10 +993,22 @@ export default function App() {
             </div>
           ))}
 
-          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} /></ErrorBoundary>}
+          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} outreachView={outreachView} setOutreachView={setOutreachView} setDeleteConfirm={setDeleteConfirm} editingNote={editingNote} setEditingNote={setEditingNote} noteText={noteText} setNoteText={setNoteText} saveNote={saveNote} /></ErrorBoundary>}
         </div>
       </div>
 
+      {deleteConfirm && (
+        <div className="confirm-overlay" onClick={()=>setDeleteConfirm(null)}>
+          <div className="confirm-box" onClick={e=>e.stopPropagation()}>
+            <div className="confirm-title">Delete this prospect?</div>
+            <div className="confirm-sub">This will permanently remove the hotel and all outreach history from the shared database. This action cannot be undone.</div>
+            <div className="confirm-btns">
+              <button className="confirm-cancel" onClick={()=>setDeleteConfirm(null)}>Cancel</button>
+              <button className="confirm-del" onClick={()=>deleteProspect(deleteConfirm)}>Delete permanently</button>
+            </div>
+          </div>
+        </div>
+      )}
       {rejectModal && (
         <div className="modal-overlay" onClick={()=>setRejectModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -897,9 +1033,14 @@ export default function App() {
           <div className="drawer">
             <button className="drawer-close" onClick={()=>setSelected(null)}>✕</button>
             <div className="drawer-hotel">{sel.hotel_name}</div>
-            <div className="drawer-meta">{sel.brand} · {sel.city}, {sel.country} · Added by {sel.sdr} · {fmtDateShort(sel.created_at)}</div>
+            <div className="drawer-meta">{sel.brand}{sel.hotel_group && sel.hotel_group !== sel.brand ? ` · ${sel.hotel_group}` : ""} · {sel.city}, {sel.country} · Added by {sel.sdr} · {fmtDateShort(sel.created_at)}</div>
             <div className="d-sec">
-              <div className="d-sec-title">Property</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <span className="d-sec-title" style={{margin:0}}>Property</span>
+                <button className="act-btn" style={{fontSize:11}} onClick={()=>runDeepResearch(sel.id)} disabled={deepLoading===sel.id}>
+                  {deepLoading===sel.id ? "🔍 Researching..." : "🔍 Deep Research"}
+                </button>
+              </div>
               <div className="d-row"><span className="d-key">Address</span><span className="d-val">{sel.address||"—"}</span></div>
               <div className="d-row"><span className="d-key">Rooms</span><span className="d-val">{sel.rooms||"—"}</span></div>
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val">{sel.restaurants||"—"}</span></div>
@@ -916,12 +1057,12 @@ export default function App() {
               <div className="d-row"><span className="d-key">LinkedIn</span><span className="d-val">{sel.linkedin?<a className="email-link" href={sel.linkedin} target="_blank" rel="noreferrer">↗ View Profile</a>:<span className="cell-muted">Not found</span>}</span></div>
               <div className="d-row"><span className="d-key">Confidence</span><span className="d-val"><span className={`badge badge-${(sel.contact_confidence||"l").toLowerCase()}`}>{sel.contact_confidence}</span></span></div>
             </div>
-            {sel.outreach_email_subject && (
+            {(sel.outreach_email_subject || sel.outreach_email_body) && (
               <div className="d-sec">
                 <div className="d-sec-title">4-Touch Email Sequence</div>
                 <div className="email-touch">
                   <div className="touch-hdr">Touch 1 <span className="tag">Day 1 · Initial</span></div>
-                  <div className="subject-line">Subject: {sel.outreach_email_subject}</div>
+                  <div className="subject-line">Subject: {sel.outreach_email_subject||"—"}</div>
                   <EmailBody text={sel.outreach_email_body} />
                   <button className={`copy-btn ${copied==="e1"?"copied":""}`} onClick={()=>copy(`Subject: ${sel.outreach_email_subject}\n\n${sel.outreach_email_body}`,"e1")}>{copied==="e1"?"✓ Copied":"Copy"}</button>
                 </div>
@@ -958,8 +1099,9 @@ export default function App() {
               </div>
             )}
           </div>
+        </div>
         </>
       )}
     </>
   );
-}
+
