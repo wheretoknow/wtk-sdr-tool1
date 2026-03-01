@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component } from "react";
 
 const SUPABASE_URL = "https://rzksmbzlmzvodywfasht.supabase.co";
 const SUPABASE_KEY = "sb_publishable_PT6OfaeYiOb_lM5sTP30Lw_XJsir-4E";
@@ -166,6 +166,7 @@ const css = `
   .cmd-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; box-shadow: var(--shadow-sm); }
   .cmd-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px; }
   .cmd-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .cmd-row .field { justify-content: flex-end; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
   .field input, .field select { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text); outline: none; transition: all 0.15s; height: 34px; }
@@ -482,6 +483,21 @@ function TierBadge({ tier }) {
   const t = (tier || "").toLowerCase();
   const cls = t.includes("lux") ? "badge-luxury" : t.includes("prem") ? "badge-premium" : t.includes("life") ? "badge-lifestyle" : "badge-economy";
   return <span className={`badge ${cls}`}>{tier || "—"}</span>;
+}
+
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return <div style={{padding:24,color:"var(--red)",fontSize:13}}>
+        <strong>Error loading this section:</strong> {this.state.error.message}
+        <div style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>Check browser console for details.</div>
+      </div>;
+    }
+    return this.props.children;
+  }
 }
 
 function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence }) {
@@ -834,7 +850,7 @@ export default function App() {
             </div>
           ))}
 
-          {tab==="outreach" && <OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} />}
+          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} /></ErrorBoundary>}
         </div>
       </div>
 
