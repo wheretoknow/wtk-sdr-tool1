@@ -14,7 +14,6 @@ CRITICAL RULES:
 - If you cannot find a verified email, set email to null
 - If you cannot find the actual LinkedIn profile URL, set linkedin to null
 - Only return information you actually found via search
-- GM names and emails change - always verify current status
 
 Return ONLY a valid JSON array. No markdown, no backticks. Start with [ end with ].
 
@@ -24,7 +23,7 @@ Each hotel:
   "brand": "Current brand/management company",
   "segment": "Luxury or Upper Scale",
   "city": "City",
-  "country": "Country", 
+  "country": "Country",
   "address": "Street address",
   "website": "Official website URL",
   "rooms": 200,
@@ -37,11 +36,11 @@ Each hotel:
   "email_source": "Where you found the email or null",
   "contact_confidence": "H if GM+email verified / M if name only / L if uncertain",
   "outreach_email_subject": "Compelling subject line",
-  "outreach_email_body": "100-130 words. Pattern-visibility framing. Reference specific guest experience pattern found in reviews. Sign off: Where to know Insights | zishuo@wheretoknow.com",
+  "outreach_email_body": "100-130 words. Pattern-visibility framing. Sign off: Where to know Insights | zishuo@wheretoknow.com",
   "linkedin_dm": "Under 280 characters",
   "engagement_strategy": "DIRECT-TO-GM or THROUGH-REGIONAL-SPONSOR or STRATEGIC-HOLD or HOLD",
   "strategy_reason": "1-2 sentences",
-  "research_notes": "What you found and any important context"
+  "research_notes": "What you found and context"
 }`
 
 export default async function handler(req) {
@@ -62,18 +61,7 @@ export default async function handler(req) {
   try {
     const { city, segment, count } = await req.json()
 
-    const prompt = `Research ${count} ${segment} hotels currently operating in ${city}.
-
-For each hotel, use web search to find:
-- Current hotel name and brand (some may have rebranded recently)
-- Current General Manager (search the hotel website and recent news)
-- Verified public email address
-- Actual LinkedIn profile URL for the GM
-- Guest experience patterns from recent reviews
-
-Avoid hotels already working with Where to know Insights: Kimpton Maa-Lai Bangkok, Anantara Bangkok.
-
-Return exactly ${count} hotels as a JSON array. Start with [ and end with ]. No other text.`
+    const prompt = `Research ${count} ${segment} hotels currently operating in ${city}. Use web search to find current GM, verified email, actual LinkedIn URL, and guest experience patterns. Return exactly ${count} hotels as a JSON array. Start with [ and end with ]. No other text.`
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -87,11 +75,7 @@ Return exactly ${count} hotels as a JSON array. Start with [ and end with ]. No 
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 16000,
         system: SDR_SYSTEM_PROMPT,
-        tools: [{
-          type: 'web_search_20250305',
-          name: 'web_search',
-          max_uses: 20,
-        }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 20 }],
         messages: [{ role: 'user', content: prompt }],
       }),
     })
@@ -105,10 +89,7 @@ Return exactly ${count} hotels as a JSON array. Start with [ and end with ]. No 
     }
 
     const data = await response.json()
-    const text = data.content
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('')
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('')
 
     return new Response(JSON.stringify({ result: text }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
