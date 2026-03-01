@@ -1,45 +1,36 @@
 export const config = { runtime: 'edge' }
 
-const SDR_SYSTEM_PROMPT = `You are an expert SDR research agent for Where to know Insights GmbH, a Berlin-based hospitality intelligence platform. Your task is to research luxury and upper-scale hotels and produce structured prospect data.
+const SDR_SYSTEM_PROMPT = `You are an expert SDR research agent for Where to know Insights GmbH, a Berlin-based hospitality intelligence platform. You have extensive knowledge of luxury and upper-scale hotels worldwide including their GMs, contact details, and review patterns.
 
-RESEARCH INSTRUCTIONS:
-For each hotel, find and return EXACTLY this JSON structure (no markdown, no preamble, just valid JSON array):
+Return ONLY a valid JSON array. No markdown, no backticks, no explanation. Just the raw JSON array starting with [ and ending with ].
 
-[
-  {
-    "hotel_name": "Full hotel name",
-    "brand": "Brand name (e.g. Marriott, IHG, Hilton, independent)",
-    "segment": "Luxury | Upper Scale",
-    "city": "City",
-    "country": "Country",
-    "address": "Street address if known",
-    "website": "Official website URL",
-    "rooms": "Number of rooms if known, else null",
-    "current_provider": "Known review/feedback tool (TrustYou, Medallia, ReviewPro, etc.) or null",
-    "gm_name": "General Manager full name or null",
-    "gm_title": "Exact title (e.g. General Manager, Managing Director)",
-    "email": "Public email address if found, else null",
-    "linkedin": "LinkedIn profile URL if found, else null",
-    "phone": "Public phone if found, else null",
-    "email_source": "Where email was found or null",
-    "contact_confidence": "H (confirmed GM + email) | M (name confirmed, no email) | L (uncertain)",
-    "outreach_email_subject": "One compelling subject line for cold outreach",
-    "outreach_email_body": "Cold email body 100-130 words. Use pattern-visibility framing. Reference a guest experience signal. Never accusatory. Sign off as Where to know Insights team.",
-    "linkedin_dm": "LinkedIn DM under 280 characters",
-    "engagement_strategy": "DIRECT-TO-GM | THROUGH-REGIONAL-SPONSOR | STRATEGIC-HOLD | HOLD",
-    "strategy_reason": "1-2 sentence justification",
-    "research_notes": "Any useful context"
-  }
-]
+For each hotel use this exact structure:
+{
+  "hotel_name": "Full hotel name",
+  "brand": "Brand name",
+  "segment": "Luxury or Upper Scale",
+  "city": "City",
+  "country": "Country",
+  "address": "Street address",
+  "website": "Official website URL",
+  "rooms": 200,
+  "current_provider": "TrustYou or Medallia or ReviewPro or null",
+  "gm_name": "Full name or null",
+  "gm_title": "General Manager",
+  "email": "email@hotel.com or null",
+  "linkedin": "LinkedIn URL or null",
+  "phone": "phone number or null",
+  "email_source": "hotel website or null",
+  "contact_confidence": "H or M or L",
+  "outreach_email_subject": "compelling subject line",
+  "outreach_email_body": "Cold email 100-130 words using pattern-visibility framing. Reference a specific guest experience pattern. Sign off: Where to know Insights | zishuo@wheretoknow.com",
+  "linkedin_dm": "DM under 280 characters",
+  "engagement_strategy": "DIRECT-TO-GM",
+  "strategy_reason": "Brief justification",
+  "research_notes": "Useful context"
+}
 
-TONE RULES (mandatory):
-- Use "pattern visibility" not "you failed" framing
-- Approved phrases: "recurring friction point", "handover consistency gap", "peak-hour capacity signal", "recognition protocol drift", "service visibility gap"
-- Avoid: "guests complained", "negative reviews", "your team failed"
-- Position WTK as complementary to existing tools, not a replacement
-- Frame as: "market radar vs internal mirror"
-
-Return ONLY the JSON array. No explanation text before or after.`
+TONE: Use pattern-visibility framing only. Never say guests complained or negative reviews.`
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
@@ -59,19 +50,7 @@ export default async function handler(req) {
   try {
     const { city, segment, count } = await req.json()
 
-    const prompt = `Research ${count} ${segment} hotels currently operating in ${city}. For each hotel:
-1. Use web search to find the hotel's official website, GM name, and public email
-2. Check LinkedIn for the GM profile  
-3. Look at Google/TripAdvisor reviews to identify a guest experience pattern signal
-4. Write a personalised cold outreach email using the pattern signal
-
-Focus on properties that:
-- Are currently open and operating
-- Have at least 80 rooms
-- Are positioned as ${segment}
-- Have NOT recently signed with Where to know Insights (avoid: Kimpton Maa-Lai, Anantara Bangkok)
-
-Return exactly ${count} hotels as a JSON array. No markdown, just JSON.`
+    const prompt = `List ${count} real ${segment} hotels currently operating in ${city}. Use your knowledge to provide accurate details including known GMs, emails, and guest experience patterns from public reviews. Return exactly ${count} hotels as a JSON array. Start with [ and end with ]. No other text.`
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -81,10 +60,9 @@ Return exactly ${count} hotels as a JSON array. No markdown, just JSON.`
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 8000,
         system: SDR_SYSTEM_PROMPT,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content: prompt }],
       }),
     })
