@@ -15,23 +15,38 @@ async function sbFetch(path, opts = {}) {
 // ── Geography data ────────────────────────────────────────────────────
 const GEO = {
   "Europe": {
-    "Austria": ["Vienna","Salzburg","Innsbruck","Graz"],
-    "France": ["Paris","Lyon","Nice","Cannes","Bordeaux","Marseille"],
-    "Germany": ["Berlin","Munich","Hamburg","Frankfurt","Düsseldorf","Cologne"],
-    "Italy": ["Rome","Milan","Florence","Venice","Naples","Amalfi"],
-    "Spain": ["Madrid","Barcelona","Seville","Marbella","Ibiza"],
-    "Switzerland": ["Zurich","Geneva","Basel","Zermatt","St. Moritz"],
-    "United Kingdom": ["London","Edinburgh","Manchester","Bath","Oxford"],
-    "Netherlands": ["Amsterdam","Rotterdam","The Hague"],
-    "Portugal": ["Lisbon","Porto","Algarve"],
-    "Greece": ["Athens","Santorini","Mykonos","Thessaloniki"],
-    "Turkey": ["Istanbul","Antalya","Bodrum"],
-    "Czech Republic": ["Prague","Brno"],
-    "Poland": ["Warsaw","Krakow"],
-    "Belgium": ["Brussels","Bruges","Antwerp"],
-    "Denmark": ["Copenhagen"],
-    "Sweden": ["Stockholm","Gothenburg"],
-    "Norway": ["Oslo","Bergen"],
+    "Austria": ["Vienna","Salzburg","Innsbruck","Graz","Linz"],
+    "Belgium": ["Brussels","Bruges","Antwerp","Ghent","Liège"],
+    "Croatia": ["Dubrovnik","Zagreb","Split","Hvar","Rovinj"],
+    "Czech Republic": ["Prague","Brno","Karlovy Vary"],
+    "Denmark": ["Copenhagen","Aarhus","Odense"],
+    "Finland": ["Helsinki","Espoo","Tampere"],
+    "France": ["Paris","Lyon","Nice","Cannes","Bordeaux","Marseille","Strasbourg","Biarritz","Courchevel","Monaco"],
+    "Germany": ["Berlin","Munich","Hamburg","Frankfurt","Düsseldorf","Cologne","Stuttgart","Dresden","Heidelberg"],
+    "Greece": ["Athens","Santorini","Mykonos","Thessaloniki","Rhodes","Crete","Corfu"],
+    "Hungary": ["Budapest","Debrecen"],
+    "Iceland": ["Reykjavik"],
+    "Ireland": ["Dublin","Galway","Cork","Killarney"],
+    "Italy": ["Rome","Milan","Florence","Venice","Naples","Amalfi","Lake Como","Tuscany","Capri","Positano","Portofino","Bologna","Turin"],
+    "Luxembourg": ["Luxembourg City"],
+    "Malta": ["Valletta","St. Julian's"],
+    "Monaco": ["Monte Carlo"],
+    "Montenegro": ["Budva","Kotor","Tivat"],
+    "Netherlands": ["Amsterdam","Rotterdam","The Hague","Utrecht"],
+    "Norway": ["Oslo","Bergen","Tromsø","Stavanger"],
+    "Poland": ["Warsaw","Krakow","Gdansk","Wroclaw","Poznan"],
+    "Portugal": ["Lisbon","Porto","Algarve","Madeira","Azores","Sintra"],
+    "Romania": ["Bucharest","Cluj-Napoca","Brasov"],
+    "Scotland": ["Edinburgh","Glasgow","Highlands"],
+    "Serbia": ["Belgrade"],
+    "Slovakia": ["Bratislava"],
+    "Slovenia": ["Ljubljana","Bled"],
+    "Spain": ["Madrid","Barcelona","Seville","Marbella","Ibiza","Mallorca","Bilbao","Valencia","San Sebastián","Granada","Malaga"],
+    "Sweden": ["Stockholm","Gothenburg","Malmö","Kiruna"],
+    "Switzerland": ["Zurich","Geneva","Basel","Zermatt","St. Moritz","Interlaken","Lucerne","Lausanne","Davos"],
+    "Turkey": ["Istanbul","Antalya","Bodrum","Cappadocia","Izmir","Ankara"],
+    "Ukraine": ["Kyiv","Lviv"],
+    "United Kingdom": ["London","Edinburgh","Manchester","Bath","Oxford","Cambridge","Birmingham","Bristol","Liverpool","Brighton","Cotswolds"],
   },
   "Asia Pacific": {
     "China": ["Shanghai","Beijing","Shenzhen","Guangzhou","Chengdu","Hangzhou","Suzhou"],
@@ -77,13 +92,44 @@ const GEO = {
   },
 };
 
+const CLIENT_PROVIDER_MAP = {
+  "ritz-carlton":"Qualtrics","st. regis":"Qualtrics","jw marriott":"Qualtrics","w hotels":"Qualtrics",
+  "luxury collection":"Qualtrics","edition":"Qualtrics","sheraton":"Qualtrics","westin":"Qualtrics",
+  "le méridien":"Qualtrics","le meridien":"Qualtrics","renaissance":"Qualtrics","autograph collection":"Qualtrics",
+  "tribute portfolio":"Qualtrics","design hotels":"Qualtrics","marriott":"Qualtrics","delta hotels":"Qualtrics",
+  "aloft":"Qualtrics","moxy":"Qualtrics","ac hotels":"Qualtrics","courtyard":"Qualtrics",
+  "intercontinental":"Medallia","kimpton":"Medallia","six senses":"Medallia","regent":"Medallia",
+  "vignette collection":"Medallia","hotel indigo":"Medallia","crowne plaza":"Medallia","voco":"Medallia",
+  "holiday inn":"Medallia","hualuxe":"Medallia","ihg":"Medallia",
+  "park hyatt":"Medallia","andaz":"Medallia","grand hyatt":"Medallia","hyatt regency":"Medallia",
+  "hyatt centric":"Medallia","alila":"Medallia","thompson hotels":"Medallia","hyatt":"Medallia",
+  "wyndham":"Medallia","dolce by wyndham":"Medallia","ramada":"Medallia",
+  "radisson collection":"ReviewPro","radisson blu":"ReviewPro","radisson red":"ReviewPro",
+  "radisson":"ReviewPro","park plaza":"ReviewPro","park inn":"ReviewPro","country inn":"ReviewPro",
+  "anantara":"ReviewPro","nh collection":"ReviewPro","nh hotels":"ReviewPro","nhow":"ReviewPro",
+  "tivoli":"ReviewPro","minor hotels":"ReviewPro","peninsula":"ReviewPro","capella":"ReviewPro",
+  "raffles":"TrustYou","fairmont":"TrustYou","sofitel":"TrustYou","mgallery":"TrustYou",
+  "pullman":"TrustYou","swissôtel":"TrustYou","swissotel":"TrustYou","mövenpick":"TrustYou",
+  "movenpick":"TrustYou","novotel":"TrustYou","mercure":"TrustYou","ibis":"TrustYou",
+  "25hours":"TrustYou","banyan tree":"TrustYou","accor":"TrustYou",
+  "rosewood":"TrustYou","new world hotels":"TrustYou","mandarin oriental":"TrustYou",
+};
+
+function inferProvider(brand, hotelName) {
+  const s = ((brand||"") + " " + (hotelName||"")).toLowerCase();
+  for (const [k, v] of Object.entries(CLIENT_PROVIDER_MAP)) {
+    if (s.includes(k)) return v;
+  }
+  return null;
+}
 const TIER_OPTIONS = [
-  { value: "Luxury only", label: "Luxury", desc: "Six Senses, Park Hyatt, Rosewood, Mandarin Oriental, Four Seasons, Aman, LHW independents" },
-  { value: "Premium only", label: "Premium", desc: "Hilton, Marriott, Hyatt Regency, Voco, Radisson, NH, 4-star independents" },
-  { value: "Luxury and Premium", label: "Luxury + Premium", desc: "Both luxury and premium tiers" },
-  { value: "Lifestyle", label: "Lifestyle", desc: "W Hotels, Kimpton, Hoxton, 25Hours, Tribute Portfolio" },
-  { value: "Economy", label: "Economy", desc: "Ibis, Holiday Inn, Novotel, 3-star independents" },
+  { value: "Luxury", label: "Luxury", desc: "Six Senses, Park Hyatt, Rosewood, Mandarin Oriental, Four Seasons, Aman, Peninsula, LHW independents" },
+  { value: "Premium", label: "Premium", desc: "Hilton, Marriott, Hyatt Regency, Voco, Radisson, NH, Anantara, upper 4-star independents" },
+  { value: "Lifestyle", label: "Lifestyle", desc: "W Hotels, Kimpton, Hoxton, 25Hours, Tribute Portfolio, Edition, boutique lifestyle" },
+  { value: "Economy", label: "Economy", desc: "Ibis, Holiday Inn, Novotel, Courtyard, 3-star independents" },
+  { value: "Function", label: "Function", desc: "Airport hotels, convention center hotels, large conference properties" },
 ];
+
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -124,7 +170,7 @@ const css = `
   .field-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
   .field input, .field select { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text); outline: none; transition: all 0.15s; height: 34px; }
   .field input:focus, .field select:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-  .geo-row { display: flex; gap: 8px; align-items: flex-end; }
+  .geo-row { display: flex; gap: 8px; align-items: center; }
   .tier-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .tier-btn { padding: 6px 14px; border: 1px solid var(--border2); border-radius: 6px; background: var(--surface); font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; }
   .tier-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -190,31 +236,78 @@ const css = `
   .empty-title { font-size: 15px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
   .empty-sub { font-size: 13px; color: var(--text3); }
 
-  /* Outreach tracker cards */
-  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  /* Outreach tracker - pipeline view */
+  .pipeline-legend { font-size: 12px; color: var(--text3); margin-bottom: 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   .track-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow-sm); }
   .track-card:hover { border-color: var(--border2); box-shadow: var(--shadow); }
+  .track-card.closed { opacity: 0.55; background: #fafafa; }
+  .track-card.reopen { opacity: 0.7; }
   .track-hotel { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
   .track-gm { font-size: 12px; color: var(--text3); margin-bottom: 10px; }
-  .touch-timeline { display: flex; align-items: center; gap: 0; margin-bottom: 12px; }
+
+  /* Touch timeline */
+  .touch-timeline { display: flex; align-items: flex-start; gap: 0; margin-bottom: 10px; }
   .touch-node { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; position: relative; }
-  .touch-node:not(:last-child)::after { content: ''; position: absolute; top: 15px; left: 55%; width: 90%; height: 2px; background: var(--border); z-index: 0; }
-  .touch-node.done:not(:last-child)::after { background: var(--green); }
-  .touch-circle { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border2); background: var(--surface); font-size: 11px; font-weight: 700; font-family: 'Inter', sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text3); transition: all 0.15s; z-index: 1; position: relative; }
-  .touch-circle.done { background: var(--green-bg); border-color: var(--green); color: var(--green); }
-  .touch-circle.overdue { background: var(--red-bg); border-color: var(--red); color: var(--red); }
-  .touch-circle.upcoming { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
-  .touch-circle:hover:not(.done) { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-  .touch-label-txt { font-size: 10px; font-weight: 500; color: var(--text3); white-space: nowrap; }
-  .touch-date-txt { font-size: 9px; color: var(--text3); white-space: nowrap; }
-  .touch-date-txt.overdue { color: var(--red); font-weight: 600; }
-  .touch-date-txt.upcoming { color: var(--amber); font-weight: 600; }
-  .track-status-row { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
-  .track-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
-  .status-fresh { background: #f3f4f6; color: var(--text3); }
-  .status-active { background: var(--accent-light); color: var(--accent); }
-  .status-overdue { background: var(--red-bg); color: var(--red); }
-  .status-done { background: var(--green-bg); color: var(--green); }
+  .touch-node:not(:last-child)::after { content: ''; position: absolute; top: 14px; left: 55%; width: 88%; height: 2px; background: var(--border); z-index: 0; }
+  .touch-node.t-done:not(:last-child)::after { background: var(--green); }
+  .touch-node.t-skipped:not(:last-child)::after { background: #e5e7eb; }
+  .touch-circle { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border2); background: var(--surface); font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text3); transition: all 0.15s; z-index: 1; position: relative; }
+  .touch-circle.t-done { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .touch-circle.t-overdue { background: var(--red-bg); border-color: var(--red); color: var(--red); animation: pulse 2s infinite; }
+  .touch-circle.t-upcoming { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+  .touch-circle.t-locked { background: #f9fafb; border-color: var(--border); color: #d1d5db; cursor: not-allowed; }
+  .touch-circle.t-demo { background: #f0fdf4; border-color: #22c55e; color: #16a34a; }
+  .touch-circle:not(.t-locked):not(.t-done):hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.3)} 50%{box-shadow:0 0 0 4px rgba(220,38,38,0)} }
+  .touch-lbl { font-size: 10px; font-weight: 500; color: var(--text3); white-space: nowrap; }
+  .touch-date { font-size: 9px; white-space: nowrap; color: var(--text3); }
+  .touch-date.od { color: var(--red); font-weight: 600; }
+  .touch-date.up { color: var(--amber); font-weight: 600; }
+  .touch-date.ok { color: var(--green); }
+
+  /* Status bar at bottom of card */
+  .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 8px; }
+  .pipeline-status { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; }
+  .ps-active { background: var(--accent-light); color: var(--accent); }
+  .ps-demo { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .ps-won { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .ps-dead { background: #f3f4f6; color: var(--text3); }
+  .ps-overdue { background: var(--red-bg); color: var(--red); }
+  .ps-reopen { background: var(--amber-bg); color: var(--amber); }
+
+  /* Pipeline action buttons on card */
+  .card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .act-btn { padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border2); background: var(--surface); font-size: 11px; font-weight: 600; cursor: pointer; font-family: 'Inter',sans-serif; transition: all 0.15s; color: var(--text2); }
+  .act-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .act-btn.danger { color: var(--red); }
+  .act-btn.danger:hover { border-color: var(--red); background: var(--red-bg); }
+  .act-btn.success { color: var(--green); }
+  .act-btn.success:hover { border-color: var(--green); background: var(--green-bg); }
+
+  /* Rejection modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 60; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); border-radius: 10px; padding: 24px; width: 420px; box-shadow: var(--shadow-md); }
+  .modal-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: var(--text3); margin-bottom: 16px; }
+  .reason-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .reason-btn { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border2); background: var(--surface); font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; font-family: 'Inter',sans-serif; text-align: left; transition: all 0.15s; }
+  .reason-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .reason-btn.selected { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
+  .modal-cancel { padding: 7px 16px; border: 1px solid var(--border2); border-radius: 6px; background: var(--surface); font-size: 13px; cursor: pointer; font-family: 'Inter',sans-serif; }
+  .modal-confirm { padding: 7px 16px; border: none; border-radius: 6px; background: var(--accent); color: white; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter',sans-serif; }
+  .modal-confirm.danger-btn { background: var(--red); }
+
+  /* Filter tabs for pipeline stage */
+  .stage-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stage-tab { padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border2); background: var(--surface); font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; font-family: 'Inter',sans-serif; transition: all 0.15s; display: flex; align-items: center; gap: 4px; }
+  .stage-tab:hover { border-color: var(--accent); color: var(--accent); }
+  .stage-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .stage-cnt { font-size: 10px; font-weight: 700; opacity: 0.8; }
+
 
   /* Drawer */
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 40; }
@@ -237,7 +330,10 @@ const css = `
   .copy-btn { margin-top: 7px; padding: 4px 12px; border: 1px solid var(--border2); border-radius: 5px; background: var(--surface); font-size: 11px; font-weight: 600; color: var(--text3); cursor: pointer; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.15s; }
   .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
   .copy-btn.copied { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
-  .research-notes { font-size: 13px; color: var(--text2); line-height: 1.7; white-space: pre-wrap; }
+  .research-notes { font-size: 13px; color: var(--text2); line-height: 1.8; }
+  .research-notes .bullet { display: flex; gap: 8px; margin-bottom: 3px; }
+  .research-notes .bullet-dot { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  .research-notes .bullet-text { color: var(--text2); }
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -245,42 +341,67 @@ function parseJSON(raw) {
   try { const c = raw.replace(/```json|```/g, "").trim(); const s = c.indexOf("["), e = c.lastIndexOf("]"); if (s < 0 || e < 0) return []; return JSON.parse(c.slice(s, e + 1)); } catch { return []; }
 }
 
-// Date helpers for outreach tracker
-function addDays(date, n) { const d = new Date(date); d.setDate(d.getDate() + n); return d; }
-function fmtDate(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
-function fmtDateShort(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }); }
-function isOverdue(date) { return date && new Date(date) < new Date(); }
-function daysAgo(date) { return date ? Math.floor((new Date() - new Date(date)) / 86400000) : null; }
 
-// Sequence timing: Day 1, Day 4, Day 8-10, Day 15-17
-const TOUCH_CONFIG = [
-  { n: 1, label: "1st", offsetDays: 0, dueOffsetDays: 1, desc: "Initial" },
-  { n: 2, label: "Day 4", offsetDays: 4, dueOffsetDays: 4, desc: "Reply in thread" },
-  { n: 3, label: "Day 9", offsetDays: 9, dueOffsetDays: 10, desc: "New angle" },
-  { n: 4, label: "Day 16", offsetDays: 16, dueOffsetDays: 17, desc: "Close out" },
+
+const REJECTION_REASONS = [
+  "Not interested (no reason given)",
+  "Has existing provider — satisfied",
+  "No budget right now",
+  "Come back next quarter",
+  "No authority to decide",
+  "Bad timing / busy period",
+  "Already in evaluation with competitor",
+  "Other",
 ];
 
-function getTouchStatus(t) {
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function fmtDate(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
+function fmtDateShort(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }); }
+const TODAY = new Date();
+function isOverdue(d) { return d && new Date(d) < TODAY; }
+
+function getTouchState(t, tc) {
   const done = t.done || [];
-  if (done.length === 4) return { label: "Sequence complete", cls: "status-done" };
-  const nextTouch = TOUCH_CONFIG.find(tc => !done.includes(tc.n));
-  if (!nextTouch) return { label: "Done", cls: "status-done" };
-  if (!t.d1 && nextTouch.n === 1) return { label: "Not started", cls: "status-fresh" };
-  const firstContact = t.d1 ? new Date(t.d1) : null;
-  if (!firstContact) return { label: "Not started", cls: "status-fresh" };
-  const dueDate = addDays(firstContact, nextTouch.dueOffsetDays);
-  if (new Date() > dueDate) return { label: `Touch ${nextTouch.n} overdue`, cls: "status-overdue" };
-  return { label: `Touch ${nextTouch.n} due ${fmtDate(dueDate)}`, cls: "status-active" };
+  const stage = t.pipeline_stage || "active";
+  if (stage === "dead" || stage === "won") return "t-skipped";
+  if (done.includes(tc.n)) return "t-done";
+  // locked if previous not done
+  const prevDone = tc.n === 1 || done.includes(tc.n - 1);
+  if (!prevDone) return "t-locked";
+  if (!t.d1) return tc.n === 1 ? "t-upcoming" : "t-locked";
+  const dueDate = addDays(new Date(t.d1), tc.day + 1);
+  return isOverdue(dueDate) ? "t-overdue" : "t-upcoming";
 }
 
-function getTouchNodeInfo(t, tc) {
-  const done = (t.done || []).includes(tc.n);
-  if (done) return { cls: "done", dateStr: fmtDate(t[`d${tc.n}`]), dateCls: "" };
-  if (!t.d1) return { cls: "", dateStr: null, dateCls: "" };
-  const dueDate = addDays(new Date(t.d1), tc.dueOffsetDays);
-  const overdue = new Date() > dueDate;
-  return { cls: overdue ? "overdue" : "upcoming", dateStr: `Due ${fmtDate(dueDate)}`, dateCls: overdue ? "overdue" : "upcoming" };
+function getTouchDueStr(t, tc) {
+  if (!t.d1) return null;
+  const done = t.done || [];
+  if (done.includes(tc.n)) return { str: fmtDate(t[`d${tc.n}`]), cls: "ok" };
+  const due = addDays(new Date(t.d1), tc.day + 1);
+  return isOverdue(due) ? { str: `Due ${fmtDate(due)}`, cls: "od" } : { str: `Due ${fmtDate(due)}`, cls: "up" };
 }
+
+function getPipelineStatus(t) {
+  const stage = t.pipeline_stage || "active";
+  const done = t.done || [];
+  if (stage === "won") return { label: "🏆 Demo booked", cls: "ps-won" };
+  if (stage === "dead") return { label: `✕ Closed${t.rejection_reason ? ` · ${t.rejection_reason.split("(")[0].trim()}` : ""}`, cls: "ps-dead" };
+  if (stage === "reopen") return { label: "⟳ Re-engage in 3 months", cls: "ps-reopen" };
+  if (stage === "demo") return { label: "📅 Demo scheduled", cls: "ps-demo" };
+  if (done.length === 0) return { label: "Not started", cls: "ps-active" };
+  if (done.length === 4) return { label: "Sequence complete", cls: "ps-active" };
+  // Check for overdue
+  if (t.d1) {
+    const nextTc = TOUCH_CONFIG.find(tc => !done.includes(tc.n));
+    if (nextTc) {
+      const due = addDays(new Date(t.d1), nextTc.day + 1);
+      if (isOverdue(due)) return { label: `⚠ Touch ${nextTc.n} overdue`, cls: "ps-overdue" };
+      return { label: `Touch ${nextTc.n} due ${fmtDate(due)}`, cls: "ps-active" };
+    }
+  }
+  return { label: `${done.length}/4 sent`, cls: "ps-active" };
+}
+
 
 function touch2Body(sel) {
   return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nJust following up on my note from Monday.\n\nOne question worth sitting with: at ${sel.rating || "[rating]"} across ${sel.review_count ? sel.review_count.toLocaleString() : "[count]"} reviews, do you currently have visibility into which specific issue is appearing most frequently in written guest feedback — before it shows up in the score?\n\nHappy to show you one example from a comparable property. 15 minutes next week?\n\nBest,\nZishuo Wang | Where to know`;
@@ -290,6 +411,53 @@ function touch3Body(sel) {
 }
 function touch4Body(sel) {
   return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nI'll pause outreach after this — I don't want to keep landing in your inbox without purpose.\n\nIf the timing isn't right, I completely understand.\n\nOne thought to leave with you: the GMs who find this most useful tend to be the ones who engage before a score change, not after. If anything shifts — a competitive concern, a score movement, or a change in review volume — I'm easy to reach.\n\nWishing you and the team a strong season ahead.\n\nZishuo Wang | Where to know`;
+}
+
+function ResearchNotes({ text }) {
+  if (!text) return null;
+  // Split on bullet markers (• or - at line start) or newlines
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const bullets = [];
+  let current = "";
+  for (const line of lines) {
+    if (line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) {
+      if (current) bullets.push(current);
+      current = line.replace(/^[•\-*]\s*/, "");
+    } else if (bullets.length === 0 && !current) {
+      // No bullets found yet — paragraph mode, split on sentences
+      current = line;
+    } else {
+      current += " " + line;
+    }
+  }
+  if (current) bullets.push(current);
+
+  // If no bullets found (pure paragraph), split into logical chunks
+  if (bullets.length <= 1) {
+    const para = text.trim();
+    const parts = para.split(/\.\s+/).filter(Boolean).map(s => s.endsWith(".") ? s : s + ".");
+    return (
+      <div className="research-notes">
+        {parts.map((p, i) => (
+          <div key={i} className="bullet">
+            <span className="bullet-dot">•</span>
+            <span className="bullet-text">{p}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="research-notes">
+      {bullets.map((b, i) => (
+        <div key={i} className="bullet">
+          <span className="bullet-dot">•</span>
+          <span className="bullet-text">{b}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function TierBadge({ tier }) {
@@ -307,7 +475,7 @@ export default function App() {
   const [customMarket, setCustomMarket] = useState("");
   const [multiMode, setMultiMode] = useState(false);
   // Other filters
-  const [tier, setTier] = useState("Luxury and Premium");
+  const [tier, setTier] = useState("Luxury");
   const [brand, setBrand] = useState("");
   const [count, setCount] = useState("5");
   const [sdrName, setSdrName] = useState("");
@@ -320,8 +488,11 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [copied, setCopied] = useState(null);
   const [filterSdr, setFilterSdr] = useState("all");
+  const [stageFilter, setStageFilter] = useState("all");
   const [prospects, setProspects] = useState([]);
   const [tracking, setTracking] = useState([]);
+  const [rejectModal, setRejectModal] = useState(null); // { tid, stage: 'dead'|'reopen' }
+  const [rejectReason, setRejectReason] = useState("");
 
   useEffect(() => {
     const n = localStorage.getItem("wtk_sdr_name"); if (n) setSdrName(n);
@@ -372,15 +543,19 @@ export default function App() {
     finally { setRunning(false); setTimeout(() => setProgress(0), 2000); }
   }
 
-  async function touchToggle(tid, n) {
+  async function touchToggle(tid, n, e) {
+    if (e) e.stopPropagation();
     const t = tracking.find(x => x.id === tid); if (!t) return;
+    const stage = t.pipeline_stage || "active";
+    if (stage === "dead" || stage === "won") return;
+    // Lock: can't click n if n-1 not done
     const done = [...(t.done || [])];
+    if (n > 1 && !done.includes(n - 1)) return;
     const i = done.indexOf(n);
     if (i < 0) done.push(n); else done.splice(i, 1);
     done.sort((a, b) => a - b);
     const upd = { done };
-    // Set d1 to now if touching for first time
-    if (!t.d1 && n === 1 && i < 0) upd.d1 = new Date().toISOString();
+    if (n === 1 && i < 0 && !t.d1) upd.d1 = new Date().toISOString();
     if (n === 2 && i < 0) upd.d2 = new Date().toISOString();
     if (n === 3 && i < 0) upd.d3 = new Date().toISOString();
     if (n === 4 && i < 0) upd.d4 = new Date().toISOString();
@@ -388,13 +563,32 @@ export default function App() {
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(upd) }); } catch (e) { console.error(e); }
   }
 
-  // Mark first contact when 1st touch done
-  async function setFirstContact(tid) {
-    const t = tracking.find(x => x.id === tid); if (!t || t.d1) return;
-    const upd = { d1: new Date().toISOString(), done: [1] };
+  async function updatePipeline(tid, updates, e) {
+    if (e) e.stopPropagation();
+    setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...updates } : x));
+    try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(updates) }); } catch (e) { console.error(e); }
+  }
+
+  function openRejectModal(tid, stage, e) {
+    if (e) e.stopPropagation();
+    setRejectReason("");
+    setRejectModal({ tid, stage });
+  }
+
+  async function confirmReject() {
+    if (!rejectModal) return;
+    const updates = { pipeline_stage: rejectModal.stage, rejection_reason: rejectReason || "Not specified" };
+    await updatePipeline(rejectModal.tid, updates);
+    setRejectModal(null);
+  }
+
+  async function reopenSequence(tid, e) {
+    if (e) e.stopPropagation();
+    const upd = { pipeline_stage: "active", done: [], d1: null, d2: null, d3: null, d4: null, rejection_reason: null };
     setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...upd } : x));
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(upd) }); } catch (e) { console.error(e); }
   }
+
 
   function copy(text, key) { navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 1500); }); }
 
@@ -509,11 +703,15 @@ export default function App() {
           ) : (
             <div className="table-card">
               <table>
-                <thead><tr><th>Hotel</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Rating</th><th>Provider</th><th>Strategy</th><th>SDR</th><th>Added</th></tr></thead>
+                <thead><tr><th>Hotel</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Rating</th><th>Provider</th><th>SDR</th><th>Added</th></tr></thead>
                 <tbody>
-                  {filteredP.map(p=>(
+                  {filteredP.map(p=>{
+                    const trackRec = tracking.find(t=>t.prospect_id===p.id);
+                    const firstContact = trackRec?.d1;
+                    return (
                     <tr key={p.id} onClick={()=>setSelected(p.id)}>
-                      <td><div className="hotel-name">{p.hotel_name}</div><div className="hotel-sub">{p.brand} · {p.city}</div></td>
+                      <td><div className="hotel-name">{p.hotel_name}</div><div className="hotel-sub">{p.city}, {p.country}</div></td>
+                      <td><div className="gm-name" style={{fontWeight:500,fontSize:12}}>{p.brand||"—"}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name">{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title}</div></td>
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
@@ -522,12 +720,11 @@ export default function App() {
                       <td><span className="cell-muted">{p.restaurants||"—"}</span></td>
                       <td><span className="cell-muted">{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
                       <td><span className="cell-muted">{p.rating||"—"}</span></td>
-                      <td><span className="cell-muted">{p.current_provider||"—"}</span></td>
-                      <td><span className={`badge ${p.engagement_strategy==="DIRECT-TO-GM"?"badge-dgm":"badge-hold"}`}>{(p.engagement_strategy||"—").replace(/-/g," ")}</span></td>
-                      <td><span className="sdr-tag">{p.sdr||"—"}</span></td>
+                      <td><span className="cell-muted">{p.current_provider || inferProvider(p.brand, p.hotel_name) || "—"}</span></td>
+                      <td><div className="sdr-tag">{p.sdr||"—"}</div>{firstContact&&<div style={{fontSize:10,color:"var(--text3)"}}>contacted {fmtDate(firstContact)}</div>}</td>
                       <td><span className="cell-muted">{fmtDateShort(p.created_at)}</span></td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
@@ -535,49 +732,105 @@ export default function App() {
 
           {tab==="outreach" && (filteredT.length===0 ? (
             <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>
-          ) : (
-            <div>
-              <div style={{fontSize:12,color:"var(--text3)",marginBottom:12,display:"flex",gap:16}}>
-                <span>Today: <strong>{fmtDate(new Date())}</strong></span>
-                <span style={{color:"var(--red)"}}>● Overdue</span>
-                <span style={{color:"var(--amber)"}}>● Due soon</span>
-                <span style={{color:"var(--green)"}}>● Done</span>
-              </div>
-              <div className="cards-grid">
-                {filteredT.map(t=>{
-                  const status = getTouchStatus(t);
-                  return (
-                    <div key={t.id} className="track-card" onClick={()=>setSelected(t.prospect_id)}>
-                      <div className="track-hotel">{t.hotel}</div>
-                      <div className="track-gm">{t.gm||"—"}{t.d1?` · Started ${fmtDate(t.d1)}`:""}</div>
-                      <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
-                        {TOUCH_CONFIG.map(tc=>{
-                          const info = getTouchNodeInfo(t, tc);
-                          return (
-                            <div key={tc.n} className={`touch-node ${info.cls}`}>
-                              <div className={`touch-circle ${info.cls}`} onClick={()=>touchToggle(t.id,tc.n)} title={`Mark touch ${tc.n} ${info.cls==="done"?"undone":"done"}`}>
-                                {info.cls==="done"?"✓":tc.n}
+          ) : (() => {
+            const stageGroups = { all: filteredT.length, active: 0, demo: 0, won: 0, dead: 0 };
+            filteredT.forEach(t => { const s = t.pipeline_stage || "active"; if (stageGroups[s] !== undefined) stageGroups[s]++; else stageGroups.active++; });
+            const visibleT = stageFilter === "all" ? filteredT : filteredT.filter(t => (t.pipeline_stage || "active") === stageFilter);
+            return (
+              <>
+                <div className="pipeline-legend">
+                  <span>Today: <strong>{fmtDate(new Date())}</strong></span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--red)"}}/>Overdue</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--amber)"}}/>Due soon</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--green)"}}/>Sent</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--text3)"}}/>Locked</span>
+                </div>
+                <div className="stage-tabs">
+                  {[["all","All"],["active","Active"],["demo","Demo"],["won","Won"],["dead","Closed"]].map(([v,l])=>(
+                    <button key={v} className={`stage-tab ${stageFilter===v?"active":""}`} onClick={()=>setStageFilter(v)}>
+                      {l} <span className="stage-cnt">{stageGroups[v]||0}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="cards-grid">
+                  {visibleT.map(t=>{
+                    const stage = t.pipeline_stage || "active";
+                    const status = getPipelineStatus(t);
+                    const isClosed = stage === "dead" || stage === "won";
+                    return (
+                      <div key={t.id} className={`track-card ${isClosed?"closed":""}`} onClick={()=>setSelected(t.prospect_id)}>
+                        <div className="track-hotel">{t.hotel}</div>
+                        <div className="track-gm">{t.gm||"—"}{t.d1?` · First contact: ${fmtDate(t.d1)}`:""}</div>
+
+                        <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
+                          {TOUCH_CONFIG.map(tc=>{
+                            const tstate = getTouchState(t, tc);
+                            const dateInfo = getTouchDueStr(t, tc);
+                            return (
+                              <div key={tc.n} className={`touch-node ${tstate==="t-done"?"t-done":""}`}>
+                                <div className={`touch-circle ${tstate}`}
+                                  onClick={(e)=>{ if(tstate!=="t-locked" && !isClosed) touchToggle(t.id,tc.n,e); else e.stopPropagation(); }}
+                                  title={tstate==="t-locked"?"Complete previous touch first":tc.desc}>
+                                  {tstate==="t-done" ? "✓" : tc.n}
+                                </div>
+                                <div className="touch-lbl">{tc.label}</div>
+                                {dateInfo && <div className={`touch-date ${dateInfo.cls}`}>{dateInfo.str}</div>}
                               </div>
-                              <div className="touch-label-txt">{tc.label}</div>
-                              {info.dateStr && <div className={`touch-date-txt ${info.dateCls}`}>{info.dateStr}</div>}
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+
+                        {!isClosed && (
+                          <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                            {stage !== "demo" && stage !== "won" && (
+                              <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo booked</button>
+                            )}
+                            {stage === "demo" && (
+                              <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Mark Won</button>
+                            )}
+                            <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
+                          </div>
+                        )}
+                        {isClosed && stage === "dead" && (
+                          <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                            <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
+                            <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"reopen"},e)}>⏰ Re-engage in 3 months</button>
+                          </div>
+                        )}
+
+                        <div className="card-footer">
+                          <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
+                          {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
+                        </div>
                       </div>
-                      <div className="track-status-row">
-                        <span className={`track-status ${status.cls}`}>{status.label}</span>
-                        {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()
+          )}
         </div>
       </div>
 
-      {sel && (
+      {rejectModal && (
+        <div className="modal-overlay" onClick={()=>setRejectModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">Mark as Not Interested</div>
+            <div className="modal-sub">Select the reason (helps improve targeting)</div>
+            <div className="reason-grid">
+              {REJECTION_REASONS.map(r=>(
+                <button key={r} className={`reason-btn ${rejectReason===r?"selected":""}`} onClick={()=>setRejectReason(r)}>{r}</button>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button className="modal-cancel" onClick={()=>setRejectModal(null)}>Cancel</button>
+              <button className="modal-confirm danger-btn" onClick={confirmReject}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
         <>
           <div className="overlay" onClick={()=>setSelected(null)}/>
           <div className="drawer">
@@ -591,7 +844,7 @@ export default function App() {
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val">{sel.restaurants||"—"}</span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val">{sel.adr_usd?`~$${sel.adr_usd}/night`:"—"}</span></div>
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">{sel.rating?`${sel.rating} / 10`:"—"}{sel.review_count?` (${sel.review_count.toLocaleString()} reviews)`:""}</span></div>
-              <div className="d-row"><span className="d-key">Provider</span><span className="d-val">{sel.current_provider||"Unknown"}</span></div>
+              <div className="d-row"><span className="d-key">Provider</span><span className="d-val">{sel.current_provider || inferProvider(sel.brand, sel.hotel_name) || "Unknown"}</span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:"—"}</span></div>
             </div>
             <div className="d-sec">
@@ -640,7 +893,7 @@ export default function App() {
             {sel.research_notes && (
               <div className="d-sec">
                 <div className="d-sec-title">Research Notes</div>
-                <div className="research-notes">{sel.research_notes}</div>
+                <ResearchNotes text={sel.research_notes} />
               </div>
             )}
           </div>
