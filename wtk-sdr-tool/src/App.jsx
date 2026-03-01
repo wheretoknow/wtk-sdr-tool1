@@ -466,6 +466,84 @@ function TierBadge({ tier }) {
   return <span className={`badge ${cls}`}>{tier || "—"}</span>;
 }
 
+function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence }) {
+  if (filteredT.length === 0) {
+    return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
+  }
+  const stageGroups = { all: filteredT.length, active: 0, demo: 0, won: 0, dead: 0 };
+  filteredT.forEach(t => { const s = t.pipeline_stage || "active"; if (stageGroups[s] !== undefined) stageGroups[s]++; else stageGroups.active++; });
+  const visibleT = stageFilter === "all" ? filteredT : filteredT.filter(t => (t.pipeline_stage || "active") === stageFilter);
+  return (
+    <>
+      <div className="pipeline-legend">
+        <span>Today: <strong>{fmtDate(new Date())}</strong></span>
+        <span className="legend-item"><span className="legend-dot" style={{background:"var(--red)"}}/>Overdue</span>
+        <span className="legend-item"><span className="legend-dot" style={{background:"var(--amber)"}}/>Due soon</span>
+        <span className="legend-item"><span className="legend-dot" style={{background:"var(--green)"}}/>Sent</span>
+        <span className="legend-item"><span className="legend-dot" style={{background:"var(--text3)"}}/>Locked</span>
+      </div>
+      <div className="stage-tabs">
+        {[["all","All"],["active","Active"],["demo","Demo"],["won","Won"],["dead","Closed"]].map(([v,l])=>(
+          <button key={v} className={`stage-tab ${stageFilter===v?"active":""}`} onClick={()=>setStageFilter(v)}>
+            {l} <span className="stage-cnt">{stageGroups[v]||0}</span>
+          </button>
+        ))}
+      </div>
+      <div className="cards-grid">
+        {visibleT.map(t => {
+          const stage = t.pipeline_stage || "active";
+          const status = getPipelineStatus(t);
+          const isClosed = stage === "dead" || stage === "won";
+          return (
+            <div key={t.id} className={`track-card ${isClosed?"closed":""}`} onClick={()=>setSelected(t.prospect_id)}>
+              <div className="track-hotel">{t.hotel}</div>
+              <div className="track-gm">{t.gm||"—"}{t.d1?` · First contact: ${fmtDate(t.d1)}`:""}</div>
+              <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
+                {TOUCH_CONFIG.map(tc => {
+                  const tstate = getTouchState(t, tc);
+                  const dateInfo = getTouchDueStr(t, tc);
+                  return (
+                    <div key={tc.n} className={`touch-node ${tstate==="t-done"?"t-done":""}`}>
+                      <div className={`touch-circle ${tstate}`}
+                        onClick={(e)=>{ if(tstate!=="t-locked" && !isClosed) touchToggle(t.id,tc.n,e); else e.stopPropagation(); }}
+                        title={tstate==="t-locked"?"Complete previous touch first":tc.desc}>
+                        {tstate==="t-done" ? "✓" : tc.n}
+                      </div>
+                      <div className="touch-lbl">{tc.label}</div>
+                      {dateInfo && <div className={`touch-date ${dateInfo.cls}`}>{dateInfo.str}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              {!isClosed && (
+                <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                  {stage !== "demo" && stage !== "won" && (
+                    <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo booked</button>
+                  )}
+                  {stage === "demo" && (
+                    <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Mark Won</button>
+                  )}
+                  <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
+                </div>
+              )}
+              {isClosed && stage === "dead" && (
+                <div className="card-actions" onClick={e=>e.stopPropagation()}>
+                  <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
+                  <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"reopen"},e)}>⏰ Re-engage in 3 months</button>
+                </div>
+              )}
+              <div className="card-footer">
+                <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
+                {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState("hotels");
   // Geo state
@@ -730,86 +808,7 @@ export default function App() {
             </div>
           ))}
 
-          {tab==="outreach" && (filteredT.length===0 ? (
-            <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>
-          ) : (() => {
-            const stageGroups = { all: filteredT.length, active: 0, demo: 0, won: 0, dead: 0 };
-            filteredT.forEach(t => { const s = t.pipeline_stage || "active"; if (stageGroups[s] !== undefined) stageGroups[s]++; else stageGroups.active++; });
-            const visibleT = stageFilter === "all" ? filteredT : filteredT.filter(t => (t.pipeline_stage || "active") === stageFilter);
-            return (
-              <>
-                <div className="pipeline-legend">
-                  <span>Today: <strong>{fmtDate(new Date())}</strong></span>
-                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--red)"}}/>Overdue</span>
-                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--amber)"}}/>Due soon</span>
-                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--green)"}}/>Sent</span>
-                  <span className="legend-item"><span className="legend-dot" style={{background:"var(--text3)"}}/>Locked</span>
-                </div>
-                <div className="stage-tabs">
-                  {[["all","All"],["active","Active"],["demo","Demo"],["won","Won"],["dead","Closed"]].map(([v,l])=>(
-                    <button key={v} className={`stage-tab ${stageFilter===v?"active":""}`} onClick={()=>setStageFilter(v)}>
-                      {l} <span className="stage-cnt">{stageGroups[v]||0}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="cards-grid">
-                  {visibleT.map(t=>{
-                    const stage = t.pipeline_stage || "active";
-                    const status = getPipelineStatus(t);
-                    const isClosed = stage === "dead" || stage === "won";
-                    return (
-                      <div key={t.id} className={`track-card ${isClosed?"closed":""}`} onClick={()=>setSelected(t.prospect_id)}>
-                        <div className="track-hotel">{t.hotel}</div>
-                        <div className="track-gm">{t.gm||"—"}{t.d1?` · First contact: ${fmtDate(t.d1)}`:""}</div>
-
-                        <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
-                          {TOUCH_CONFIG.map(tc=>{
-                            const tstate = getTouchState(t, tc);
-                            const dateInfo = getTouchDueStr(t, tc);
-                            return (
-                              <div key={tc.n} className={`touch-node ${tstate==="t-done"?"t-done":""}`}>
-                                <div className={`touch-circle ${tstate}`}
-                                  onClick={(e)=>{ if(tstate!=="t-locked" && !isClosed) touchToggle(t.id,tc.n,e); else e.stopPropagation(); }}
-                                  title={tstate==="t-locked"?"Complete previous touch first":tc.desc}>
-                                  {tstate==="t-done" ? "✓" : tc.n}
-                                </div>
-                                <div className="touch-lbl">{tc.label}</div>
-                                {dateInfo && <div className={`touch-date ${dateInfo.cls}`}>{dateInfo.str}</div>}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {!isClosed && (
-                          <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                            {stage !== "demo" && stage !== "won" && (
-                              <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo booked</button>
-                            )}
-                            {stage === "demo" && (
-                              <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Mark Won</button>
-                            )}
-                            <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
-                          </div>
-                        )}
-                        {isClosed && stage === "dead" && (
-                          <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                            <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
-                            <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"reopen"},e)}>⏰ Re-engage in 3 months</button>
-                          </div>
-                        )}
-
-                        <div className="card-footer">
-                          <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
-                          {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()
-          )}
+          {tab==="outreach" && <OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} />}
         </div>
       </div>
 
@@ -831,6 +830,7 @@ export default function App() {
         </div>
       )}
 
+      {sel && (
         <>
           <div className="overlay" onClick={()=>setSelected(null)}/>
           <div className="drawer">
