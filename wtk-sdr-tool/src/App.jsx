@@ -479,7 +479,7 @@ function getPipelineStatus(t) {
 
 
 function touch2Body(sel) {
-  const provider = sel.current_provider || inferProvider(sel.brand, sel.hotel_name);
+  const provider = inferProvider(sel.brand, sel.hotel_name) || sel.current_provider;
   const providerLine = provider
     ? `\n\nOne thing worth mentioning: we're not here to replace ${provider}. Where to know works alongside it — specifically on the gaps ${provider} doesn't cover, like real-time competitor benchmarking and turning review patterns into actionable next steps for your team. Most of our hotel partners run both.`
     : "";
@@ -1177,6 +1177,7 @@ export default function App() {
                 </div>
               ) : (
               <>
+              <div style={{overflowX:"auto"}}>
               <table>
                 <thead><tr><th style={{minWidth:180}}>Hotel</th><th>City</th><th>Country</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>ADR</th><th>Provider</th><th>SDR</th><th></th></tr></thead>
                 <tbody>
@@ -1206,6 +1207,7 @@ export default function App() {
                   );})}
                 </tbody>
               </table>
+              </div>
               {totalHotelPages > 1 && (
                 <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px",borderTop:"1px solid var(--border)"}}>
                   <button className="act-btn" disabled={hotelsPage===1} onClick={()=>setHotelsPage(p=>p-1)}>← Prev</button>
@@ -1299,7 +1301,7 @@ export default function App() {
                 })()}
               </span></div>
               <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (sel.hotel_group && sel.hotel_group !== sel.brand ? sel.hotel_group : sel.brand || "Independent")}</span></div>
-              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{sel.current_provider || inferProvider(sel.brand, sel.hotel_name) || "Unknown"}</span></div>
+              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{inferProvider(sel.brand, sel.hotel_name) || sel.current_provider || "Unknown"}</span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:"—"}</span></div>
             </div>
             <div className="d-sec">
