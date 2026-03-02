@@ -746,6 +746,11 @@ export default function App() {
   const [copied, setCopied] = useState(null);
   const [filterSdr, setFilterSdr] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
+  const [filterCountry, setFilterCountry] = useState("");
+  const [filterGroup, setFilterGroup] = useState("");
+  const [filterTier, setFilterTier] = useState("");
+  const [hotelsPage, setHotelsPage] = useState(1);
+  const HOTELS_PER_PAGE = 20;
   const [prospects, setProspects] = useState([]);
   const [tracking, setTracking] = useState([]);
   const [rejectModal, setRejectModal] = useState(null); // { tid, stage: 'dead'|'reopen' }
@@ -912,7 +917,6 @@ export default function App() {
     const lines = text.split(/\r?\n/).filter(Boolean);
     if (lines.length < 2) return alert("CSV appears empty.");
 
-    // Parse CSV (handles quoted fields)
     function parseRow(line) {
       const cols = []; let cur = "", inQ = false;
       for (let i = 0; i < line.length; i++) {
@@ -924,72 +928,109 @@ export default function App() {
       cols.push(cur); return cols.map(s => s.trim());
     }
 
+    const DB_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
     const headers = parseRow(lines[0]).map(h => h.toLowerCase().trim());
+    const isDirectMode = DB_FIELDS.filter(f => headers.includes(f)).length >= 5;
 
-    // Flexible column mapping
     function col(row, ...names) {
       for (const n of names) {
         const idx = headers.findIndex(h => h.includes(n));
-        if (idx >= 0 && row[idx]) return row[idx].trim() || null;
+        if (idx >= 0 && row[idx] && row[idx].trim()) return row[idx].trim();
       }
       return null;
     }
+    function direct(row, field) {
+      const idx = headers.indexOf(field);
+      if (idx >= 0 && row[idx] && row[idx].trim() && row[idx].trim() !== 'None') return row[idx].trim();
+      return null;
+    }
+    function num(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
+    function inte(v) { const n = parseInt(v); return isNaN(n) ? null : n; }
 
     const imported = [];
     for (const line of lines.slice(1)) {
       const row = parseRow(line);
       if (!row.some(Boolean)) continue;
-      const hotelName = col(row, "hotel","property","name");
-      if (!hotelName) continue;
-      const brand = col(row, "brand");
-      const p = {
-        id: uid(), created_at: new Date().toISOString(), batch: "import",
-        hotel_name: hotelName,
-        brand: brand || null,
-        hotel_group: col(row, "group","chain","company") || brand || null,
-        tier: col(row, "tier","segment","category") || "Luxury",
-        city: col(row, "city","location"),
-        country: col(row, "country"),
-        address: col(row, "address"),
-        website: col(row, "website","url","web"),
-        rooms: parseInt(col(row, "room","rooms")) || null,
-        restaurants: parseInt(col(row, "f&b","restaurant","fb","food")) || null,
-        adr_usd: parseFloat(col(row, "adr","rate","price")) || null,
-        rating: parseFloat(col(row, "rating","score")) || null,
-        review_count: parseInt(col(row, "review")) || null,
-        gm_name: col(row, "gm","general manager","contact","name") || null,
-        gm_first_name: null,
-        gm_title: col(row, "title","position") || "General Manager",
-        email: col(row, "email","mail"),
-        linkedin: col(row, "linkedin"),
-        current_provider: col(row, "provider","platform","tech") || inferProvider(brand, hotelName),
-        engagement_strategy: col(row, "strategy","engagement") || "DIRECT-TO-GM",
-        sdr: col(row, "sdr","owner","assigned") || sdrName || "Unknown",
-        outreach_email_subject: null, outreach_email_body: null, linkedin_dm: null,
-        research_notes: null, contact_confidence: "L",
-      };
-      if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
+
+      let p;
+      if (isDirectMode) {
+        // CSV has exact DB field names — map directly
+        const hotelName = direct(row, "hotel_name");
+        if (!hotelName) continue;
+        p = { id: direct(row,"id") || uid(), created_at: direct(row,"created_at") || new Date().toISOString() };
+        for (const f of DB_FIELDS) {
+          if (f === "id" || f === "created_at") continue;
+          p[f] = direct(row, f);
+        }
+        // Coerce numeric fields
+        p.rooms = inte(p.rooms);
+        p.restaurants = inte(p.restaurants);
+        p.adr_usd = num(p.adr_usd);
+        p.rating = num(p.rating);
+        p.review_count = inte(p.review_count);
+        if (!p.current_provider && p.brand) p.current_provider = inferProvider(p.brand, p.hotel_name);
+        if (!p.gm_first_name && p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
+      } else {
+        // Generic flexible mapping
+        const hotelName = col(row, "hotel","property","name");
+        if (!hotelName) continue;
+        const brand = col(row, "brand");
+        p = {
+          id: uid(), created_at: new Date().toISOString(), batch: "import",
+          hotel_name: hotelName, brand: brand || null,
+          hotel_group: col(row, "group","chain","company") || brand || null,
+          tier: col(row, "tier","segment","category") || "Luxury",
+          city: col(row, "city","location"), country: col(row, "country"),
+          address: col(row, "address"), website: col(row, "website","url","web"),
+          rooms: inte(col(row, "room","rooms")), restaurants: inte(col(row, "f&b","restaurant")),
+          adr_usd: num(col(row, "adr","rate","price")), rating: num(col(row, "rating","score")),
+          review_count: inte(col(row, "review")),
+          gm_name: col(row, "gm","general manager","contact"),
+          gm_first_name: null, gm_title: col(row, "title","position") || "General Manager",
+          email: col(row, "email","mail"), linkedin: col(row, "linkedin"),
+          current_provider: col(row, "provider","platform","tech") || inferProvider(brand, hotelName),
+          engagement_strategy: col(row, "strategy","engagement") || "DIRECT-TO-GM",
+          sdr: col(row, "sdr","owner","assigned") || sdrName || "Unknown",
+          outreach_email_subject: null, outreach_email_body: null, linkedin_dm: null,
+          research_notes: null, contact_confidence: "L",
+        };
+        if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
+      }
       imported.push(p);
     }
 
-    if (!imported.length) return alert("No valid rows found. Make sure your CSV has a 'Hotel' column.");
-
-    if (!confirm(`Import ${imported.length} hotels into the shared database?`)) return;
+    if (!imported.length) return alert("No valid rows found.");
+    if (!confirm(`Import ${imported.length} hotels? (Mode: ${isDirectMode ? "Direct field match" : "Flexible mapping"})`)) return;
 
     try {
-      await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(imported) });
+      // Supabase has 1000 row insert limit — chunk it
+      const CHUNK = 500;
+      for (let i = 0; i < imported.length; i += CHUNK) {
+        await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(imported.slice(i, i+CHUNK)) });
+      }
       setProspects(prev => [...prev, ...imported]);
-      alert(`✓ ${imported.length} hotels imported successfully.`);
+      alert(`✓ ${imported.length} hotels imported.`);
     } catch(err) {
       alert("Import failed: " + err.message);
     }
   }
+  }
 
   const sel = selected ? prospects.find(p => p.id === selected) : null;
   const sdrs = ["all", ...new Set(prospects.map(p => p.sdr).filter(Boolean))];
-  const filteredP = filterSdr === "all" ? prospects : prospects.filter(p => p.sdr === filterSdr);
+  const filteredP = prospects.filter(p => {
+    if (filterSdr !== "all" && p.sdr !== filterSdr) return false;
+    if (filterCountry && !(p.country||"").toLowerCase().includes(filterCountry.toLowerCase())) return false;
+    if (filterGroup && !(p.hotel_group||p.brand||"").toLowerCase().includes(filterGroup.toLowerCase())) return false;
+    if (filterTier && p.tier !== filterTier) return false;
+    return true;
+  });
   const filteredT = filterSdr === "all" ? tracking : tracking.filter(t => t.sdr === filterSdr);
   const contacted = tracking.filter(t => (t.done || []).length > 0).length;
+  const totalHotelPages = Math.ceil(filteredP.length / HOTELS_PER_PAGE);
+  const pagedP = filteredP.slice((hotelsPage-1)*HOTELS_PER_PAGE, hotelsPage*HOTELS_PER_PAGE);
+  const allCountries = [...new Set(prospects.map(p=>p.country).filter(Boolean))].sort();
+  const allGroups = [...new Set(prospects.map(p=>p.hotel_group||p.brand).filter(Boolean))].sort();
   const countries = Object.keys(GEO[region] || {});
   const cities = (GEO[region] || {})[country] || [];
   const selectedTierObj = TIER_OPTIONS.find(t => t.value === tier);
@@ -1053,7 +1094,7 @@ export default function App() {
           </div>
 
           <div className="toolbar">
-            {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>setFilterSdr(s)}>{s==="all"?"All SDRs":s}</button>)}
+            {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
@@ -1068,14 +1109,30 @@ export default function App() {
             ))}
           </div>
 
-          {tab==="hotels" && (filteredP.length===0 ? (
+          {tab==="hotels" && (filteredP.length===0 && !filterCountry && !filterGroup && !filterTier ? (
             <div className="empty"><div className="empty-icon">🏨</div><div className="empty-title">{loading?"Loading database...":"No prospects yet"}</div><div className="empty-sub">Select your market and tier, then click Run Research.</div></div>
           ) : (
             <div className="table-card">
+              <div style={{display:"flex",gap:8,alignItems:"center",padding:"10px 0 6px",flexWrap:"wrap"}}>
+                <select className="cmd-input" style={{minWidth:130}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setHotelsPage(1);}}>
+                  <option value="">All Countries</option>
+                  {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+                <select className="cmd-input" style={{minWidth:160}} value={filterGroup} onChange={e=>{setFilterGroup(e.target.value);setHotelsPage(1);}}>
+                  <option value="">All Groups</option>
+                  {allGroups.map(g=><option key={g} value={g}>{g}</option>)}
+                </select>
+                <select className="cmd-input" style={{minWidth:120}} value={filterTier} onChange={e=>{setFilterTier(e.target.value);setHotelsPage(1);}}>
+                  <option value="">All Tiers</option>
+                  {["Luxury","Premium","Lifestyle","Economy","Function"].map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+                {(filterCountry||filterGroup||filterTier) && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setFilterCountry("");setFilterGroup("");setFilterTier("");setHotelsPage(1);}}>✕ Clear</button>}
+                <span style={{marginLeft:"auto",fontSize:11,color:"var(--text3)"}}>{filteredP.length} hotels{(filterCountry||filterGroup||filterTier)?" (filtered)":""}</span>
+              </div>
               <table>
                 <thead><tr><th>Hotel</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Ownership</th><th>SDR</th><th>Added</th><th></th></tr></thead>
                 <tbody>
-                  {filteredP.map(p=>{
+                  {pagedP.map(p=>{
                     const trackRec = tracking.find(t=>t.prospect_id===p.id);
                     const firstContact = trackRec?.d1;
                     const grp = p.hotel_group || p.brand || "Independent";
@@ -1100,6 +1157,21 @@ export default function App() {
                   );})}
                 </tbody>
               </table>
+              {totalHotelPages > 1 && (
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px",borderTop:"1px solid var(--border)"}}>
+                  <button className="act-btn" disabled={hotelsPage===1} onClick={()=>setHotelsPage(p=>p-1)}>← Prev</button>
+                  {Array.from({length:Math.min(totalHotelPages,7)}, (_,i) => {
+                    let page;
+                    if (totalHotelPages <= 7) page = i+1;
+                    else if (hotelsPage <= 4) page = i+1;
+                    else if (hotelsPage >= totalHotelPages-3) page = totalHotelPages-6+i;
+                    else page = hotelsPage-3+i;
+                    return <button key={page} className={`act-btn ${hotelsPage===page?"success":""}`} style={{minWidth:32}} onClick={()=>setHotelsPage(page)}>{page}</button>;
+                  })}
+                  <button className="act-btn" disabled={hotelsPage===totalHotelPages} onClick={()=>setHotelsPage(p=>p+1)}>Next →</button>
+                  <span style={{fontSize:11,color:"var(--text3)",marginLeft:4}}>{(hotelsPage-1)*HOTELS_PER_PAGE+1}–{Math.min(hotelsPage*HOTELS_PER_PAGE,filteredP.length)} of {filteredP.length}</span>
+                </div>
+              )}
             </div>
           ))}
 
