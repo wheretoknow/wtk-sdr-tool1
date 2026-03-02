@@ -603,8 +603,12 @@ class ErrorBoundary extends Component {
   }
 }
 
-function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote, prospects }) {
-  if (filteredT.length === 0) {
+function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote, prospects,
+  outreachSearch, setOutreachSearch, outreachCountry, setOutreachCountry, outreachCity, setOutreachCity, outreachGroup, setOutreachGroup, outreachTier, setOutreachTier, outreachProvider, setOutreachProvider,
+  allCountries, allCities, allGroups, allProviders, updateIntention }) {
+  const hasActiveFilters = outreachSearch || outreachCountry || outreachCity || outreachGroup || outreachTier || outreachProvider;
+  function clearOutreachFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); }
+  if (filteredT.length === 0 && !hasActiveFilters) {
     return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
   const stageGroups = { all: filteredT.length, active: 0, demo: 0, won: 0, dead: 0 };
@@ -625,6 +629,35 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
 
   return (
     <>
+      {/* Outreach Filters */}
+      <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:12,flexWrap:"nowrap",overflowX:"auto"}}>
+        <input className="cmd-input" style={{minWidth:160,flexShrink:0}} placeholder="🔍 Hotel or person..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
+        <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
+          <option value="">All Countries</option>
+          {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachCity} onChange={e=>setOutreachCity(e.target.value)}>
+          <option value="">All Cities</option>
+          {allCities.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="cmd-input" style={{width:150,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
+          <option value="">All Groups</option>
+          {allGroups.map(g=><option key={g} value={g}>{g.length>26?g.slice(0,24)+"…":g}</option>)}
+        </select>
+        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachTier} onChange={e=>setOutreachTier(e.target.value)}>
+          <option value="">All Tiers</option>
+          {["Luxury","Premium","Lifestyle","Economy","Function"].map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+        <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachProvider} onChange={e=>setOutreachProvider(e.target.value)}>
+          <option value="">All Providers</option>
+          {allProviders.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+        {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>✕ Clear</button>}
+        <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{filteredT.length} prospects{hasActiveFilters?" (filtered)":""}</span>
+      </div>
+      {filteredT.length === 0 ? (
+        <div className="empty"><div className="empty-icon">🔍</div><div className="empty-title">No outreach matches filters</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>← Clear filters</button></div>
+      ) : (<>
       <div className="pipeline-legend">
         <span>Today: <strong>{fmtDate(new Date())}</strong></span>
         <span className="legend-item"><span className="legend-dot" style={{background:"var(--red)"}}/>Overdue</span>
@@ -648,7 +681,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         <div className="table-card" style={{overflowX:"auto"}}>
           <table className="outreach-list">
             <thead><tr>
-              <th>Hotel</th><th>Country</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Touches</th><th>Actions</th><th>Notes</th><th>SDR</th><th></th>
+              <th>Hotel</th><th>Country</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intention</th><th>Touches</th><th>Actions</th><th>Notes</th><th>SDR</th><th></th>
             </tr></thead>
             <tbody>
               {visibleT.map(t => {
@@ -664,6 +697,12 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                     <td style={{color:"var(--text3)",fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||p?.brand||"Independent"}</td>
                     <td style={{color:"var(--text2)"}}>{t.gm||"—"}</td>
                     <td><span className={`pipeline-status ${status.cls}`} style={{fontSize:10}}>{stage}</span></td>
+                    <td onClick={e=>e.stopPropagation()}>
+                      <div style={{display:"flex",gap:2}}>{[1,2,3,4,5].map(v=>(
+                        <button key={v} onClick={()=>updateIntention(t.id,v)} title={`Intention ${v}`}
+                          style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:v<=(t.intention||0)?"#f59e0b":"#d1d5db",padding:0,lineHeight:1}}>★</button>
+                      ))}</div>
+                    </td>
                     <td onClick={e=>e.stopPropagation()}><MiniTouches t={t}/></td>
                     <td onClick={e=>e.stopPropagation()}>
                       {!isClosed && (
@@ -775,6 +814,12 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                 )}
                 <div className="card-footer">
                   <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
+                  <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:1,alignItems:"center"}}>
+                    {[1,2,3,4,5].map(v=>(
+                      <button key={v} onClick={()=>updateIntention(t.id,v)} title={`Intention ${v}`}
+                        style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:v<=(t.intention||0)?"#f59e0b":"#d1d5db",padding:0,lineHeight:1}}>★</button>
+                    ))}
+                  </div>
                   {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
                 </div>
               </div>
@@ -782,6 +827,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
           })}
         </div>
       )}
+      </>)}
     </>
   );
 }
@@ -825,6 +871,13 @@ export default function App() {
   const [editingNote, setEditingNote] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [filterProvider, setFilterProvider] = useState("");
+  // Outreach tracker filters
+  const [outreachSearch, setOutreachSearch] = useState("");
+  const [outreachCountry, setOutreachCountry] = useState("");
+  const [outreachCity, setOutreachCity] = useState("");
+  const [outreachGroup, setOutreachGroup] = useState("");
+  const [outreachTier, setOutreachTier] = useState("");
+  const [outreachProvider, setOutreachProvider] = useState("");
   const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
 
@@ -905,7 +958,10 @@ export default function App() {
       if (data.error) throw new Error(data.error);
       setProgress(70); setLog("Saving to shared database...");
       const raw = parseJSON(data.result);
-      if (!raw.length) throw new Error("No hotels returned. Try a different market.");
+      if (!raw.length) {
+        const preview = (data.result||"").slice(0, 300);
+        throw new Error(`No hotels parsed. Raw response: ${preview || "(empty)"}`);
+      }
       const sdr = sdrName || "Unknown";
       const batch = `${market} · ${fmtDateShort(new Date())}`;
       const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
@@ -989,6 +1045,14 @@ export default function App() {
     const upd = { pipeline_stage: "active", done: [], d1: null, d2: null, d3: null, d4: null, rejection_reason: null };
     setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...upd } : x));
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(upd) }); } catch (e) { console.error(e); }
+  }
+
+  async function updateIntention(tid, val) {
+    const t = tracking.find(x => x.id === tid);
+    // Toggle off if clicking same value
+    const newVal = (t?.intention || 0) === val ? 0 : val;
+    setTracking(prev => prev.map(x => x.id === tid ? { ...x, intention: newVal } : x));
+    try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ intention: newVal }) }); } catch (e) { console.error(e); }
   }
 
 
@@ -1134,7 +1198,23 @@ export default function App() {
     if (vb == null) return -1;
     return sortDir === "asc" ? va - vb : vb - va;
   }) : filteredP;
-  const filteredT = filterSdr === "all" ? tracking : tracking.filter(t => t.sdr === filterSdr);
+  const filteredT = tracking.filter(t => {
+    if (filterSdr !== "all" && t.sdr !== filterSdr) return false;
+    const p = prospects.find(x => x.id === t.prospect_id);
+    if (outreachSearch) {
+      const q = outreachSearch.toLowerCase();
+      if (!(t.hotel||"").toLowerCase().includes(q) && !(t.gm||"").toLowerCase().includes(q)) return false;
+    }
+    if (outreachCountry && (p?.country||"") !== outreachCountry) return false;
+    if (outreachCity && (p?.city||"") !== outreachCity) return false;
+    if (outreachGroup && normalizeGroup(p?.hotel_group||p?.brand||"") !== outreachGroup) return false;
+    if (outreachTier && p?.tier !== outreachTier) return false;
+    if (outreachProvider) {
+      const prov = p ? (getProvider(p) || "Unknown") : "Unknown";
+      if (prov !== outreachProvider) return false;
+    }
+    return true;
+  });
   const contacted = tracking.filter(t => (t.done || []).length > 0).length;
   const totalHotelPages = Math.ceil(sortedP.length / HOTELS_PER_PAGE);
   const pagedP = sortedP.slice((hotelsPage-1)*HOTELS_PER_PAGE, hotelsPage*HOTELS_PER_PAGE);
@@ -1312,7 +1392,16 @@ export default function App() {
             </div>
           )}
 
-          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} outreachView={outreachView} setOutreachView={setOutreachView} setDeleteConfirm={setDeleteConfirm} editingNote={editingNote} setEditingNote={setEditingNote} noteText={noteText} setNoteText={setNoteText} saveNote={saveNote} prospects={prospects} /></ErrorBoundary>}
+          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} outreachView={outreachView} setOutreachView={setOutreachView} setDeleteConfirm={setDeleteConfirm} editingNote={editingNote} setEditingNote={setEditingNote} noteText={noteText} setNoteText={setNoteText} saveNote={saveNote} prospects={prospects}
+            outreachSearch={outreachSearch} setOutreachSearch={setOutreachSearch}
+            outreachCountry={outreachCountry} setOutreachCountry={setOutreachCountry}
+            outreachCity={outreachCity} setOutreachCity={setOutreachCity}
+            outreachGroup={outreachGroup} setOutreachGroup={setOutreachGroup}
+            outreachTier={outreachTier} setOutreachTier={setOutreachTier}
+            outreachProvider={outreachProvider} setOutreachProvider={setOutreachProvider}
+            allCountries={allCountries} allCities={allCities} allGroups={allGroups} allProviders={allProviders}
+            updateIntention={updateIntention}
+          /></ErrorBoundary>}
         </div>
       </div>
 
