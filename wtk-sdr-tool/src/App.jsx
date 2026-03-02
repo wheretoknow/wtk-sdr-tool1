@@ -1137,31 +1137,37 @@ export default function App() {
             ))}
           </div>
 
-          {tab==="hotels" && (filteredP.length===0 && !filterCountry && !filterGroup && !filterTier ? (
-            <div className="empty"><div className="empty-icon">🏨</div><div className="empty-title">{loading?"Loading database...":"No prospects yet"}</div><div className="empty-sub">Select your market and tier, then click Run Research.</div></div>
-          ) : (
+          {tab==="hotels" && (
             <div className="table-card">
-              <div style={{display:"flex",gap:8,alignItems:"center",padding:"10px 0 6px",flexWrap:"wrap"}}>
-                <input className="cmd-input" style={{minWidth:180}} placeholder="🔍 Search hotel or person..." value={filterSearch} onChange={e=>{setFilterSearch(e.target.value);setHotelsPage(1);}}/>
-                <select className="cmd-input" style={{minWidth:130}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setFilterCity("");setHotelsPage(1);}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",padding:"10px 0 6px",flexWrap:"nowrap",overflowX:"auto"}}>
+                <input className="cmd-input" style={{minWidth:160,flexShrink:0}} placeholder="🔍 Hotel or person..." value={filterSearch} onChange={e=>{setFilterSearch(e.target.value);setHotelsPage(1);}}/>
+                <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setFilterCity("");setHotelsPage(1);}}>
                   <option value="">All Countries</option>
                   {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
-                <select className="cmd-input" style={{minWidth:130}} value={filterCity} onChange={e=>{setFilterCity(e.target.value);setHotelsPage(1);}}>
+                <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={filterCity} onChange={e=>{setFilterCity(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Cities</option>
                   {allCities.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
-                <select className="cmd-input" style={{minWidth:180}} value={filterGroup} onChange={e=>{setFilterGroup(e.target.value);setHotelsPage(1);}}>
+                <select className="cmd-input" style={{width:160,flexShrink:0,maxWidth:160}} value={filterGroup} onChange={e=>{setFilterGroup(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Groups</option>
-                  {allGroups.map(g=><option key={g} value={g}>{g}</option>)}
+                  {allGroups.map(g=><option key={g} value={g}>{g.length>28?g.slice(0,26)+"…":g}</option>)}
                 </select>
-                <select className="cmd-input" style={{minWidth:110}} value={filterTier} onChange={e=>{setFilterTier(e.target.value);setHotelsPage(1);}}>
+                <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterTier} onChange={e=>{setFilterTier(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Tiers</option>
                   {["Luxury","Premium","Lifestyle","Economy","Function"].map(t=><option key={t} value={t}>{t}</option>)}
                 </select>
-                {(filterCountry||filterCity||filterGroup||filterTier||filterSearch) && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setHotelsPage(1);}}>✕ Clear</button>}
-                <span style={{marginLeft:"auto",fontSize:11,color:"var(--text3)"}}>{filteredP.length} hotels{(filterCountry||filterCity||filterGroup||filterTier||filterSearch)?" (filtered)":""}</span>
+                {(filterCountry||filterCity||filterGroup||filterTier||filterSearch) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setHotelsPage(1);}}>✕ Clear</button>}
+                <span style={{marginLeft:"auto",fontSize:11,color:"var(--text3)",whiteSpace:"nowrap",flexShrink:0}}>{filteredP.length} hotels{(filterCountry||filterCity||filterGroup||filterTier||filterSearch)?" (filtered)":""}</span>
               </div>
+              {filteredP.length === 0 ? (
+                <div className="empty">
+                  <div className="empty-icon">{loading ? "⏳" : "🔍"}</div>
+                  <div className="empty-title">{loading ? "Loading database..." : "No hotels match your filters"}</div>
+                  <div className="empty-sub" style={{marginBottom:12}}>{loading ? "" : "Try adjusting your search or filters."}</div>
+                  {!loading && <button className="act-btn" onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setHotelsPage(1);}}>← Clear all filters</button>}
+                </div>
+              ) : (
               <table>
                 <thead><tr><th style={{minWidth:180}}>Hotel</th><th>City</th><th>Country</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>ADR</th><th>Ownership</th><th>SDR</th><th></th></tr></thead>
                 <tbody>
@@ -1207,7 +1213,7 @@ export default function App() {
                 </div>
               )}
             </div>
-          ))}
+          )}
 
           {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} outreachView={outreachView} setOutreachView={setOutreachView} setDeleteConfirm={setDeleteConfirm} editingNote={editingNote} setEditingNote={setEditingNote} noteText={noteText} setNoteText={setNoteText} saveNote={saveNote} prospects={prospects} /></ErrorBoundary>}
         </div>
