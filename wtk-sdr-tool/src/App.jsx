@@ -1168,6 +1168,7 @@ export default function App() {
                   {!loading && <button className="act-btn" onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setHotelsPage(1);}}>← Clear all filters</button>}
                 </div>
               ) : (
+              <>
               <table>
                 <thead><tr><th style={{minWidth:180}}>Hotel</th><th>City</th><th>Country</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>ADR</th><th>Ownership</th><th>SDR</th><th></th></tr></thead>
                 <tbody>
@@ -1211,6 +1212,8 @@ export default function App() {
                   <button className="act-btn" disabled={hotelsPage===totalHotelPages} onClick={()=>setHotelsPage(p=>p+1)}>Next →</button>
                   <span style={{fontSize:11,color:"var(--text3)",marginLeft:4}}>{(hotelsPage-1)*HOTELS_PER_PAGE+1}–{Math.min(hotelsPage*HOTELS_PER_PAGE,filteredP.length)} of {filteredP.length}</span>
                 </div>
+              )}
+              </>
               )}
             </div>
           )}
