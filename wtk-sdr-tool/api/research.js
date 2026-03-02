@@ -6,19 +6,47 @@ function inferProvider(b, n) {
   return null;
 }
 
-// When web search is used, Claude emits multiple text blocks (search narration).
-// The actual JSON is always in the LAST text block. join('') breaks parsing.
-function extractLastText(content) {
-  const blocks = (content || []).filter(b => b.type === 'text');
-  return blocks.length ? blocks[blocks.length - 1].text : '';
+// Search ALL text blocks for one containing a JSON array — not just the last block.
+// The last block is sometimes a disclaimer ("I couldn't find X"). The JSON is in an earlier block.
+function extractJSON(content) {
+  const blocks = (content || []).filter(b => b.type === 'text').map(b => b.text || '');
+  // Search from last to first — prefer later blocks but fall back to any block with [
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const s = blocks[i].indexOf('[');
+    const e = blocks[i].lastIndexOf(']');
+    if (s >= 0 && e > s) return blocks[i].slice(s, e + 1);
+  }
+  return '';
 }
 
-const SYSTEM = `Return ONLY a raw JSON array. No markdown. No explanation. No preamble. Start your response with [ and end with ].
-Each hotel: {"hotel_name":"","brand":"brand only e.g. Kimpton","hotel_group":"parent group e.g. IHG or Independent","tier":"Luxury|Premium|Lifestyle|Economy|Function","city":"","country":"","address":"","website":"","rooms":null,"restaurants":null,"adr_usd":null,"rating":null,"review_count":null,"current_provider":null,"gm_name":null,"gm_first_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"L","outreach_email_subject":"REQUIRED - specific tension hook, no generic titles","outreach_email_body":"REQUIRED. MAX 100 words. No labels, no placeholders. Format:\nHello [FirstName],\n\n[1 sentence: specific tension from reviews with platform+timeframe. Be concrete.]\n\n[1 sentence: why invisible to management.]\n\n[If provider known: 'We know you have [Provider] — Where to know works alongside it, adding what [Provider] does not cover: local competitor benchmarking and pattern-to-action mapping. Most clients run both.' Else: skip.]\n\n[1 sentence: concrete outcome. No AI/tech/dashboard words.]\n\nAvailable for 15 min [specific days]?\n\nBest,\nZishuo Wang | Where to know","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":"• GM: name (source)\n• ADR: $X (source)\n• Rating: X/SCALE from PLATFORM (N reviews) — SCALE is 5 for Google/TripAdvisor, 10 for Booking.com/Agoda/Trip.com\n• Provider: X (confirmed source) or Unknown\n• Theme: X"}
-Provider map: Marriott brands=Qualtrics, IHG brands(InterContinental/Kimpton/Hotel Indigo/Six Senses/Regent/Crowne Plaza/voco/Holiday Inn)=Medallia, Hyatt/Wyndham=Medallia, Radisson/NH/Park Plaza/Anantara/Peninsula/Capella=ReviewPro, Accor/Rosewood/Mandarin Oriental=TrustYou.
-Rules: outreach_email_subject and outreach_email_body are REQUIRED always. For email: search for GM personal email first; use generic (info@, reservations@) as last resort and mark email_source as "generic". Asia hotels: prefer Agoda or Trip.com reviews. Europe/Americas: prefer Booking.com. PROVIDER ACCURACY: only set current_provider if confirmed from a public source, else null.`;
+function extractJSONObject(content) {
+  const blocks = (content || []).filter(b => b.type === 'text').map(b => b.text || '');
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const s = blocks[i].indexOf('{');
+    const e = blocks[i].lastIndexOf('}');
+    if (s >= 0 && e > s) return blocks[i].slice(s, e + 1);
+  }
+  return '';
+}
 
-const DEEP_SYSTEM = `Search for this hotel. Return ONLY a JSON object (no array): {"adr_usd":null,"rating":null,"review_count":null,"research_notes":"• GM: name+LinkedIn\n• ADR: $X (Booking.com)\n• Rating: X/5 (N reviews, Google) or X/10 (N reviews, Booking.com)\n• Theme 1: X\n• Theme 2: X\n• Provider: X"}`;
+const SYSTEM = `You are a data extraction API. You MUST always return a valid JSON array, no matter what.
+
+CRITICAL RULES:
+1. Start your response with [ and end with ]. Nothing before [, nothing after ].
+2. If a field is unknown or not found, use null. NEVER refuse to output JSON because data is missing.
+3. Do NOT write explanations, disclaimers, or apologies. JSON only.
+4. outreach_email_subject and outreach_email_body are REQUIRED — write them based on whatever you know about the hotel, even if details are limited.
+
+Each hotel object schema:
+{"hotel_name":"","brand":"","hotel_group":"","tier":"Luxury|Premium|Lifestyle|Economy|Function","city":"","country":"","address":"","website":"","rooms":null,"restaurants":null,"adr_usd":null,"rating":null,"review_count":null,"current_provider":null,"gm_name":null,"gm_first_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"L","outreach_email_subject":"specific tension hook based on hotel reputation","outreach_email_body":"MAX 100 words. Hello [FirstName],\n\n[specific operational tension from reviews or known reputation, with platform+timeframe if available]\n\n[why this is invisible to management without the right tool]\n\n[if provider known: We know you have [Provider] — Where to know works alongside it, adding local competitor benchmarking and pattern-to-action mapping. Most clients run both.]\n\n[one concrete outcome sentence]\n\nAvailable for 15 min this week or next?\n\nBest,\nZishuo Wang | Where to know","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":"• GM: name (source)\n• ADR: $X or Unknown\n• Rating: X/SCALE (N reviews, PLATFORM) or Unknown\n• Provider: X or Unknown\n• Theme: X"}
+
+Provider inference: Marriott brands→Qualtrics, IHG brands(InterContinental/Kimpton/Hotel Indigo/Six Senses/Regent/Crowne Plaza/voco)→Medallia, Hyatt/Wyndham→Medallia, Radisson/NH/Park Plaza/Anantara/Peninsula/Capella→ReviewPro, Accor/Rosewood/Mandarin Oriental→TrustYou.
+For email: search for GM personal email first; use hotel generic email (info@, reservations@) as last resort and set email_source="generic". If nothing found, email=null.
+Asia hotels: prefer Agoda/Trip.com ratings. Europe/Americas: prefer Booking.com.`;
+
+const DEEP_SYSTEM = `Search for this hotel. Return ONLY a JSON object (no array, no markdown):
+{"adr_usd":null,"rating":null,"review_count":null,"research_notes":"• GM: name+LinkedIn\n• ADR: $X (source)\n• Rating: X/5 or X/10 (N reviews, PLATFORM)\n• Theme 1: X\n• Theme 2: X\n• Provider: X"}
+If data is unavailable, use null. Always output the JSON object.`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -39,10 +67,9 @@ export default async function handler(req, res) {
       });
       const data = await r.json();
       if (!r.ok) return res.status(500).json({ error: data.error?.message || 'API error' });
-      const text = extractLastText(data.content);
-      const s = text.indexOf('{'), e = text.lastIndexOf('}');
-      if (s >= 0 && e >= 0) return res.status(200).json({ result: text.slice(s, e + 1) });
-      return res.status(200).json({ result: text });
+      const text = extractJSONObject(data.content);
+      if (text) return res.status(200).json({ result: text });
+      return res.status(200).json({ result: '{}' });
     }
 
     // ── Main search mode ─────────────────────────────────────────────────────
@@ -50,10 +77,10 @@ export default async function handler(req, res) {
     const t = tiers[segment] || "luxury";
     const brandFilter = brand ? ` Only include CONFIRMED ${brand} brand properties. Exclude all non-${brand} hotels.` : "";
     const excludeClause = (exclude && exclude.length)
-      ? `\n\nDo NOT include these hotels (already in our database): ${exclude.slice(0, 80).join(', ')}. Find different hotels only.`
+      ? `\n\nSkip these hotels (already in database): ${exclude.slice(0, 60).join(', ')}.`
       : "";
 
-    const prompt = `List ${count} ${t} hotels in ${city}.${brandFilter}${excludeClause} For each: GM name+email, rooms, ADR, recent review theme, brand, parent group. Output as JSON array only.`;
+    const prompt = `Find ${count} ${t} hotels in ${city}.${brandFilter}${excludeClause} Search for GM names, room counts, ADR, recent guest feedback themes. Then output the JSON array.`;
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -63,20 +90,22 @@ export default async function handler(req, res) {
     const data = await r.json();
     if (!r.ok) return res.status(500).json({ error: data.error?.message || 'API error' });
 
-    let text = extractLastText(data.content);
-    try {
-      const s = text.indexOf('['), e = text.lastIndexOf(']');
-      if (s >= 0 && e >= 0) {
-        const arr = JSON.parse(text.slice(s, e + 1));
-        text = JSON.stringify(arr.map(p => ({
-          ...p,
-          current_provider: inferProvider(p.brand, p.hotel_name) || p.current_provider || null,
-          hotel_group: p.hotel_group || p.brand || "Independent"
-        })));
-      }
-    } catch (e) {}
+    const jsonStr = extractJSON(data.content);
+    if (!jsonStr) return res.status(200).json({ result: '[]' });
 
-    res.status(200).json({ result: text });
+    try {
+      const arr = JSON.parse(jsonStr);
+      const enriched = JSON.stringify(arr.map(p => ({
+        ...p,
+        current_provider: inferProvider(p.brand, p.hotel_name) || p.current_provider || null,
+        hotel_group: p.hotel_group || p.brand || "Independent"
+      })));
+      return res.status(200).json({ result: enriched });
+    } catch (e) {
+      // JSON parse failed — return raw string, let frontend try
+      return res.status(200).json({ result: jsonStr });
+    }
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
