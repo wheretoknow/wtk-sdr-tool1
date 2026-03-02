@@ -1014,7 +1014,6 @@ export default function App() {
       alert("Import failed: " + err.message);
     }
   }
-  }
 
   const sel = selected ? prospects.find(p => p.id === selected) : null;
   const sdrs = ["all", ...new Set(prospects.map(p => p.sdr).filter(Boolean))];
