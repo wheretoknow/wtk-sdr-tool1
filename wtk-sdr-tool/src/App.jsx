@@ -931,7 +931,24 @@ export default function App() {
   async function loadData() {
     setLoading(true);
     try {
-      const [p, t] = await Promise.all([sbFetch("/prospects?order=created_at.desc&limit=500"), sbFetch("/tracking?order=created_at.desc&limit=500")]);
+      // Load all records in parallel pages (Supabase max 1000/request)
+      async function loadAll(path) {
+        const all = [];
+        let offset = 0;
+        const PAGE = 1000;
+        while (true) {
+          const page = await sbFetch(`${path}&limit=${PAGE}&offset=${offset}`);
+          if (!page || !page.length) break;
+          all.push(...page);
+          if (page.length < PAGE) break;
+          offset += PAGE;
+        }
+        return all;
+      }
+      const [p, t] = await Promise.all([
+        loadAll("/prospects?order=created_at.desc"),
+        loadAll("/tracking?order=created_at.desc")
+      ]);
       setProspects(p || []); setTracking(t || []);
     } catch (e) { console.error(e); }
     setLoading(false);
