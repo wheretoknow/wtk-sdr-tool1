@@ -26,43 +26,48 @@ function extractJSONObject(content) {
 
 const SYSTEM = `You are a hotel data extraction API. Output ONLY a valid JSON array. Start with [, end with ]. No text before or after. Unknown fields = null. Never refuse to output JSON.
 
-SEARCH STRATEGY — for each hotel, execute these searches in order:
+━━━ FIELD PRIORITY ━━━
 
-1. GM NAME (priority source: LinkedIn or news)
-   → Search: "[hotel name] general manager 2024" on Google News
-   → Search: "[hotel name] general manager" on LinkedIn
-   → Also check: hospitalitynet.org, hotelnewsresource.com for appointment announcements
-   → contact_confidence: "H"=official/press, "M"=news article, "L"=unconfirmed
+🔴 CRITICAL — allocate most searches here, do not leave null without 2 attempts:
+  • gm_name — GM full name
+  • email or linkedin — at least one GM contact method
+  • rating + review_count — score from any major platform
+  • rooms — total room count
+  • current_provider — infer from brand OR search "[hotel] Medallia/ReviewPro/Qualtrics"
 
-2. GM EMAIL (best sources in order)
-   → TripAdvisor: find management responses for this hotel, check if GM signed with email
-   → Hotel official website: check /contact, /press, /about pages
-   → If brand email pattern is known (e.g. firstname.lastname@fourseasons.com), try it
-   → If nothing found: email=null. NEVER fabricate an email address.
+🟡 SECONDARY — one search attempt, null if not found:
+  • restaurants — F&B outlet count
+  • adr_usd — estimated nightly rate
 
-3. ROOMS + RESTAURANTS
-   → Official hotel website (always listed under "rooms" or "accommodations")
-   → Brand website property page
-   → These are almost always findable — do not leave as null without searching
+━━━ SEARCH INSTRUCTIONS ━━━
 
-4. ADR
-   → Search Booking.com or Agoda for "[hotel name]", pick any available rate for a standard room on a mid-week date
-   → This is an estimate — round to nearest $10, set adr_usd as integer
-   → Note the platform and date in research_notes
+🔴 GM NAME — search in this order, stop when found:
+  1. Google News: "[hotel name] general manager 2025" or "2024"
+  2. LinkedIn: "[hotel name] general manager"
+  3. hospitalitynet.org or hotelnewsresource.com: "[hotel name] GM appointed"
+  contact_confidence: "H"=press release, "M"=news article, "L"=other
 
-5. RATING + REVIEW COUNT
-   → Asia hotels: search "[hotel name] Agoda" or "[hotel name] Trip.com rating"
-   → Europe/Americas: search "[hotel name] Booking.com" (rating out of 10) or Google (out of 5)
-   → rating field = numeric value only (e.g. 8.7 or 4.5)
-   → review_count field = integer
-   → Always findable if the hotel exists — do not leave as null without searching
+🔴 GM CONTACT — search in this order, stop when found:
+  1. TripAdvisor management responses for this hotel — GM sometimes signs with email
+  2. Hotel official website /contact /press /about page
+  3. LinkedIn profile URL (linkedin.com/in/...) — set in linkedin field
+  email=null if not found. NEVER fabricate. linkedin URL is acceptable if email unavailable.
 
-6. FEEDBACK THEME
-   → Read 2-3 recent Google or TripAdvisor reviews, identify the most common operational friction
-   → Use neutral language: "breakfast capacity signal", "check-in wait pattern", "housekeeping consistency"
+🔴 ROOMS — always on official hotel website under "rooms" or "accommodations". Never null.
+
+🔴 RATING + REVIEW COUNT — always publicly visible:
+  Asia: search "[hotel name] Agoda" or "[hotel name] Trip.com"
+  Europe/Americas: search "[hotel name] Booking.com" (out of 10) or "[hotel name] Google reviews" (out of 5)
+  Try a second platform if first fails. Never null if hotel is findable.
+
+🔴 CURRENT PROVIDER — infer from brand map below first. If brand is ambiguous, search "[hotel name] Medallia" or "[hotel name] guest experience platform".
+
+🟡 ADR — Booking.com or Agoda, any standard room rate, round to $10. One search only.
+
+🟡 RESTAURANTS — hotel website /dining page. One search only.
 
 OUTPUT SCHEMA:
-{"hotel_name":"","brand":"","hotel_group":"","tier":"Luxury|Premium|Lifestyle|Economy|Function","city":"","country":"","address":"","website":"","rooms":null,"restaurants":null,"adr_usd":null,"rating":null,"review_count":null,"current_provider":null,"gm_name":null,"gm_first_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"L","outreach_email_subject":"specific tension hook — no generic titles","outreach_email_body":"MAX 100 words. Hello [FirstName],\n\n[1 sentence: specific operational tension from reviews with platform+timeframe]\n\n[1 sentence: why this is invisible to management without pattern-level visibility]\n\n[if provider known: We know you have [Provider] — Where to know works alongside it, adding local competitor benchmarking and pattern-to-action mapping. Most clients run both.]\n\n[1 sentence: concrete outcome, no AI/tech/dashboard words]\n\nAvailable for 15 min this week or next?\n\nBest,\nZishuo Wang | Where to know","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":"• GM: [name] ([source: LinkedIn/news/website])\n• Rooms: [N]\n• Restaurants: [N]\n• ADR: ~$[X] ([platform], [date])\n• Rating: [X]/[SCALE] ([N] reviews, [PLATFORM])\n• Provider: [X or Unknown]\n• Theme: [feedback theme]"}
+{"hotel_name":"","brand":"","hotel_group":"","tier":"Luxury|Premium|Lifestyle|Economy|Function","city":"","country":"","address":"","website":"","rooms":null,"restaurants":null,"adr_usd":null,"rating":null,"review_count":null,"current_provider":null,"gm_name":null,"gm_first_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"L","outreach_email_subject":"specific tension hook — no generic titles","outreach_email_body":"REQUIRED. 80-120 words. Follow this structure exactly — do not shorten:\n\nHello [FirstName],\n\n[1-2 sentences: specific operational tension observed across recent reviews on [PLATFORM] over [TIMEFRAME]. Be concrete — name the pattern, e.g. breakfast wait times, late checkout friction, recognition gaps. Not vague.]\n\n[1 sentence: why this pattern is structurally invisible to management — it lives in written text, not scores.]\n\n[REQUIRED if provider known: We know you have [Provider] — Where to know works alongside it, not instead of it. What [Provider] does not cover: real-time local competitor benchmarking and turning written feedback patterns into specific next steps for your team. Most of our hotel partners run both.]\n\n[1 sentence: the concrete operational outcome — what changes for the GM. No AI, no dashboard, no tech words.]\n\nAvailable for 15 min this week or next?\n\nBest,\nZishuo Wang | Where to know","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":"• GM: [name] ([source: LinkedIn/news/website])\n• Rooms: [N]\n• Restaurants: [N]\n• ADR: ~$[X] ([platform], [date])\n• Rating: [X]/[SCALE] ([N] reviews, [PLATFORM])\n• Provider: [X or Unknown]\n• Theme: [feedback theme]"}
 
 Provider map: Marriott→Qualtrics, IHG(InterContinental/Kimpton/Hotel Indigo/Six Senses/Regent/Crowne Plaza/voco)→Medallia, Hyatt/Wyndham→Medallia, Radisson/NH/Park Plaza/Anantara/Peninsula/Capella→ReviewPro, Accor/Rosewood/Mandarin Oriental→TrustYou.`;
 
@@ -106,16 +111,21 @@ export default async function handler(req, res) {
 
     const prompt = `Find ${count} ${t} hotels in ${city}.${brandFilter}${excludeClause}
 
-For EACH hotel, search for all of the following — do not skip:
-- GM name: search "[hotel name] general manager" on Google News and LinkedIn
-- Room count and restaurant count: hotel official website
-- ADR: current rate on Booking.com or Agoda
-- Rating + review count: Google or Booking.com
-- One guest feedback theme: Google reviews or TripAdvisor
+For EACH hotel, prioritize these searches:
+🔴 CRITICAL (search until found):
+- GM name: Google News "[hotel name] general manager 2025" then LinkedIn
+- GM contact: LinkedIn URL or email from TripAdvisor responses / hotel website
+- Room count: official hotel website
+- Rating + review count: Booking.com or Google
+- Current provider: infer from brand, or search "[hotel name] Medallia"
 
-Then output the JSON array with all fields populated.`;
+🟡 SECONDARY (one attempt each):
+- Restaurant count: hotel website /dining
+- ADR: Booking.com or Agoda current rate
 
-    const maxUses = count <= 3 ? 4 : count <= 6 ? 5 : 6;
+Then output the JSON array.`;
+
+    const maxUses = count <= 3 ? 5 : count <= 6 ? 6 : 7; // enough for GM + ADR + rating + reviews + email
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
