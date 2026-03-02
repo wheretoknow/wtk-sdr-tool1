@@ -983,42 +983,67 @@ export default function App() {
         batchPromises.push({ batchIdx: i, batchCount });
       }
 
-      // Execute in groups of 3 concurrent
-      const CONCURRENCY = 3;
-      for (let i = 0; i < batchPromises.length; i += CONCURRENCY) {
-        const chunk = batchPromises.slice(i, i + CONCURRENCY);
+      // 1 batch at a time — sequential to stay within 50k tokens/min rate limit
+      // Each batch uses ~15k tokens (system prompt + web search results)
+      // At 1 batch/15s we stay safely under limit
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+      // Countdown helper — shows live "waiting Xs..." in the log
+      async function rateLimitWait(seconds) {
+        for (let s = seconds; s > 0; s--) {
+          setLog(`Rate limit — waiting ${s}s before next batch...`);
+          await sleep(1000);
+        }
+      }
+
+      // Fetch with automatic rate-limit retry
+      async function fetchWithRetry(body, attempt = 0) {
+        const r = await fetch("/api/research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await r.json();
+        // Detect rate limit error from Anthropic (passed through from research.js)
+        if (data?.error && data.error.toLowerCase().includes("rate limit")) {
+          if (attempt >= 3) return data; // give up after 3 retries
+          const waitSec = 30 + attempt * 15; // 30s, 45s, 60s
+          await rateLimitWait(waitSec);
+          return fetchWithRetry(body, attempt + 1);
+        }
+        return data;
+      }
+
+      for (let i = 0; i < batchPromises.length; i++) {
+        const { batchCount } = batchPromises[i];
         const pct = Math.round(10 + (i / batchPromises.length) * 75);
         setProgress(pct);
-        setLog(`Searching batch ${i+1}–${Math.min(i+CONCURRENCY, numBatches)} of ${numBatches} (${n} hotels total)...`);
+        setLog(`Searching batch ${i + 1} of ${numBatches} (${batchCount} hotels)...`);
 
-        const results = await Promise.allSettled(chunk.map(({ batchCount }) => {
-          // Build live exclusion list including hotels found so far this run
-          const alreadyFound = allFresh.map(p => p.hotel_name);
-          const excludeList = [...existingInMarket, ...alreadyFound];
-          return fetch("/api/research", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ city: market, brand, segment: tier, count: batchCount, exclude: excludeList })
-          }).then(r => r.json());
-        }));
+        // Inter-batch delay: 20s after batch 1, scaled up for large runs
+        if (i > 0) {
+          const delaySec = n <= 10 ? 20 : n <= 25 ? 25 : 35;
+          await rateLimitWait(delaySec);
+        }
 
-        for (const result of results) {
-          if (result.status === "rejected" || result.value?.error) {
-            totalErrors++;
-            const errMsg = result.value?.error || result.reason?.message || "unknown";
-            setError(prev => (prev ? prev + " | " : "") + "API error: " + errMsg);
-            continue;
-          }
-          const raw = parseJSON(result.value.result);
-          if (!raw.length) {
-            const preview = (result.value.result || "").slice(0, 400);
-            setError("Parse failed. Model returned: " + preview);
-          }
-          for (const p of raw) {
-            const key = normKey(p.hotel_name, p.city);
-            if (existingKeys.has(key)) { allDupes.push(p.hotel_name); }
-            else { allFresh.push(p); existingKeys.add(key); }
-          }
+        const alreadyFound = allFresh.map(p => p.hotel_name);
+        const excludeList = [...existingInMarket, ...alreadyFound];
+        const data = await fetchWithRetry({ city: market, brand, segment: tier, count: batchCount, exclude: excludeList });
+
+        if (data?.error) {
+          totalErrors++;
+          setError("API error: " + data.error);
+          continue;
+        }
+        const raw = parseJSON(data.result);
+        if (!raw.length) {
+          const preview = (data.result || "").slice(0, 300);
+          setError("Parse failed. Model returned: " + preview);
+        }
+        for (const p of raw) {
+          const key = normKey(p.hotel_name, p.city);
+          if (existingKeys.has(key)) { allDupes.push(p.hotel_name); }
+          else { allFresh.push(p); existingKeys.add(key); }
         }
       }
 
