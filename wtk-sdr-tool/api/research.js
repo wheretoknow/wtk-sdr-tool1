@@ -2,9 +2,9 @@ const PROVIDER_MAP = {"ritz-carlton":"Qualtrics","marriott":"Qualtrics","sherato
 function inferProvider(b,n){const s=((b||"")+" "+(n||"")).toLowerCase();for(const[k,v]of Object.entries(PROVIDER_MAP)){if(s.includes(k))return v;}return null;}
 
 const SYSTEM=`Return ONLY a raw JSON array. No markdown.
-Each hotel:{"hotel_name":"","brand":"brand only e.g. Kimpton","hotel_group":"parent group e.g. IHG or Independent","tier":"Luxury|Premium|Lifestyle|Economy|Function","city":"","country":"","address":"","website":"","rooms":null,"restaurants":null,"adr_usd":null,"rating":null,"review_count":null,"current_provider":null,"gm_name":null,"gm_first_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"L","outreach_email_subject":"REQUIRED","outreach_email_body":"REQUIRED: Hello [FirstName],\n\n[P1: specific tension from reviews.]\n\n[P2: why invisible to team.]\n\n[P3: business consequence.]\n\nWhere to know [P4: one outcome, no AI/tech terms].\n\n[P5: 15-min call CTA with days].\n\nBest,\nZishuo Wang | Where to know","linkedin_dm":"<280 chars","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":"• GM: name\n• ADR: $X\n• Provider: X\n• Theme: X"}
-Providers: Marriott=Qualtrics, IHG/Hyatt/Wyndham=Medallia, Radisson/NH/Peninsula/Capella=ReviewPro, Accor/Rosewood/Mandarin=TrustYou.
-outreach_email_subject and outreach_email_body are REQUIRED always.`;
+Each hotel:{"hotel_name":"","brand":"brand only e.g. Kimpton","hotel_group":"parent group e.g. IHG or Independent","tier":"Luxury|Premium|Lifestyle|Economy|Function","city":"","country":"","address":"","website":"","rooms":null,"restaurants":null,"adr_usd":null,"rating":null,"review_count":null,"current_provider":null,"gm_name":null,"gm_first_name":null,"gm_title":"General Manager","email":null,"linkedin":null,"phone":null,"email_source":null,"contact_confidence":"L","outreach_email_subject":"REQUIRED - specific tension hook, no generic titles","outreach_email_body":"REQUIRED. Write naturally, NO [P1][P2] labels, NO placeholders. Structure:\n1. Hello [FirstName],\n2. One specific tension sentence from recent reviews (cite platform + timeframe).\n3. One sentence: why this pattern stays invisible to the management team.\n4. One sentence: business consequence (occupancy, loyalty, reputation).\n5. If provider known: 'We know you have [Provider] — Where to know works alongside it, adding [specific gap Provider does not cover: competitor benchmarking / real-time theme alerts / solution mapping]. Most of our clients use both.' If provider unknown: skip this.\n6. One sentence outcome Where to know delivers (no AI/tech/dashboard language).\n7. CTA: specific days for 15-min call.\n8. Best,\\nZishuo Wang | Where to know","linkedin_dm":"<280 chars, first name only","engagement_strategy":"DIRECT-TO-GM","strategy_reason":"","research_notes":"• GM: name\\n• ADR: $X\\n• Provider: X\\n• Theme: X"}
+Our provider map (use to infer current_provider): Marriott brands=Qualtrics, IHG brands(InterContinental/Kimpton/Hotel Indigo/Six Senses/Regent/Crowne Plaza/voco/Holiday Inn/EVEN/Staybridge/Candlewood)=Medallia, Hyatt/Wyndham=Medallia, Radisson/NH/Park Plaza/Anantara/Peninsula/Capella=ReviewPro, Accor/Rosewood/Mandarin Oriental=TrustYou.
+outreach_email_subject and outreach_email_body are REQUIRED always. Never use placeholder labels like [P1] in the final email.`;
 
 const DEEP_SYSTEM=`Search for this hotel. Return ONLY JSON: {"adr_usd":null,"rating":null,"review_count":null,"research_notes":"• GM: name+LinkedIn\n• ADR: $X (Booking.com)\n• Rating: X/10 (N reviews)\n• Theme 1: X\n• Theme 2: X\n• Provider: X"}`;
 
@@ -38,7 +38,7 @@ export default async function handler(req,res){
       const s=text.indexOf('['),e=text.lastIndexOf(']');
       if(s>=0&&e>=0){
         const arr=JSON.parse(text.slice(s,e+1));
-        text=JSON.stringify(arr.map(p=>({...p,current_provider:p.current_provider||inferProvider(p.brand,p.hotel_name),hotel_group:p.hotel_group||p.brand||"Independent"})));
+        text=JSON.stringify(arr.map(p=>({...p,current_provider:inferProvider(p.brand,p.hotel_name)||p.current_provider||null,hotel_group:p.hotel_group||p.brand||"Independent"})));
       }
     }catch(e){}
     res.status(200).json({result:text});
