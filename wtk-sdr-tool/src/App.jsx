@@ -133,23 +133,32 @@ function inferProvider(brand, hotelName) {
 function normalizeGroup(g) {
   if (!g) return null;
   const s = g.toLowerCase();
-  if (s.includes('marriott')) return 'Marriott International';
+  if (s.includes('marriott')) return 'Marriott';
   if (s.includes('ihg') || s.includes('intercontinental hotels group') || s.includes('intercontinental hotel group')) return 'IHG';
   if (s.includes('hilton')) return 'Hilton';
   if (s.includes('hyatt')) return 'Hyatt';
   if (s.includes('accor') || s.includes('ennismore') || s.includes('mgallery')) return 'Accor';
-  if (s.includes('radisson')) return 'Radisson Hotel Group';
-  if (s.includes('rosewood')) return 'Rosewood Hotel Group';
+  if (s.includes('radisson')) return 'Radisson';
+  if (s.includes('rosewood')) return 'Rosewood';
   if (s.includes('wyndham')) return 'Wyndham';
   if (s.includes('shangri')) return 'Shangri-La';
-  if (s.includes('peninsula')) return 'The Peninsula Hotels';
+  if (s.includes('peninsula')) return 'Peninsula';
   if (s.includes('mandarin oriental')) return 'Mandarin Oriental';
   if (s.includes('four seasons')) return 'Four Seasons';
   if (s.includes('banyan tree')) return 'Banyan Tree';
-  if (s.includes('minor')) return 'Minor Hotels';
-  if (s.includes('onyx')) return 'Onyx Hospitality Group';
+  if (s.includes('minor')) return 'Minor';
+  if (s.includes('onyx')) return 'Onyx';
   if (s.includes('kempinski')) return 'Kempinski';
-  return g; // keep original if no match
+  if (s.includes('lore group')) return 'Lore Group';
+  if (s.includes('dorchester')) return 'Dorchester';
+  if (s.includes('langham')) return 'Langham';
+  if (s.includes('aman')) return 'Aman';
+  if (s.includes('como')) return 'COMO';
+  if (s.includes('belmond')) return 'Belmond';
+  if (s.includes('oetker')) return 'Oetker';
+  if (s.includes('jumeirah')) return 'Jumeirah';
+  // Strip common suffixes for unknown groups
+  return g.replace(/\s*(Hotels?( & Resorts?)?|International|Group|Collection|Worldwide|Ltd\.?|Inc\.?|plc|S\.?A\.?|GmbH)\s*/gi, '').trim() || g;
 }
 const TIER_OPTIONS = [
   { value: "Luxury", label: "Luxury", desc: "Six Senses, Park Hyatt, Rosewood, Mandarin Oriental, Four Seasons, Aman, Peninsula, LHW independents" },
@@ -867,9 +876,27 @@ export default function App() {
       const sdr = sdrName || "Unknown";
       const batch = `${market} · ${fmtDateShort(new Date())}`;
       const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
-      const enriched = raw.map(p => {
+
+      // Deduplication: check against existing prospects by normalized name + city
+      const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
+      const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
+      const fresh = [];
+      const dupes = [];
+      for (const p of raw) {
+        const key = normKey(p.hotel_name, p.city);
+        if (existingKeys.has(key)) { dupes.push(p.hotel_name); }
+        else { fresh.push(p); existingKeys.add(key); }
+      }
+
+      if (fresh.length === 0) {
+        setProgress(100);
+        setLog(`No new hotels — ${dupes.length} already in database${dupes.length<=3?": "+dupes.join(", "):""}`);
+        setTab("hotels");
+        return;
+      }
+
+      const enriched = fresh.map(p => {
         const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
-        // Only keep known DB columns to avoid schema cache errors
         const safe = {};
         PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
         return safe;
@@ -878,7 +905,8 @@ export default function App() {
       await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched) });
       await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT) });
       setProspects(prev => [...enriched, ...prev]); setTracking(prev => [...newT, ...prev]);
-      setProgress(100); setLog(`${enriched.length} prospects saved · ${enriched.filter(p => p.email).length} emails found`);
+      const dupeNote = dupes.length > 0 ? ` · ${dupes.length} skipped (already exist)` : "";
+      setProgress(100); setLog(`${enriched.length} new prospects saved · ${enriched.filter(p => p.email).length} emails found${dupeNote}`);
       setTab("hotels");
     } catch (err) { setError(err.message); }
     finally { setRunning(false); setTimeout(() => setProgress(0), 2000); }
@@ -1193,10 +1221,10 @@ export default function App() {
                       <td><span className="cell-muted">{p.city||"—"}</span></td>
                       <td><span className="cell-muted">{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{isIndependent?"—":p.brand||"—"}</div></td>
-                      <td><div style={{fontSize:12,color:"var(--text3)"}}>{normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
+                      <td><div style={{fontSize:12,color:"var(--text3)",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"—"}>{normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name">{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title}</div></td>
-                      <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
+                      <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()} style={{maxWidth:160,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={p.email}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
                       <td><span className="cell-muted">{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted">{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:11}}>{inferProvider(p.brand,p.hotel_name)||p.current_provider||"—"}</span></td>
