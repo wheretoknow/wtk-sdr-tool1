@@ -130,6 +130,26 @@ function inferProvider(brand, hotelName) {
   }
   return null;
 }
+
+// Normalize messy provider strings from DB to canonical names
+function normalizeProvider(raw) {
+  if (!raw) return null;
+  const s = raw.toLowerCase();
+  if (s.includes("medallia")) return "Medallia";
+  if (s.includes("qualtrics")) return "Qualtrics";
+  if (s.includes("reviewpro") || s.includes("review pro")) return "ReviewPro";
+  if (s.includes("trustyou") || s.includes("trust you")) return "TrustYou";
+  if (s.includes("revinate")) return "Revinate";
+  if (s.includes("guestfeedback") || s.includes("guest feedback")) return "Guestfeedback";
+  if (s.includes("reputation.com") || s.includes("reputation com")) return "Reputation.com";
+  if (s.includes("olery")) return "Olery";
+  return raw.split(/[-–—·,]/)[0].trim(); // Take first part before any dash/description
+}
+
+// Get display provider: infer from brand map first, then normalize DB value
+function getProvider(p) {
+  return inferProvider(p.brand, p.hotel_name) || normalizeProvider(p.current_provider) || null;
+}
 function normalizeGroup(g) {
   if (!g) return null;
   const s = g.toLowerCase();
@@ -251,7 +271,7 @@ const css = `
   .tab.active .tab-badge { background: var(--accent-light); color: var(--accent); }
 
   .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   thead th { background: var(--bg); padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap; }
   thead th.sortable { cursor: pointer; user-select: none; }
   thead th.sortable:hover { color: var(--accent); }
@@ -492,7 +512,7 @@ function getPipelineStatus(t) {
 
 
 function touch2Body(sel) {
-  const provider = inferProvider(sel.brand, sel.hotel_name) || sel.current_provider;
+  const provider = getProvider(sel);
   const providerLine = provider
     ? `\n\nOne thing worth mentioning: we're not here to replace ${provider}. Where to know works alongside it — specifically on the gaps ${provider} doesn't cover, like real-time competitor benchmarking and turning review patterns into actionable next steps for your team. Most of our hotel partners run both.`
     : "";
@@ -1096,12 +1116,8 @@ export default function App() {
     if (filterGroup && normalizeGroup(p.hotel_group||p.brand||"") !== filterGroup) return false;
     if (filterTier && p.tier !== filterTier) return false;
     if (filterProvider) {
-      const prov = inferProvider(p.brand, p.hotel_name) || p.current_provider || "";
-      if (filterProvider === "Unknown" ? prov : prov !== filterProvider) {
-        if (filterProvider === "Unknown" && !prov) { /* match */ }
-        else if (filterProvider !== "Unknown" && prov === filterProvider) { /* match */ }
-        else return false;
-      }
+      const prov = getProvider(p) || "Unknown";
+      if (prov !== filterProvider) return false;
     }
     if (filterSearch) {
       const q = filterSearch.toLowerCase();
@@ -1109,10 +1125,13 @@ export default function App() {
     }
     return true;
   });
-  // Sort if active
+  // Sort if active — nulls always at bottom
   const sortedP = sortCol ? [...filteredP].sort((a, b) => {
-    const va = sortCol === "adr" ? (a.adr_usd||0) : sortCol === "rooms" ? (a.rooms||0) : 0;
-    const vb = sortCol === "adr" ? (b.adr_usd||0) : sortCol === "rooms" ? (b.rooms||0) : 0;
+    const va = sortCol === "adr" ? (a.adr_usd||null) : sortCol === "rooms" ? (a.rooms||null) : null;
+    const vb = sortCol === "adr" ? (b.adr_usd||null) : sortCol === "rooms" ? (b.rooms||null) : null;
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
     return sortDir === "asc" ? va - vb : vb - va;
   }) : filteredP;
   const filteredT = filterSdr === "all" ? tracking : tracking.filter(t => t.sdr === filterSdr);
@@ -1122,7 +1141,7 @@ export default function App() {
   const allCountries = [...new Set(prospects.map(p=>p.country).filter(Boolean))].sort();
   const allCities = filterCountry ? [...new Set(prospects.filter(p=>p.country===filterCountry).map(p=>p.city).filter(Boolean))].sort() : [...new Set(prospects.map(p=>p.city).filter(Boolean))].sort();
   const allGroups = [...new Set(prospects.map(p=>normalizeGroup(p.hotel_group||p.brand)).filter(Boolean))].sort();
-  const allProviders = [...new Set(prospects.map(p=>inferProvider(p.brand,p.hotel_name)||p.current_provider||"Unknown").filter(Boolean))].sort();
+  const allProviders = [...new Set(prospects.map(p=>getProvider(p)||"Unknown"))].sort();
   const countries = Object.keys(GEO[region] || {});
   const cities = (GEO[region] || {})[country] || [];
   const selectedTierObj = TIER_OPTIONS.find(t => t.value === tier);
@@ -1226,7 +1245,7 @@ export default function App() {
                   {allProviders.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
                 {(filterCountry||filterCity||filterGroup||filterTier||filterSearch||filterProvider) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setFilterProvider("");setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
-                <span style={{marginLeft:"auto",fontSize:11,color:"var(--text3)",whiteSpace:"nowrap",flexShrink:0}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterTier||filterSearch||filterProvider)?" (filtered)":""}</span>
+                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterTier||filterSearch||filterProvider)?" (filtered)":""}</span>
               </div>
               {filteredP.length === 0 ? (
                 <div className="empty">
@@ -1240,33 +1259,33 @@ export default function App() {
               <div style={{overflowX:"auto"}}>
               <table>
                 <thead><tr>
-                  <th style={{minWidth:160}}>Hotel</th>
-                  <th>City</th>
-                  <th>Country</th>
-                  <th>Group</th>
-                  <th>Tier</th>
-                  <th>GM</th>
-                  <th>Email</th>
-                  <th className="sortable" onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
-                  <th className="sortable" onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
-                  <th>Provider</th>
-                  <th></th>
+                  <th style={{width:"20%"}}>Hotel</th>
+                  <th style={{width:"8%"}}>City</th>
+                  <th style={{width:"8%"}}>Country</th>
+                  <th style={{width:"10%"}}>Group</th>
+                  <th style={{width:"7%"}}>Tier</th>
+                  <th style={{width:"12%"}}>GM</th>
+                  <th style={{width:"15%"}}>Email</th>
+                  <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
+                  <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
+                  <th style={{width:"8%"}}>Provider</th>
+                  <th style={{width:"3%"}}></th>
                 </tr></thead>
                 <tbody>
                   {pagedP.map(p=>{
                     const isIndependent = !p.hotel_group && !p.brand;
                     return (
                     <tr key={p.id} onClick={()=>setSelected(p.id)}>
-                      <td style={{minWidth:160}}><div className="hotel-name">{p.hotel_name}</div></td>
+                      <td><div className="hotel-name">{p.hotel_name}</div></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.city||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
-                      <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={`${p.brand||""} · ${normalizeGroup(p.hotel_group||p.brand)||""}`}>{isIndependent?"Independent":(p.brand && normalizeGroup(p.hotel_group||p.brand) && p.brand !== normalizeGroup(p.hotel_group||p.brand)) ? <>{p.brand} <span style={{color:"var(--text3)",fontSize:11}}>· {normalizeGroup(p.hotel_group||p.brand)}</span></> : (p.brand || normalizeGroup(p.hotel_group||"") || "—")}</div></td>
+                      <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title&&p.gm_title!=="General Manager"?p.gm_title:""}</div></td>
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={p.email}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
-                      <td><span className="cell-muted" style={{fontSize:11}}>{inferProvider(p.brand,p.hotel_name)||p.current_provider||"—"}</span></td>
+                      <td><span className="cell-muted" style={{fontSize:11}}>{getProvider(p)||"—"}</span></td>
                       <td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
                     </tr>
                   );})}
@@ -1365,8 +1384,8 @@ export default function App() {
                   return <span>{sel.rating} / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
                 })()}
               </span></div>
-              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (sel.hotel_group && sel.hotel_group !== sel.brand ? sel.hotel_group : sel.brand || "Independent")}</span></div>
-              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{inferProvider(sel.brand, sel.hotel_name) || sel.current_provider || "Unknown"}</span></div>
+              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const group = normalizeGroup(sel.hotel_group||sel.brand); const brand = sel.brand; if (!brand && !group) return "Independent"; if (brand && group && brand !== group) return `${brand} · ${group}`; return brand || group || "Independent"; })()}</span></div>
+              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{getProvider(sel) || "Unknown"}</span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:"—"}</span></div>
             </div>
             <div className="d-sec">
