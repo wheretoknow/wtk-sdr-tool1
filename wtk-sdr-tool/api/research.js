@@ -30,7 +30,7 @@ export default async function handler(req,res){
     const b=brand?` ${brand} brand only.`:"";
     const brandFilter = brand ? ` IMPORTANT: Only include hotels that are CONFIRMED ${brand} brand properties. Verify brand affiliation before including. Do NOT include hotels that are not ${brand} branded.` : "";
     const prompt=`List ${count} ${t} hotels in ${city}.${b}${brandFilter} For each find: GM name+email, brand, parent group, rooms, ADR from Booking.com, one feedback theme from recent reviews. JSON array.`;
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-beta':'web-search-2025-03-05'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:4000,system:SYSTEM,tools:[{type:'web_search_20250305',name:'web_search',max_uses:6}],messages:[{role:'user',content:prompt}]})});
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-beta':'web-search-2025-03-05'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:6000,system:SYSTEM,tools:[{type:'web_search_20250305',name:'web_search',max_uses:8}],messages:[{role:'user',content:prompt}]})});
     const data=await r.json();
     if(!r.ok)return res.status(500).json({error:data.error?.message||'API error'});
     let text=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
