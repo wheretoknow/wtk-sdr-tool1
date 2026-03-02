@@ -6,7 +6,7 @@ Each hotel:{"hotel_name":"","brand":"brand only e.g. Kimpton","hotel_group":"par
 Our provider map (use to infer current_provider): Marriott brands=Qualtrics, IHG brands(InterContinental/Kimpton/Hotel Indigo/Six Senses/Regent/Crowne Plaza/voco/Holiday Inn/EVEN/Staybridge/Candlewood)=Medallia, Hyatt/Wyndham=Medallia, Radisson/NH/Park Plaza/Anantara/Peninsula/Capella=ReviewPro, Accor/Rosewood/Mandarin Oriental=TrustYou.
 outreach_email_subject and outreach_email_body are REQUIRED always. Never use placeholder labels like [P1] in the final email.`;
 
-const DEEP_SYSTEM=`Search for this hotel. Return ONLY JSON: {"adr_usd":null,"rating":null,"review_count":null,"research_notes":"• GM: name+LinkedIn\n• ADR: $X (Booking.com)\n• Rating: X/10 (N reviews)\n• Theme 1: X\n• Theme 2: X\n• Provider: X"}`;
+const DEEP_SYSTEM=`Search for this hotel. Return ONLY JSON: {"adr_usd":null,"rating":null,"review_count":null,"research_notes":"• GM: name+LinkedIn\n• ADR: $X (Booking.com)\n• Rating: X/5 (N reviews, Google) or X/10 (N reviews, Booking.com) — specify platform and correct scale\n• Theme 1: X\n• Theme 2: X\n• Provider: X"}`;
 
 export default async function handler(req,res){
   res.setHeader('Access-Control-Allow-Origin','*');
