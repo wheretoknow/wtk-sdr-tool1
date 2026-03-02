@@ -21,7 +21,7 @@ Return this exact JSON structure per hotel:
   "email": null, "linkedin": null, "phone": null, "email_source": null,
   "contact_confidence": "L",
   "outreach_email_subject": "REQUIRED - e.g. [Hotel] — [tension hook]",
-  "outreach_email_body": "REQUIRED - Hello [FirstName],\n\n[P1: one sentence, real tension using score or pattern.]\n\n[P2: one sentence, why this is invisible to the team.]\n\n[P3: one sentence, business consequence.]\n\nWhereToKnow [P4: one sentence operational outcome, NO AI/dashboard/features].\n\n[P5: 15-min CTA, offer specific days].\n\nBest,\nZishuo Wang | Where to know",
+  "outreach_email_body": "REQUIRED - Hello [FirstName],\n\n[P1: one sentence, real tension using score or pattern.]\n\n[P2: one sentence, why this is invisible to the team.]\n\n[P3: one sentence, business consequence.]\n\nWhere to know [P4: one sentence operational outcome, NO AI/dashboard/features].\n\n[P5: 15-min CTA, offer specific days].\n\nBest,\nZishuo Wang | Where to know",
   "linkedin_dm": "Under 280 chars. First name only.",
   "engagement_strategy": "DIRECT-TO-GM",
   "strategy_reason": "",
