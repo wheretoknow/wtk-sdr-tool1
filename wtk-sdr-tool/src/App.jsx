@@ -453,7 +453,7 @@ function touch2Body(sel) {
   return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nJust following up on my note from Monday.\n\nOne question worth sitting with: at ${sel.rating || "[rating]"} across ${sel.review_count ? sel.review_count.toLocaleString() : "[count]"} reviews, do you currently have visibility into which specific issue is appearing most frequently in written guest feedback — before it shows up in the score?\n\nHappy to show you one example from a comparable property. 15 minutes next week?\n\nBest,\nZishuo Wang | Where to know`;
 }
 function touch3Body(sel) {
-  return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nI've reached out a couple of times — I'll keep this brief.\n\nIn competitive markets like ${sel.city}, perception shifts often appear in competitor guest commentary before rankings adjust. We're seeing this pattern across comparable properties in the area.\n\nWhereToKnow surfaces those competitor signals automatically, so you see where the gap is forming before it affects your standing.\n\nWould early next week or later work better for a 15-minute look? No prep needed.\n\nBest,\nZishuo Wang | Where to know`;
+  return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nI've reached out a couple of times — I'll keep this brief.\n\nIn competitive markets like ${sel.city}, perception shifts often appear in competitor guest commentary before rankings adjust. We're seeing this pattern across comparable properties in the area.\n\nWhere to know surfaces those competitor signals automatically, so you see where the gap is forming before it affects your standing.\n\nWould early next week or later work better for a 15-minute look? No prep needed.\n\nBest,\nZishuo Wang | Where to know`;
 }
 function touch4Body(sel) {
   return `Hi ${sel.gm_first_name || sel.gm_name?.split(" ")[0] || "[Name]"},\n\nI'll pause outreach after this — I don't want to keep landing in your inbox without purpose.\n\nIf the timing isn't right, I completely understand.\n\nOne thought to leave with you: the GMs who find this most useful tend to be the ones who engage before a score change, not after. If anything shifts — a competitive concern, a score movement, or a change in review volume — I'm easy to reach.\n\nWishing you and the team a strong season ahead.\n\nZishuo Wang | Where to know`;
@@ -537,7 +537,7 @@ class ErrorBoundary extends Component {
   }
 }
 
-function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote }) {
+function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote, prospects }) {
   if (filteredT.length === 0) {
     return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
@@ -582,19 +582,37 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         <div style={{overflowX:"auto"}}>
           <table className="outreach-list">
             <thead><tr>
-              <th>Hotel</th><th>GM</th><th>Stage</th><th>Touches</th><th>Status</th><th>Notes</th><th>SDR</th><th></th>
+              <th>Hotel</th><th>Country</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Touches</th><th>Actions</th><th>Notes</th><th>SDR</th><th></th>
             </tr></thead>
             <tbody>
               {visibleT.map(t => {
                 const stage = t.pipeline_stage || "active";
                 const status = getPipelineStatus(t);
+                const isClosed = stage === "dead" || stage === "won";
+                const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
                 return (
                   <tr key={t.id}>
-                    <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)"}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+                    <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:200}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+                    <td style={{color:"var(--text3)",fontSize:11}}>{p?.country||"—"}</td>
+                    <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"—"}</td>
+                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||p?.brand||"Independent"}</td>
                     <td style={{color:"var(--text2)"}}>{t.gm||"—"}</td>
                     <td><span className={`pipeline-status ${status.cls}`} style={{fontSize:10}}>{stage}</span></td>
                     <td onClick={e=>e.stopPropagation()}><MiniTouches t={t}/></td>
-                    <td style={{color:"var(--text3)",fontSize:11,whiteSpace:"nowrap"}}>{status.label}</td>
+                    <td onClick={e=>e.stopPropagation()}>
+                      {!isClosed && (
+                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {stage !== "demo" && stage !== "won" && (
+                            <button className="act-btn success" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo</button>
+                          )}
+                          {stage === "demo" && (
+                            <button className="act-btn success" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Won</button>
+                          )}
+                          <button className="act-btn danger" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕</button>
+                        </div>
+                      )}
+                      {isClosed && <button className="act-btn" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open</button>}
+                    </td>
                     <td onClick={e=>e.stopPropagation()}>
                       {editingNote === t.id ? (
                         <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
@@ -617,6 +635,8 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
             </tbody>
           </table>
         </div>
@@ -966,13 +986,14 @@ export default function App() {
           ) : (
             <div className="table-card">
               <table>
-                <thead><tr><th>Hotel</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Conf.</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Provider</th><th>SDR</th><th>Added</th></tr></thead>
+                <thead><tr><th>Hotel</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Ownership</th><th>SDR</th><th>Added</th><th></th></tr></thead>
                 <tbody>
                   {filteredP.map(p=>{
                     const trackRec = tracking.find(t=>t.prospect_id===p.id);
                     const firstContact = trackRec?.d1;
                     const grp = p.hotel_group || p.brand || "Independent";
                     const isIndependent = !p.hotel_group && !p.brand;
+                    const ownership = isIndependent ? "Independent" : (p.hotel_group && p.hotel_group !== p.brand ? p.hotel_group : (p.brand || "Independent"));
                     return (
                     <tr key={p.id} onClick={()=>setSelected(p.id)}>
                       <td><div className="hotel-name">{p.hotel_name}</div><div className="hotel-sub">{p.city}, {p.country}</div></td>
@@ -981,13 +1002,13 @@ export default function App() {
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name">{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title}</div></td>
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
-                      <td><span className={`badge badge-${(p.contact_confidence||"l").toLowerCase()}`}>{p.contact_confidence||"L"}</span></td>
                       <td><span className="cell-muted">{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted">{p.restaurants||"—"}</span></td>
                       <td><span className="cell-muted">{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
-                      <td><span className="cell-muted">{p.current_provider || inferProvider(p.brand, p.hotel_name) || "—"}</span></td>
+                      <td><span className="cell-muted">{ownership}</span></td>
                       <td><div className="sdr-tag">{p.sdr||"—"}</div>{firstContact&&<div style={{fontSize:10,color:"var(--text3)"}}>contacted {fmtDate(firstContact)}</div>}</td>
                       <td><span className="cell-muted">{fmtDateShort(p.created_at)}</span></td>
+                      <td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
                     </tr>
                   );})}
                 </tbody>
@@ -995,7 +1016,7 @@ export default function App() {
             </div>
           ))}
 
-          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} outreachView={outreachView} setOutreachView={setOutreachView} setDeleteConfirm={setDeleteConfirm} editingNote={editingNote} setEditingNote={setEditingNote} noteText={noteText} setNoteText={setNoteText} saveNote={saveNote} /></ErrorBoundary>}
+          {tab==="outreach" && <ErrorBoundary><OutreachTab filteredT={filteredT} stageFilter={stageFilter} setStageFilter={setStageFilter} setSelected={setSelected} touchToggle={touchToggle} updatePipeline={updatePipeline} openRejectModal={openRejectModal} reopenSequence={reopenSequence} outreachView={outreachView} setOutreachView={setOutreachView} setDeleteConfirm={setDeleteConfirm} editingNote={editingNote} setEditingNote={setEditingNote} noteText={noteText} setNoteText={setNoteText} saveNote={saveNote} prospects={prospects} /></ErrorBoundary>}
         </div>
       </div>
 
@@ -1047,8 +1068,9 @@ export default function App() {
               <div className="d-row"><span className="d-key">Rooms</span><span className="d-val">{sel.rooms||"—"}</span></div>
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val">{sel.restaurants||"—"}</span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val">{sel.adr_usd?`~$${sel.adr_usd}/night`:"—"}</span></div>
-              <div className="d-row"><span className="d-key">Rating</span><span className="d-val">{sel.rating?`${sel.rating} / 10`:"—"}{sel.review_count?` (${sel.review_count.toLocaleString()} reviews)`:""}</span></div>
-              <div className="d-row"><span className="d-key">Provider</span><span className="d-val">{sel.current_provider || inferProvider(sel.brand, sel.hotel_name) || "Unknown"}</span></div>
+              <div className="d-row"><span className="d-key">Rating</span><span className="d-val">{sel.rating?`${sel.rating} / 10`:"—"}{sel.review_count?` (${Number(sel.review_count).toLocaleString()} reviews)`:""}{sel.rating&&<span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>Google / Booking.com</span>}</span></div>
+              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (sel.hotel_group && sel.hotel_group !== sel.brand ? sel.hotel_group : sel.brand || "Independent")}</span></div>
+              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{sel.current_provider || inferProvider(sel.brand, sel.hotel_name) || "Unknown"}</span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:"—"}</span></div>
             </div>
             <div className="d-sec">
@@ -1057,7 +1079,6 @@ export default function App() {
               <div className="d-row"><span className="d-key">Title</span><span className="d-val">{sel.gm_title||"—"}</span></div>
               <div className="d-row"><span className="d-key">Email</span><span className="d-val">{sel.email?<a className="email-link" href={`mailto:${sel.email}`}>{sel.email}</a>:<span className="cell-muted">Not found</span>}</span></div>
               <div className="d-row"><span className="d-key">LinkedIn</span><span className="d-val">{sel.linkedin?<a className="email-link" href={sel.linkedin} target="_blank" rel="noreferrer">↗ View Profile</a>:<span className="cell-muted">Not found</span>}</span></div>
-              <div className="d-row"><span className="d-key">Confidence</span><span className="d-val"><span className={`badge badge-${(sel.contact_confidence||"l").toLowerCase()}`}>{sel.contact_confidence}</span></span></div>
             </div>
             {(sel.outreach_email_subject || sel.outreach_email_body) && (
               <div className="d-sec">
