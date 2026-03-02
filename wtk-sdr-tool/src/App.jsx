@@ -122,6 +122,27 @@ function inferProvider(brand, hotelName) {
   }
   return null;
 }
+function normalizeGroup(g) {
+  if (!g) return null;
+  const s = g.toLowerCase();
+  if (s.includes('marriott')) return 'Marriott International';
+  if (s.includes('ihg') || s.includes('intercontinental hotels group') || s.includes('intercontinental hotel group')) return 'IHG';
+  if (s.includes('hilton')) return 'Hilton';
+  if (s.includes('hyatt')) return 'Hyatt';
+  if (s.includes('accor') || s.includes('ennismore') || s.includes('mgallery')) return 'Accor';
+  if (s.includes('radisson')) return 'Radisson Hotel Group';
+  if (s.includes('rosewood')) return 'Rosewood Hotel Group';
+  if (s.includes('wyndham')) return 'Wyndham';
+  if (s.includes('shangri')) return 'Shangri-La';
+  if (s.includes('peninsula')) return 'The Peninsula Hotels';
+  if (s.includes('mandarin oriental')) return 'Mandarin Oriental';
+  if (s.includes('four seasons')) return 'Four Seasons';
+  if (s.includes('banyan tree')) return 'Banyan Tree';
+  if (s.includes('minor')) return 'Minor Hotels';
+  if (s.includes('onyx')) return 'Onyx Hospitality Group';
+  if (s.includes('kempinski')) return 'Kempinski';
+  return g; // keep original if no match
+}
 const TIER_OPTIONS = [
   { value: "Luxury", label: "Luxury", desc: "Six Senses, Park Hyatt, Rosewood, Mandarin Oriental, Four Seasons, Aman, Peninsula, LHW independents" },
   { value: "Premium", label: "Premium", desc: "Hilton, Marriott, Hyatt Regency, Voco, Radisson, NH, Anantara, upper 4-star independents" },
@@ -747,8 +768,10 @@ export default function App() {
   const [filterSdr, setFilterSdr] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [filterCountry, setFilterCountry] = useState("");
+  const [filterCity, setFilterCity] = useState("");
   const [filterGroup, setFilterGroup] = useState("");
   const [filterTier, setFilterTier] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
   const [hotelsPage, setHotelsPage] = useState(1);
   const HOTELS_PER_PAGE = 20;
   const [prospects, setProspects] = useState([]);
@@ -1019,9 +1042,14 @@ export default function App() {
   const sdrs = ["all", ...new Set(prospects.map(p => p.sdr).filter(Boolean))];
   const filteredP = prospects.filter(p => {
     if (filterSdr !== "all" && p.sdr !== filterSdr) return false;
-    if (filterCountry && !(p.country||"").toLowerCase().includes(filterCountry.toLowerCase())) return false;
-    if (filterGroup && !(p.hotel_group||p.brand||"").toLowerCase().includes(filterGroup.toLowerCase())) return false;
+    if (filterCountry && (p.country||"") !== filterCountry) return false;
+    if (filterCity && (p.city||"") !== filterCity) return false;
+    if (filterGroup && normalizeGroup(p.hotel_group||p.brand||"") !== filterGroup) return false;
     if (filterTier && p.tier !== filterTier) return false;
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      if (!(p.hotel_name||"").toLowerCase().includes(q) && !(p.gm_name||"").toLowerCase().includes(q) && !(p.city||"").toLowerCase().includes(q)) return false;
+    }
     return true;
   });
   const filteredT = filterSdr === "all" ? tracking : tracking.filter(t => t.sdr === filterSdr);
@@ -1029,7 +1057,8 @@ export default function App() {
   const totalHotelPages = Math.ceil(filteredP.length / HOTELS_PER_PAGE);
   const pagedP = filteredP.slice((hotelsPage-1)*HOTELS_PER_PAGE, hotelsPage*HOTELS_PER_PAGE);
   const allCountries = [...new Set(prospects.map(p=>p.country).filter(Boolean))].sort();
-  const allGroups = [...new Set(prospects.map(p=>p.hotel_group||p.brand).filter(Boolean))].sort();
+  const allCities = filterCountry ? [...new Set(prospects.filter(p=>p.country===filterCountry).map(p=>p.city).filter(Boolean))].sort() : [...new Set(prospects.map(p=>p.city).filter(Boolean))].sort();
+  const allGroups = [...new Set(prospects.map(p=>normalizeGroup(p.hotel_group||p.brand)).filter(Boolean))].sort();
   const countries = Object.keys(GEO[region] || {});
   const cities = (GEO[region] || {})[country] || [];
   const selectedTierObj = TIER_OPTIONS.find(t => t.value === tier);
@@ -1113,23 +1142,28 @@ export default function App() {
           ) : (
             <div className="table-card">
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"10px 0 6px",flexWrap:"wrap"}}>
-                <select className="cmd-input" style={{minWidth:130}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setHotelsPage(1);}}>
+                <input className="cmd-input" style={{minWidth:180}} placeholder="🔍 Search hotel or person..." value={filterSearch} onChange={e=>{setFilterSearch(e.target.value);setHotelsPage(1);}}/>
+                <select className="cmd-input" style={{minWidth:130}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setFilterCity("");setHotelsPage(1);}}>
                   <option value="">All Countries</option>
                   {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
-                <select className="cmd-input" style={{minWidth:160}} value={filterGroup} onChange={e=>{setFilterGroup(e.target.value);setHotelsPage(1);}}>
+                <select className="cmd-input" style={{minWidth:130}} value={filterCity} onChange={e=>{setFilterCity(e.target.value);setHotelsPage(1);}}>
+                  <option value="">All Cities</option>
+                  {allCities.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+                <select className="cmd-input" style={{minWidth:180}} value={filterGroup} onChange={e=>{setFilterGroup(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Groups</option>
                   {allGroups.map(g=><option key={g} value={g}>{g}</option>)}
                 </select>
-                <select className="cmd-input" style={{minWidth:120}} value={filterTier} onChange={e=>{setFilterTier(e.target.value);setHotelsPage(1);}}>
+                <select className="cmd-input" style={{minWidth:110}} value={filterTier} onChange={e=>{setFilterTier(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Tiers</option>
                   {["Luxury","Premium","Lifestyle","Economy","Function"].map(t=><option key={t} value={t}>{t}</option>)}
                 </select>
-                {(filterCountry||filterGroup||filterTier) && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setFilterCountry("");setFilterGroup("");setFilterTier("");setHotelsPage(1);}}>✕ Clear</button>}
-                <span style={{marginLeft:"auto",fontSize:11,color:"var(--text3)"}}>{filteredP.length} hotels{(filterCountry||filterGroup||filterTier)?" (filtered)":""}</span>
+                {(filterCountry||filterCity||filterGroup||filterTier||filterSearch) && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setHotelsPage(1);}}>✕ Clear</button>}
+                <span style={{marginLeft:"auto",fontSize:11,color:"var(--text3)"}}>{filteredP.length} hotels{(filterCountry||filterCity||filterGroup||filterTier||filterSearch)?" (filtered)":""}</span>
               </div>
               <table>
-                <thead><tr><th>Hotel</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>F&B</th><th>ADR</th><th>Ownership</th><th>SDR</th><th>Added</th><th></th></tr></thead>
+                <thead><tr><th style={{minWidth:180}}>Hotel</th><th>City</th><th>Country</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>ADR</th><th>Ownership</th><th>SDR</th><th></th></tr></thead>
                 <tbody>
                   {pagedP.map(p=>{
                     const trackRec = tracking.find(t=>t.prospect_id===p.id);
@@ -1139,16 +1173,17 @@ export default function App() {
                     const ownership = isIndependent ? "Independent" : (p.hotel_group && p.hotel_group !== p.brand ? p.hotel_group : (p.brand || "Independent"));
                     return (
                     <tr key={p.id} onClick={()=>setSelected(p.id)}>
-                      <td><div className="hotel-name">{p.hotel_name}</div><div className="hotel-sub">{p.city}, {p.country}</div></td>
-                      <td><div style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{isIndependent?"Independent":p.brand||"—"}</div></td>
-                      <td><div style={{fontSize:12,color:"var(--text3)"}}>{isIndependent?"Independent":grp===p.brand?"—":grp}</div></td>
+                      <td style={{minWidth:180}}><div className="hotel-name">{p.hotel_name}</div></td>
+                      <td><span className="cell-muted">{p.city||"—"}</span></td>
+                      <td><span className="cell-muted">{p.country||"—"}</span></td>
+                      <td><div style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{isIndependent?"—":p.brand||"—"}</div></td>
+                      <td><div style={{fontSize:12,color:"var(--text3)"}}>{normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name">{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title}</div></td>
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
                       <td><span className="cell-muted">{p.rooms||"—"}</span></td>
-                      <td><span className="cell-muted">{p.restaurants||"—"}</span></td>
                       <td><span className="cell-muted">{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
-                      <td><span className="cell-muted">{ownership}</span></td>
+                      <td><span className="cell-muted">{normalizeGroup(p.hotel_group||p.brand)||"Independent"}</span></td>
                       <td><div className="sdr-tag">{p.sdr||"—"}</div>{firstContact&&<div style={{fontSize:10,color:"var(--text3)"}}>contacted {fmtDate(firstContact)}</div>}</td>
                       <td><span className="cell-muted">{fmtDateShort(p.created_at)}</span></td>
                       <td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
@@ -1227,13 +1262,18 @@ export default function App() {
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val">{sel.restaurants||"—"}</span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val">{sel.adr_usd?`~$${sel.adr_usd}/night`:"—"}</span></div>
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
-                {sel.rating ? `${sel.rating} / 10` : "—"}
-                {sel.review_count ? ` (${Number(sel.review_count).toLocaleString()} reviews)` : ""}
                 {(() => {
-                  if (!sel.research_notes) return null;
-                  const m = sel.research_notes.match(/Rating:.*?from\s+([^\n(]+)/i) || sel.research_notes.match(/(\bBooking\.com\b|\bGoogle\b|\bTripAdvisor\b|\bTrip\.com\b|\bExpedia\b)/i);
-                  const src = m ? m[1].trim() : null;
-                  return src ? <span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>{src}</span> : null;
+                  if (!sel.rating) return "—";
+                  const notes = sel.research_notes || "";
+                  const isGoogle = notes.toLowerCase().includes("google");
+                  const isBooking = notes.toLowerCase().includes("booking");
+                  const scale = isGoogle && !isBooking ? 5 : 10;
+                  const src = isGoogle && !isBooking ? "Google" : isBooking && !isGoogle ? "Booking.com" : null;
+                  return <>
+                    {`${sel.rating} / ${scale}`}
+                    {sel.review_count ? ` (${Number(sel.review_count).toLocaleString()} reviews)` : ""}
+                    {src && <span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>{src}</span>}
+                  </>;
                 })()}
               </span></div>
               <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (sel.hotel_group && sel.hotel_group !== sel.brand ? sel.hotel_group : sel.brand || "Independent")}</span></div>
