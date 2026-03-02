@@ -947,58 +947,110 @@ export default function App() {
   }
 
   async function run() {
-    setRunning(true); setError(null); setProgress(15);
+    setRunning(true); setError(null); setProgress(5);
     const market = getMarket();
     const n = Math.min(Math.max(parseInt(count) || 5, 1), 50);
-    setLog(`Searching ${n} hotels in ${market}...`);
+    const BATCH_SIZE = 10; // max per API call to stay within token limits
+    const numBatches = Math.ceil(n / BATCH_SIZE);
+
+    // Build exclusion list from existing prospects in same market (city/country match)
+    const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
+    const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
+
+    // Hotels already in DB for this market — pass to API so model skips them
+    const marketLower = market.toLowerCase();
+    const existingInMarket = prospects
+      .filter(p => marketLower.includes((p.city||"").toLowerCase()) || marketLower.includes((p.country||"").toLowerCase()))
+      .map(p => p.hotel_name)
+      .filter(Boolean);
+
+    setLog(`Searching ${n} hotels in ${market}${existingInMarket.length ? ` · skipping ${existingInMarket.length} already in DB` : ""}...`);
+
+    const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
+    const sdr = sdrName || "Unknown";
+    const batch = `${market} · ${fmtDateShort(new Date())}`;
+
+    let allFresh = [];
+    let allDupes = [];
+    let totalErrors = 0;
+
     try {
-      setProgress(35);
-      const res = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ city: market, brand, segment: tier, count: n }) });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setProgress(70); setLog("Saving to shared database...");
-      const raw = parseJSON(data.result);
-      if (!raw.length) {
-        const preview = (data.result||"").slice(0, 300);
-        throw new Error(`No hotels parsed. Raw response: ${preview || "(empty)"}`);
-      }
-      const sdr = sdrName || "Unknown";
-      const batch = `${market} · ${fmtDateShort(new Date())}`;
-      const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
-
-      // Deduplication: check against existing prospects by normalized name + city
-      const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
-      const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
-      const fresh = [];
-      const dupes = [];
-      for (const p of raw) {
-        const key = normKey(p.hotel_name, p.city);
-        if (existingKeys.has(key)) { dupes.push(p.hotel_name); }
-        else { fresh.push(p); existingKeys.add(key); }
+      // Run batches — parallel if >1 batch, but cap at 3 concurrent to avoid rate limits
+      const batchPromises = [];
+      for (let i = 0; i < numBatches; i++) {
+        const batchCount = Math.min(BATCH_SIZE, n - i * BATCH_SIZE);
+        // Pass exclusion list = existing in market + hotels found in previous batches (updated progressively)
+        batchPromises.push({ batchIdx: i, batchCount });
       }
 
-      if (fresh.length === 0) {
+      // Execute in groups of 3 concurrent
+      const CONCURRENCY = 3;
+      for (let i = 0; i < batchPromises.length; i += CONCURRENCY) {
+        const chunk = batchPromises.slice(i, i + CONCURRENCY);
+        const pct = Math.round(10 + (i / batchPromises.length) * 75);
+        setProgress(pct);
+        setLog(`Searching batch ${i+1}–${Math.min(i+CONCURRENCY, numBatches)} of ${numBatches} (${n} hotels total)...`);
+
+        const results = await Promise.allSettled(chunk.map(({ batchCount }) => {
+          // Build live exclusion list including hotels found so far this run
+          const alreadyFound = allFresh.map(p => p.hotel_name);
+          const excludeList = [...existingInMarket, ...alreadyFound];
+          return fetch("/api/research", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ city: market, brand, segment: tier, count: batchCount, exclude: excludeList })
+          }).then(r => r.json());
+        }));
+
+        for (const result of results) {
+          if (result.status === "rejected" || result.value?.error) {
+            totalErrors++;
+            continue;
+          }
+          const raw = parseJSON(result.value.result);
+          for (const p of raw) {
+            const key = normKey(p.hotel_name, p.city);
+            if (existingKeys.has(key)) { allDupes.push(p.hotel_name); }
+            else { allFresh.push(p); existingKeys.add(key); }
+          }
+        }
+      }
+
+      if (allFresh.length === 0) {
         setProgress(100);
-        setLog(`No new hotels — ${dupes.length} already in database${dupes.length<=3?": "+dupes.join(", "):""}`);
+        const msg = allDupes.length > 0
+          ? `All ${allDupes.length} hotels already in database`
+          : `No hotels found. Try adjusting market or brand filters.`;
+        setLog(msg);
         setTab("hotels");
         return;
       }
 
-      const enriched = fresh.map(p => {
+      setProgress(88); setLog(`Saving ${allFresh.length} new hotels to database...`);
+
+      const enriched = allFresh.map(p => {
         const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
         const safe = {};
         PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
         return safe;
       });
       const newT = enriched.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
-      await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched) });
-      await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT) });
-      setProspects(prev => [...enriched, ...prev]); setTracking(prev => [...newT, ...prev]);
-      const dupeNote = dupes.length > 0 ? ` · ${dupes.length} skipped (already exist)` : "";
-      setProgress(100); setLog(`${enriched.length} new prospects saved · ${enriched.filter(p => p.email).length} emails found${dupeNote}`);
+
+      // Insert in chunks of 500 (Supabase limit)
+      for (let i = 0; i < enriched.length; i += 500) {
+        await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched.slice(i, i+500)) });
+        await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT.slice(i, i+500)) });
+      }
+      setProspects(prev => [...enriched, ...prev]);
+      setTracking(prev => [...newT, ...prev]);
+
+      const dupeNote = allDupes.length > 0 ? ` · ${allDupes.length} skipped (already in DB)` : "";
+      const errNote = totalErrors > 0 ? ` · ${totalErrors} batch(es) failed` : "";
+      setProgress(100);
+      setLog(`${enriched.length} new hotels saved · ${enriched.filter(p => p.email).length} emails found${dupeNote}${errNote}`);
       setTab("hotels");
     } catch (err) { setError(err.message); }
-    finally { setRunning(false); setTimeout(() => setProgress(0), 2000); }
+    finally { setRunning(false); setTimeout(() => setProgress(0), 3000); }
   }
 
   async function touchToggle(tid, n, e) {
