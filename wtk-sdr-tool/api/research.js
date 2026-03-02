@@ -82,10 +82,13 @@ export default async function handler(req, res) {
 
     const prompt = `Find ${count} ${t} hotels in ${city}.${brandFilter}${excludeClause} Search for GM names, room counts, ADR, recent guest feedback themes. Then output the JSON array.`;
 
+    // Scale searches with batch size — cap at 5 to stay within token limits (~3k tokens/search)
+    const maxUses = count <= 3 ? 2 : count <= 6 ? 3 : count <= 10 ? 4 : 5;
+
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'web-search-2025-03-05' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 5000, system: SYSTEM, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }], messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 5000, system: SYSTEM, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses }], messages: [{ role: 'user', content: prompt }] })
     });
     const data = await r.json();
     if (!r.ok) return res.status(500).json({ error: data.error?.message || 'API error' });
