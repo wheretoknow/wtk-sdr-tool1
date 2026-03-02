@@ -637,8 +637,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
               })}
             </tbody>
           </table>
-            </tbody>
-          </table>
         </div>
       ) : (
         <div className="cards-grid">
