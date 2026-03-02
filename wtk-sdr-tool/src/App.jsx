@@ -93,21 +93,29 @@ const GEO = {
 };
 
 const CLIENT_PROVIDER_MAP = {
+  // Marriott → Qualtrics
   "ritz-carlton":"Qualtrics","st. regis":"Qualtrics","jw marriott":"Qualtrics","w hotels":"Qualtrics",
   "luxury collection":"Qualtrics","edition":"Qualtrics","sheraton":"Qualtrics","westin":"Qualtrics",
   "le méridien":"Qualtrics","le meridien":"Qualtrics","renaissance":"Qualtrics","autograph collection":"Qualtrics",
   "tribute portfolio":"Qualtrics","design hotels":"Qualtrics","marriott":"Qualtrics","delta hotels":"Qualtrics",
   "aloft":"Qualtrics","moxy":"Qualtrics","ac hotels":"Qualtrics","courtyard":"Qualtrics",
+  // IHG → Medallia
   "intercontinental":"Medallia","kimpton":"Medallia","six senses":"Medallia","regent":"Medallia",
   "vignette collection":"Medallia","hotel indigo":"Medallia","crowne plaza":"Medallia","voco":"Medallia",
   "holiday inn":"Medallia","hualuxe":"Medallia","ihg":"Medallia",
+  // Hyatt → Medallia
   "park hyatt":"Medallia","andaz":"Medallia","grand hyatt":"Medallia","hyatt regency":"Medallia",
   "hyatt centric":"Medallia","alila":"Medallia","thompson hotels":"Medallia","hyatt":"Medallia",
+  // Wyndham → Medallia
   "wyndham":"Medallia","dolce by wyndham":"Medallia","ramada":"Medallia",
+  // Radisson/NH/Minor → ReviewPro
   "radisson collection":"ReviewPro","radisson blu":"ReviewPro","radisson red":"ReviewPro",
   "radisson":"ReviewPro","park plaza":"ReviewPro","park inn":"ReviewPro","country inn":"ReviewPro",
   "anantara":"ReviewPro","nh collection":"ReviewPro","nh hotels":"ReviewPro","nhow":"ReviewPro",
   "tivoli":"ReviewPro","minor hotels":"ReviewPro","peninsula":"ReviewPro","capella":"ReviewPro",
+  // Kempinski → ReviewPro (confirmed: Shiji ReviewPro partnership since 2016)
+  "kempinski":"ReviewPro",
+  // Accor brands → TrustYou
   "raffles":"TrustYou","fairmont":"TrustYou","sofitel":"TrustYou","mgallery":"TrustYou",
   "pullman":"TrustYou","swissôtel":"TrustYou","swissotel":"TrustYou","mövenpick":"TrustYou",
   "movenpick":"TrustYou","novotel":"TrustYou","mercure":"TrustYou","ibis":"TrustYou",
@@ -1170,7 +1178,7 @@ export default function App() {
               ) : (
               <>
               <table>
-                <thead><tr><th style={{minWidth:180}}>Hotel</th><th>City</th><th>Country</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>ADR</th><th>Ownership</th><th>SDR</th><th></th></tr></thead>
+                <thead><tr><th style={{minWidth:180}}>Hotel</th><th>City</th><th>Country</th><th>Brand</th><th>Group</th><th>Tier</th><th>GM</th><th>Email</th><th>Rooms</th><th>ADR</th><th>Provider</th><th>SDR</th><th></th></tr></thead>
                 <tbody>
                   {pagedP.map(p=>{
                     const trackRec = tracking.find(t=>t.prospect_id===p.id);
@@ -1190,7 +1198,7 @@ export default function App() {
                       <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
                       <td><span className="cell-muted">{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted">{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
-                      <td><span className="cell-muted">{normalizeGroup(p.hotel_group||p.brand)||"Independent"}</span></td>
+                      <td><span className="cell-muted" style={{fontSize:11}}>{inferProvider(p.brand,p.hotel_name)||p.current_provider||"—"}</span></td>
                       <td><div className="sdr-tag">{p.sdr||"—"}</div>{firstContact&&<div style={{fontSize:10,color:"var(--text3)"}}>contacted {fmtDate(firstContact)}</div>}</td>
                       <td><span className="cell-muted">{fmtDateShort(p.created_at)}</span></td>
                       <td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
@@ -1273,16 +1281,21 @@ export default function App() {
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
                 {(() => {
                   if (!sel.rating) return "—";
-                  const notes = sel.research_notes || "";
-                  const isGoogle = notes.toLowerCase().includes("google");
-                  const isBooking = notes.toLowerCase().includes("booking");
-                  const scale = isGoogle && !isBooking ? 5 : 10;
-                  const src = isGoogle && !isBooking ? "Google" : isBooking && !isGoogle ? "Booking.com" : null;
-                  return <>
-                    {`${sel.rating} / ${scale}`}
-                    {sel.review_count ? ` (${Number(sel.review_count).toLocaleString()} reviews)` : ""}
-                    {src && <span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>{src}</span>}
-                  </>;
+                  const notes = (sel.research_notes || "").toLowerCase();
+                  const hasGoogle = notes.includes("google");
+                  const hasBooking = notes.includes("booking");
+                  const hasTripAdvisor = notes.includes("tripadvisor");
+                  const hasAgoda = notes.includes("agoda");
+                  const hasTripCom = notes.includes("trip.com");
+                  // Determine source and scale
+                  let src = null, scale = null;
+                  if (hasBooking && !hasGoogle) { src = "Booking.com"; scale = 10; }
+                  else if (hasGoogle && !hasBooking) { src = "Google"; scale = 5; }
+                  else if (hasTripAdvisor) { src = "TripAdvisor"; scale = 5; }
+                  else if (hasAgoda) { src = "Agoda"; scale = 10; }
+                  else if (hasTripCom) { src = "Trip.com"; scale = 10; }
+                  else { return <span>{sel.rating} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews` : ""} · source unknown)</span></span>; }
+                  return <span>{sel.rating} / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
                 })()}
               </span></div>
               <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (sel.hotel_group && sel.hotel_group !== sel.brand ? sel.hotel_group : sel.brand || "Independent")}</span></div>
