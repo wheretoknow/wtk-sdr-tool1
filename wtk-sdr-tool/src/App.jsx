@@ -1005,9 +1005,15 @@ export default function App() {
         for (const result of results) {
           if (result.status === "rejected" || result.value?.error) {
             totalErrors++;
+            const errMsg = result.value?.error || result.reason?.message || "unknown";
+            setError(prev => (prev ? prev + " | " : "") + "API error: " + errMsg);
             continue;
           }
           const raw = parseJSON(result.value.result);
+          if (!raw.length) {
+            const preview = (result.value.result || "").slice(0, 400);
+            setError("Parse failed. Model returned: " + preview);
+          }
           for (const p of raw) {
             const key = normKey(p.hotel_name, p.city);
             if (existingKeys.has(key)) { allDupes.push(p.hotel_name); }
