@@ -904,6 +904,87 @@ export default function App() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download = `WTK_SDR_${new Date().toISOString().slice(0,10)}.csv`; a.click();
   }
 
+  async function importCSV(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return alert("CSV appears empty.");
+
+    // Parse CSV (handles quoted fields)
+    function parseRow(line) {
+      const cols = []; let cur = "", inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (c === ',' && !inQ) { cols.push(cur); cur = ""; }
+        else cur += c;
+      }
+      cols.push(cur); return cols.map(s => s.trim());
+    }
+
+    const headers = parseRow(lines[0]).map(h => h.toLowerCase().trim());
+
+    // Flexible column mapping
+    function col(row, ...names) {
+      for (const n of names) {
+        const idx = headers.findIndex(h => h.includes(n));
+        if (idx >= 0 && row[idx]) return row[idx].trim() || null;
+      }
+      return null;
+    }
+
+    const imported = [];
+    for (const line of lines.slice(1)) {
+      const row = parseRow(line);
+      if (!row.some(Boolean)) continue;
+      const hotelName = col(row, "hotel","property","name");
+      if (!hotelName) continue;
+      const brand = col(row, "brand");
+      const p = {
+        id: uid(), created_at: new Date().toISOString(), batch: "import",
+        hotel_name: hotelName,
+        brand: brand || null,
+        hotel_group: col(row, "group","chain","company") || brand || null,
+        tier: col(row, "tier","segment","category") || "Luxury",
+        city: col(row, "city","location"),
+        country: col(row, "country"),
+        address: col(row, "address"),
+        website: col(row, "website","url","web"),
+        rooms: parseInt(col(row, "room","rooms")) || null,
+        restaurants: parseInt(col(row, "f&b","restaurant","fb","food")) || null,
+        adr_usd: parseFloat(col(row, "adr","rate","price")) || null,
+        rating: parseFloat(col(row, "rating","score")) || null,
+        review_count: parseInt(col(row, "review")) || null,
+        gm_name: col(row, "gm","general manager","contact","name") || null,
+        gm_first_name: null,
+        gm_title: col(row, "title","position") || "General Manager",
+        email: col(row, "email","mail"),
+        linkedin: col(row, "linkedin"),
+        current_provider: col(row, "provider","platform","tech") || inferProvider(brand, hotelName),
+        engagement_strategy: col(row, "strategy","engagement") || "DIRECT-TO-GM",
+        sdr: col(row, "sdr","owner","assigned") || sdrName || "Unknown",
+        outreach_email_subject: null, outreach_email_body: null, linkedin_dm: null,
+        research_notes: null, contact_confidence: "L",
+      };
+      if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
+      imported.push(p);
+    }
+
+    if (!imported.length) return alert("No valid rows found. Make sure your CSV has a 'Hotel' column.");
+
+    if (!confirm(`Import ${imported.length} hotels into the shared database?`)) return;
+
+    try {
+      await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(imported) });
+      setProspects(prev => [...prev, ...imported]);
+      alert(`✓ ${imported.length} hotels imported successfully.`);
+    } catch(err) {
+      alert("Import failed: " + err.message);
+    }
+  }
+
   const sel = selected ? prospects.find(p => p.id === selected) : null;
   const sdrs = ["all", ...new Set(prospects.map(p => p.sdr).filter(Boolean))];
   const filteredP = filterSdr === "all" ? prospects : prospects.filter(p => p.sdr === filterSdr);
@@ -974,7 +1055,11 @@ export default function App() {
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>setFilterSdr(s)}>{s==="all"?"All SDRs":s}</button>)}
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
-            <span className="record-count">{loading?"Loading...":` ${filteredP.length} prospects in shared database`}</span>
+            <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
+              ↑ Import CSV
+              <input type="file" accept=".csv" style={{display:"none"}} onChange={importCSV}/>
+            </label>
+            <span className="record-count">{loading?"Loading...":`${filteredP.length} prospects in shared database`}</span>
           </div>
 
           <div className="tabs">
@@ -1070,7 +1155,16 @@ export default function App() {
               <div className="d-row"><span className="d-key">Rooms</span><span className="d-val">{sel.rooms||"—"}</span></div>
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val">{sel.restaurants||"—"}</span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val">{sel.adr_usd?`~$${sel.adr_usd}/night`:"—"}</span></div>
-              <div className="d-row"><span className="d-key">Rating</span><span className="d-val">{sel.rating?`${sel.rating} / 10`:"—"}{sel.review_count?` (${Number(sel.review_count).toLocaleString()} reviews)`:""}{sel.rating&&<span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>est.</span>}</span></div>
+              <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
+                {sel.rating ? `${sel.rating} / 10` : "—"}
+                {sel.review_count ? ` (${Number(sel.review_count).toLocaleString()} reviews)` : ""}
+                {(() => {
+                  if (!sel.research_notes) return null;
+                  const m = sel.research_notes.match(/Rating:.*?from\s+([^\n(]+)/i) || sel.research_notes.match(/(\bBooking\.com\b|\bGoogle\b|\bTripAdvisor\b|\bTrip\.com\b|\bExpedia\b)/i);
+                  const src = m ? m[1].trim() : null;
+                  return src ? <span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>{src}</span> : null;
+                })()}
+              </span></div>
               <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (sel.hotel_group && sel.hotel_group !== sel.brand ? sel.hotel_group : sel.brand || "Independent")}</span></div>
               <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{sel.current_provider || inferProvider(sel.brand, sel.hotel_name) || "Unknown"}</span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:"—"}</span></div>
