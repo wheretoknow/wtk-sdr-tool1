@@ -180,13 +180,36 @@ function normalizeGroup(g) {
   // Strip common suffixes for unknown groups
   return g.replace(/\s*(Hotels?( & Resorts?)?|International|Group|Collection|Worldwide|Ltd\.?|Inc\.?|plc|S\.?A\.?|GmbH)\s*/gi, '').trim() || g;
 }
-const TIER_OPTIONS = [
-  { value: "Luxury", label: "Luxury", desc: "Six Senses, Park Hyatt, Rosewood, Mandarin Oriental, Four Seasons, Aman, Peninsula, LHW independents" },
-  { value: "Premium", label: "Premium", desc: "Hilton, Marriott, Hyatt Regency, Voco, Radisson, NH, Anantara, upper 4-star independents" },
-  { value: "Lifestyle", label: "Lifestyle", desc: "W Hotels, Kimpton, Hoxton, 25Hours, Tribute Portfolio, Edition, boutique lifestyle" },
-  { value: "Economy", label: "Economy", desc: "Ibis, Holiday Inn, Novotel, Courtyard, 3-star independents" },
-  { value: "Function", label: "Function", desc: "Airport hotels, convention center hotels, large conference properties" },
-];
+// Chain → Brand hierarchy for filter UI
+const CHAIN_BRANDS = {
+  "IHG": ["InterContinental","Kimpton","Six Senses","Regent","Vignette Collection","Hotel Indigo","Crowne Plaza","voco","Holiday Inn"],
+  "Marriott": ["Ritz-Carlton","St. Regis","JW Marriott","W Hotels","Luxury Collection","EDITION","Sheraton","Westin","Le Méridien","Renaissance","Autograph Collection","Tribute Portfolio","Design Hotels"],
+  "Hilton": ["Waldorf Astoria","Conrad","LXR","Canopy","Curio","DoubleTree","Tapestry","Hilton"],
+  "Hyatt": ["Park Hyatt","Andaz","Grand Hyatt","Hyatt Regency","Hyatt Centric","Alila","Thompson Hotels"],
+  "Accor": ["Raffles","Fairmont","Sofitel","MGallery","Pullman","Swissôtel","Mövenpick","Novotel","25hours","Banyan Tree"],
+  "Radisson": ["Radisson Collection","Radisson Blu","Radisson RED","Park Plaza","Park Inn"],
+  "Minor": ["Anantara","Avani","Oaks","Tivoli","NH Collection","NH Hotels","nhow"],
+  "Kempinski": ["Kempinski"],
+  "Shangri-La": ["Shangri-La","Kerry Hotels"],
+  "Mandarin Oriental": ["Mandarin Oriental"],
+  "Four Seasons": ["Four Seasons"],
+  "Peninsula": ["Peninsula"],
+  "Rosewood": ["Rosewood"],
+  "Aman": ["Aman"],
+  "Belmond": ["Belmond"],
+  "Capella": ["Capella","Patina"],
+  "Jumeirah": ["Jumeirah"],
+  "Langham": ["Langham"],
+  "Dorchester": ["Dorchester Collection"],
+  "Oetker": ["Oetker Collection"],
+  "Lore Group": ["Lore Group"],
+  "Barceló": ["Barceló"],
+  "Meliá": ["Meliá","Innside"],
+  "Pestana": ["Pestana"],
+  "Iberostar": ["Iberostar"],
+  "Wyndham": ["Wyndham","Dolce by Wyndham","Ramada"],
+  "COMO": ["COMO"],
+};
 
 
 const css = `
@@ -430,10 +453,6 @@ const css = `
   .research-notes .bullet { display: flex; gap: 8px; margin-bottom: 3px; }
   .research-notes .bullet-dot { color: var(--accent); font-weight: 700; flex-shrink: 0; }
   .research-notes .bullet-text { color: var(--text2); }
-
-  /* Editable field in drawer */
-  .d-val-edit { cursor: pointer; border-bottom: 1px dashed var(--border2); padding-bottom: 1px; transition: all 0.15s; }
-  .d-val-edit:hover { border-bottom-color: var(--accent); color: var(--accent); }
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -592,54 +611,20 @@ function TierBadge({ tier }) {
   return <span className={`badge ${cls}`}>{tier || "—"}</span>;
 }
 
-// ── Inline editable field for the drawer ────────────────────────────────────
 function EditableField({ value, placeholder, onSave, type, options }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
-
   function startEdit() { setDraft(value || ""); setEditing(true); }
-  function cancel() { setEditing(false); }
-  function save() {
-    const trimmed = draft.trim();
-    if (trimmed !== (value || "")) onSave(trimmed);
-    setEditing(false);
-  }
-  function handleKey(e) {
-    if (e.key === "Enter") save();
-    if (e.key === "Escape") cancel();
-  }
-
+  function save() { const trimmed = draft.trim(); if (trimmed !== (value || "")) onSave(trimmed); setEditing(false); }
+  function handleKey(e) { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }
   if (editing) {
-    if (options) {
-      return (
-        <select value={draft} onChange={e => { setDraft(e.target.value); }} onBlur={save} autoFocus
-          style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",background:"white",outline:"none",minWidth:100}}>
-          <option value="">—</option>
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      );
-    }
-    return (
-      <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={save} onKeyDown={handleKey} autoFocus
-        type={type === "number" ? "number" : "text"}
-        placeholder={placeholder || ""}
-        style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",width:"100%",background:"white",outline:"none",boxSizing:"border-box"}} />
-    );
+    if (options) return <select value={draft} onChange={e=>setDraft(e.target.value)} onBlur={save} autoFocus style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",background:"white",outline:"none",minWidth:100}}><option value="">—</option>{options.map(o=><option key={o} value={o}>{o}</option>)}</select>;
+    return <input value={draft} onChange={e=>setDraft(e.target.value)} onBlur={save} onKeyDown={handleKey} autoFocus type={type==="number"?"number":"text"} placeholder={placeholder||""} style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",width:"100%",background:"white",outline:"none",boxSizing:"border-box"}} />;
   }
-
-  // Sanitize display: strip "[email protected]" artifacts
   let display = value;
-  if (display && (display.includes('[email') || display.includes('email protected'))) {
-    display = null;
-  }
-
-  return (
-    <span onClick={startEdit} style={{cursor:"pointer",borderBottom:"1px dashed var(--border2)",paddingBottom:1}} title="Click to edit">
-      {display || <span style={{color:"var(--text3)",fontStyle:"italic"}}>{placeholder || "Click to add"}</span>}
-    </span>
-  );
+  if (display && (display.includes('[email') || display.includes('email protected'))) display = null;
+  return <span onClick={startEdit} style={{cursor:"pointer",borderBottom:"1px dashed var(--border2)",paddingBottom:1}} title="Click to edit">{display || <span style={{color:"var(--text3)",fontStyle:"italic"}}>{placeholder||"Click to add"}</span>}</span>;
 }
-
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -891,9 +876,11 @@ export default function App() {
   const [cityInput, setCityInput] = useState("Vienna");
   const [customMarket, setCustomMarket] = useState("");
   const [multiMode, setMultiMode] = useState(false);
-  // Other filters
-  const [tier, setTier] = useState("Luxury");
+  // Scope & filter state
+  const [scope, setScope] = useState("chain"); // "chain" | "independent" | "all"
+  const [group, setGroup] = useState("");
   const [brand, setBrand] = useState("");
+  const [minAdr, setMinAdr] = useState("150");
   const [count, setCount] = useState("5");
   const [sdrName, setSdrName] = useState("");
   // State
@@ -959,25 +946,13 @@ export default function App() {
 
   // ── Inline editing for prospect fields ──────────────────────────────
   async function updateProspectField(pid, field, value) {
-    // Sanitize email values
     if (field === 'email' && value) {
-      if (value.includes('[email') || value.includes('email protected') || value.includes('email\u00a0protected')) {
-        value = null;
-      }
+      if (value.includes('[email') || value.includes('email protected')) value = null;
     }
-    // Coerce numeric fields
-    if (['rooms', 'restaurants', 'review_count'].includes(field)) {
-      value = value ? parseInt(value) || null : null;
-    }
-    if (['adr_usd', 'rating'].includes(field)) {
-      value = value ? parseFloat(value) || null : null;
-    }
+    if (['rooms', 'restaurants', 'review_count'].includes(field)) value = value ? parseInt(value) || null : null;
+    if (['adr_usd', 'rating'].includes(field)) value = value ? parseFloat(value) || null : null;
     const patch = { [field]: value || null };
-    // If updating gm_name, auto-update gm_first_name
-    if (field === 'gm_name' && value) {
-      patch.gm_first_name = value.split(' ')[0];
-    }
-    // Also sync tracking table if updating gm or email
+    if (field === 'gm_name' && value) patch.gm_first_name = value.split(' ')[0];
     if (field === 'gm_name' || field === 'email') {
       const t = tracking.find(x => x.prospect_id === pid);
       if (t) {
@@ -1114,7 +1089,7 @@ export default function App() {
 
         const alreadyFound = allFresh.map(p => p.hotel_name);
         const excludeList = [...existingInMarket, ...alreadyFound];
-        const data = await fetchWithRetry({ city: market, brand, segment: tier, count: batchCount, exclude: excludeList });
+        const data = await fetchWithRetry({ city: market, brand, group, scope, minAdr, count: batchCount, exclude: excludeList });
 
         if (data?.error) {
           totalErrors++;
@@ -1393,7 +1368,8 @@ export default function App() {
   const allProviders = [...new Set(prospects.map(p=>getProvider(p)||"Unknown"))].sort();
   const countries = region ? Object.keys(GEO[region] || {}) : [];
   const cities = region && country ? (GEO[region] || {})[country] || [] : [];
-  const selectedTierObj = TIER_OPTIONS.find(t => t.value === tier);
+  const chainGroups = Object.keys(CHAIN_BRANDS).sort();
+  const brandOptions = group ? (CHAIN_BRANDS[group] || []) : [];
 
   return (
     <>
@@ -1439,11 +1415,32 @@ export default function App() {
                 </div>
               )}
               <div className="cmd-divider"/>
-              {TIER_OPTIONS.map(t=>(
-                <button key={t.value} className={`tier-btn ${tier===t.value?"active":""}`} onClick={()=>setTier(t.value)} title={t.desc}>{t.label}</button>
-              ))}
+              {/* Scope toggle: Chain | Independent | All */}
+              <button className={`tier-btn ${scope==="chain"?"active":""}`} onClick={()=>{setScope("chain");setBrand("");}} title="Search by hotel chain/brand">Chain</button>
+              <button className={`tier-btn ${scope==="independent"?"active":""}`} onClick={()=>{setScope("independent");setGroup("");setBrand("");}} title="Independent/boutique hotels">Independent</button>
+              <button className={`tier-btn ${scope==="all"?"active":""}`} onClick={()=>{setScope("all");setGroup("");setBrand("");}} title="All hotels in market">All</button>
               <div className="cmd-divider"/>
-              <input value={brand} onChange={e=>setBrand(e.target.value)} placeholder="Brand" className="cmd-input" style={{width:100}} />
+              {scope === "chain" && (
+                <>
+                  <select value={group} onChange={e=>{setGroup(e.target.value);setBrand("");}} className="cmd-input" style={{width:120}}>
+                    <option value="">Group</option>
+                    {chainGroups.map(g=><option key={g} value={g}>{g}</option>)}
+                  </select>
+                  {group && brandOptions.length > 1 && (
+                    <select value={brand} onChange={e=>setBrand(e.target.value)} className="cmd-input" style={{width:130}}>
+                      <option value="">All {group} brands</option>
+                      {brandOptions.map(b=><option key={b} value={b}>{b}</option>)}
+                    </select>
+                  )}
+                  {!group && <input value={brand} onChange={e=>setBrand(e.target.value)} placeholder="or type brand..." className="cmd-input" style={{width:120}} />}
+                </>
+              )}
+              {scope === "independent" && (
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>Min ADR $</span>
+                  <input type="number" min="50" max="2000" step="50" value={minAdr} onChange={e=>setMinAdr(e.target.value)} className="cmd-input" style={{width:60}} title="Minimum ADR in USD" />
+                </div>
+              )}
               <input type="number" min="1" max="50" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count" />
               <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="Your name" className="cmd-input" style={{width:90}} />
               <button className="run-btn" onClick={run} disabled={running}>
@@ -1622,25 +1619,9 @@ export default function App() {
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val"><EditableField value={sel.restaurants ? String(sel.restaurants) : ""} placeholder="Add count" type="number" onSave={v => updateProspectField(sel.id, 'restaurants', v)} /></span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val"><EditableField value={sel.adr_usd ? String(sel.adr_usd) : ""} placeholder="Add ADR (USD)" type="number" onSave={v => updateProspectField(sel.id, 'adr_usd', v)} /></span></div>
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
-                {(() => {
-                  if (!sel.rating) return <EditableField value="" placeholder="Add rating" type="number" onSave={v => updateProspectField(sel.id, 'rating', v)} />;
-                  const notes = (sel.research_notes || "").toLowerCase();
-                  const hasGoogle = notes.includes("google");
-                  const hasBooking = notes.includes("booking");
-                  const hasTripAdvisor = notes.includes("tripadvisor");
-                  const hasAgoda = notes.includes("agoda");
-                  const hasTripCom = notes.includes("trip.com");
-                  let src = null, scale = null;
-                  if (hasBooking && !hasGoogle) { src = "Booking.com"; scale = 10; }
-                  else if (hasGoogle && !hasBooking) { src = "Google"; scale = 5; }
-                  else if (hasTripAdvisor) { src = "TripAdvisor"; scale = 5; }
-                  else if (hasAgoda) { src = "Agoda"; scale = 10; }
-                  else if (hasTripCom) { src = "Trip.com"; scale = 10; }
-                  else { return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews` : ""} · source unknown)</span></span>; }
-                  return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
-                })()}
+                {!sel.rating ? <EditableField value="" placeholder="Add rating" type="number" onSave={v => updateProspectField(sel.id, 'rating', v)} /> : <><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> {sel.review_count && <span style={{fontSize:11,color:"var(--text3)"}}>({Number(sel.review_count).toLocaleString()} reviews)</span>}</>}
               </span></div>
-              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const group = normalizeGroup(sel.hotel_group||sel.brand); const brand = sel.brand; if (!brand && !group) return "Independent"; if (brand && group && brand !== group) return `${brand} · ${group}`; return brand || group || "Independent"; })()}</span></div>
+              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const g = normalizeGroup(sel.hotel_group||sel.brand); const b = sel.brand; if (!b && !g) return "Independent"; if (b && g && b !== g) return `${b} · ${g}`; return b || g || "Independent"; })()}</span></div>
               <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val"><EditableField value={getProvider(sel) || ""} placeholder="Add provider" onSave={v => updateProspectField(sel.id, 'current_provider', v)} options={["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Olery","Guestfeedback"]} /></span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
             </div>
