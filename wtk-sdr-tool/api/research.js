@@ -273,25 +273,19 @@ export default async function handler(req, res) {
     // Takes hotel names, verifies rooms + GM via web search
     // ═════════════════════════════════════════════════════════════════════
     if (mode === 'verify' && hotels && hotels.length > 0) {
-      const batch = hotels.slice(0, 10);
+      const batch = hotels.slice(0, 10); // 10 × 2 = 20 searches at limit; fallback if parse fails
       const maxUses = Math.min(20, batch.length * 2);
-      const maxTokens = Math.min(12000, batch.length * 500 + 1000);
+      const maxTokens = Math.min(12000, batch.length * 600 + 1000);
 
       const hotelList = batch.map((h, i) =>
         `${i+1}. "${h.hotel_name}" in ${h.city}, ${h.country} (brand: ${h.brand || "unknown"})`
       ).join('\n');
 
-      const prompt = `Verify these ${batch.length} specific hotels. The hotel name, city, country, and brand are ALREADY CONFIRMED — do NOT change them.
+      const prompt = `[${hotelList}]
 
-For EACH hotel, search:
-1. "[hotel name] ${CURRENT_YEAR} official site" → rooms, address, website
-2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → GM name
-
-Hotels to verify:
-${hotelList}
-
-IMPORTANT: Keep hotel_name, city, country, brand EXACTLY as given above. Only fill in: address, website, rooms, gm_name, gm_title, contact_confidence, research_notes.
-Use null for fields you can't verify. Return JSON array. Start with [ immediately.`;
+Verify these ${batch.length} hotels. For EACH, search official site (rooms/address) + GM name.
+Keep hotel_name, city, country, brand EXACTLY as given. Fill in: address, website, rooms, gm_name, gm_title, contact_confidence, research_notes. Use null if not found.
+Output JSON array. Start with [ immediately.`;
 
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
