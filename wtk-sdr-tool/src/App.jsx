@@ -2054,7 +2054,7 @@ export default function App() {
                 <div className="d-sec">
                   <div className="d-sec-title">Pipeline Status</div>
                   <div className="d-row"><span className="d-key">Stage</span><span className="d-val"><span style={{fontWeight:700,color:so.color}}>{so.label}</span></span></div>
-                  {trk.intention > 0 && <div className="d-row"><span className="d-key">Intent</span><span className="d-val">{trk.intention}/5 \u2014 {({1:"Cold",2:"Low",3:"Medium",4:"Warm",5:"Hot"})[trk.intention]||"\u2014"}</span></div>}
+                  {trk.intention > 0 && <div className="d-row"><span className="d-key">Intent</span><span className="d-val">{trk.intention}/5 {String.fromCodePoint(0x2014)} {({1:"Cold",2:"Low",3:"Medium",4:"Warm",5:"Hot"})[trk.intention]||""}</span></div>}
                   {trk.rejection_reason && <div className="d-row"><span className="d-key">Lost Reason</span><span className="d-val" style={{color:"var(--red)"}}>{trk.rejection_reason}</span></div>}
                   <div style={{marginTop:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Activity Timeline</div>
