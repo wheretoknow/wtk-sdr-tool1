@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from "react";
+import { useState, useEffect, useRef, Component } from "react";
 
 const SUPABASE_URL = "https://rzksmbzlmzvodywfasht.supabase.co";
 const SUPABASE_KEY = "sb_publishable_PT6OfaeYiOb_lM5sTP30Lw_XJsir-4E";
@@ -943,6 +943,9 @@ export default function App() {
   const [rejectReason, setRejectReason] = useState("");
   const [outreachView, setOutreachView] = useState("card");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [cooldown, setCooldown] = useState(0); // seconds until next search allowed
+  const lastBatchTime = useRef(0); // timestamp of last API batch completion
+  const cooldownTimer = useRef(null);
   const [editingNote, setEditingNote] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [filterProvider, setFilterProvider] = useState("");
@@ -1056,11 +1059,39 @@ export default function App() {
     return "Global";
   }
 
+  // ── Cooldown timer: 60s between API calls to stay under 50k tokens/min ────
+  const COOLDOWN_SEC = 60;
+
+  function startCooldown() {
+    lastBatchTime.current = Date.now();
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    setCooldown(COOLDOWN_SEC);
+    cooldownTimer.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - lastBatchTime.current) / 1000);
+      const remaining = Math.max(0, COOLDOWN_SEC - elapsed);
+      setCooldown(remaining);
+      if (remaining <= 0) { clearInterval(cooldownTimer.current); cooldownTimer.current = null; }
+    }, 1000);
+  }
+
   async function run() {
+    // Auto-wait if cooldown from previous search is still active
+    const elapsed = Math.floor((Date.now() - lastBatchTime.current) / 1000);
+    const remaining = Math.max(0, COOLDOWN_SEC - elapsed);
+    if (remaining > 0 && lastBatchTime.current > 0) {
+      setRunning(true); setError(null);
+      for (let s = remaining; s > 0; s--) {
+        setLog(`Cooling down from last search — ${s}s remaining...`);
+        setCooldown(s);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      setCooldown(0);
+    }
+
     setRunning(true); setError(null); setProgress(5);
     const market = getMarket();
     const n = Math.min(Math.max(parseInt(count) || 5, 1), 50);
-    const BATCH_SIZE = 5; // 5 hotels per API call — fits within 20 search budget (5×3=15)
+    const BATCH_SIZE = 10; // 10 hotels × 2 searches = 20, within budget
     const numBatches = Math.ceil(n / BATCH_SIZE);
 
     // Build exclusion list from existing prospects in same market (city/country match)
@@ -1143,6 +1174,7 @@ export default function App() {
         // Rate limit: stop immediately, keep what we have
         if (data?.rateLimited) {
           rateLimitHit = true;
+          startCooldown();
           setError(`Rate limit reached after batch ${i + 1}. ${allFresh.length} hotels saved. Wait 1 min and run again for more.`);
           break;
         }
@@ -1187,6 +1219,7 @@ export default function App() {
           // Update state immediately — hotels appear in table right away
           setProspects(prev => [...enrichedBatch, ...prev]);
           setTracking(prev => [...newTBatch, ...prev]);
+          startCooldown(); // reset cooldown timer after each batch
 
           const totalSoFar = allFresh.length;
           const dupesSoFar = allDupes.length;
@@ -1509,7 +1542,7 @@ export default function App() {
               <input type="number" min="1" max="50" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count" />
               <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="Your name" className="cmd-input" style={{width:90}} />
               <button className="run-btn" onClick={run} disabled={running}>
-                {running ? <><div className="spinner"/>Searching...</> : "▶ Run"}
+                {running ? <><div className="spinner"/>Searching...</> : cooldown > 0 ? `⏱ ${cooldown}s` : "▶ Run"}
               </button>
             </div>
             {running && <div className="progress-wrap" style={{marginTop:8}}><div className="progress-bar"><div className="progress-fill" style={{width:`${progress}%`}}/></div><div className="progress-text">› {log}</div></div>}
