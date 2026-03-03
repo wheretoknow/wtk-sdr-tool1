@@ -319,34 +319,33 @@ Output JSON array. Start with [ immediately.`;
       let arr;
       try { arr = JSON.parse(jsonStr); } catch { return res.status(200).json({ result: '[]', debug: 'Verify parse failed' }); }
 
-      // Enrich with provider data + force-preserve city/country/brand from input
+      // Enrich with provider data + force group/brand from user's filter selection
       const inputLookup = {};
       for (const h of batch) {
         const key = (h.hotel_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         inputLookup[key] = h;
       }
 
+      // Authoritative brand/group from user selection (e.g. user picked IHG > Kimpton)
+      const authBrand = brand || null;
+      const authGroup = group || null;
+
       const enriched = (arr || []).map(p => {
-        const provider = inferProvider(p.brand, p.hotel_name) || p.current_provider || null;
+        const effectiveBrand = authBrand || p.brand;
+        const provider = inferProvider(effectiveBrand, p.hotel_name) || p.current_provider || null;
         const providerSrc = provider ? getProviderSource(provider) : null;
 
         let email = p.email || null;
         if (email && (email.includes('[email') || email.includes('email protected'))) email = null;
 
-        // Force-preserve only hotel_name and brand from Step 1
-        // Let verify overwrite city/country with search results (Step 1 cities can be wrong)
-        const key = (p.hotel_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const original = inputLookup[key];
-
         return {
           ...p,
-          hotel_name: original?.hotel_name || p.hotel_name,
-          brand: original?.brand || p.brand,
-          // city and country come from verify search results (more accurate)
+          // Force brand/group from user's filter selection (authoritative)
+          brand: authBrand || p.brand,
+          hotel_group: authGroup || p.hotel_group || "Independent",
           email,
           current_provider: provider,
           provider_source: p.provider_source || (providerSrc ? providerSrc.url : null),
-          hotel_group: p.hotel_group || original?.hotel_group || p.brand || "Independent",
           tier: p.tier || "Luxury",
           outreach_email_subject: null,
           outreach_email_body: null,
