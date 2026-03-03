@@ -1189,7 +1189,7 @@ export default function App() {
           await rateLimitWait(70);
         }
 
-        const data = await apiFetch({ mode: "verify", hotels: batchHotels });
+        const data = await apiFetch({ mode: "verify", hotels: batchHotels, brand, group });
 
         if (data?.rateLimited) {
           rateLimitHit = true;
@@ -1210,8 +1210,8 @@ export default function App() {
         // FALLBACK: if verify parse failed, use Step 1 data directly (hotel_name + city + country + brand)
         const hotelsToSave = raw.length > 0 ? raw : batchHotels.map(h => ({
           hotel_name: h.hotel_name,
-          brand: h.brand,
-          hotel_group: h.hotel_group || h.brand,
+          brand: brand || h.brand,
+          hotel_group: group || h.hotel_group || h.brand,
           city: h.city,
           country: h.country,
           tier: null,
