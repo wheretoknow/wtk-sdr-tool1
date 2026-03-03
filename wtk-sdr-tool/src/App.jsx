@@ -1059,8 +1059,8 @@ export default function App() {
     return "Global";
   }
 
-  // ── Cooldown timer: 70s between API calls to stay under 50k tokens/min ────
-  const COOLDOWN_SEC = 70;
+  // ── Cooldown timer: 62s between web search API calls ────
+  const COOLDOWN_SEC = 62;
 
   function startCooldown() {
     lastBatchTime.current = Date.now();
@@ -1118,7 +1118,8 @@ export default function App() {
       const data = await r.json();
       if (data?.error && data.error.toLowerCase().includes("rate limit")) {
         if (attempt >= 1) return { ...data, rateLimited: true };
-        await rateLimitWait(70);
+        startCooldown();
+        await rateLimitWait(62);
         return apiFetch(body, attempt + 1);
       }
       return data;
@@ -1167,7 +1168,7 @@ export default function App() {
       // ═══════════════════════════════════════════════════════════════════
       // STEP 2: VERIFY — web search for rooms + GM (batches of 10)
       // ═══════════════════════════════════════════════════════════════════
-      const BATCH_SIZE = 10; // 10 × 2 = 20 searches, at the limit but fallback protects us
+      const BATCH_SIZE = 5; // 5×2=10 searches, leaves margin in 20 budget for retries
       const batches = [];
       for (let i = 0; i < toVerify.length; i += BATCH_SIZE) {
         batches.push(toVerify.slice(i, i + BATCH_SIZE));
@@ -1183,10 +1184,9 @@ export default function App() {
         setProgress(pct);
         setLog(`Step 2: Verifying batch ${i + 1}/${batches.length} (${batchHotels.length} hotels)${allFresh.length ? ` · ${allFresh.length} saved so far` : ""}...`);
 
-        // Inter-batch cooldown — 70s to stay under 50k tokens/min
+        // Inter-batch cooldown — 62s to stay under 50k tokens/min
         if (i > 0) {
-          startCooldown();
-          await rateLimitWait(70);
+          await rateLimitWait(62);
         }
 
         const data = await apiFetch({ mode: "verify", hotels: batchHotels, brand, group });
