@@ -959,8 +959,10 @@ export default function App() {
   // Compute market string from geo selections
   function getMarket() {
     if (multiMode && customMarket.trim()) return customMarket.trim();
-    if (cityInput.trim()) return `${cityInput.trim()}, ${country}, ${region}`;
-    return `${country}, ${region}`;
+    if (cityInput.trim()) return `${cityInput.trim()}${country ? ", " + country : ""}${region ? ", " + region : ""}`;
+    if (country) return `${country}${region ? ", " + region : ""}`;
+    if (region) return region;
+    return "Global";
   }
 
   async function run() {
@@ -1322,8 +1324,8 @@ export default function App() {
   const allCities = filterCountry ? [...new Set(prospects.filter(p=>p.country===filterCountry).map(p=>p.city).filter(Boolean))].sort() : [...new Set(prospects.map(p=>p.city).filter(Boolean))].sort();
   const allGroups = [...new Set(prospects.map(p=>normalizeGroup(p.hotel_group||p.brand)).filter(Boolean))].sort();
   const allProviders = [...new Set(prospects.map(p=>getProvider(p)||"Unknown"))].sort();
-  const countries = Object.keys(GEO[region] || {});
-  const cities = (GEO[region] || {})[country] || [];
+  const countries = region ? Object.keys(GEO[region] || {}) : [];
+  const cities = region && country ? (GEO[region] || {})[country] || [] : [];
   const selectedTierObj = TIER_OPTIONS.find(t => t.value === tier);
 
   return (
@@ -1349,10 +1351,12 @@ export default function App() {
             <div className="cmd-inline">
               {!multiMode ? (
                 <div className="cmd-geo">
-                  <select value={region} onChange={e=>{setRegion(e.target.value);const cs=Object.keys(GEO[e.target.value]||{});setCountry(cs[0]||"");setCityInput((GEO[e.target.value]||{})[cs[0]]?.[0]||"")}} title="Region" className="cmd-input">
+                  <select value={region} onChange={e=>{setRegion(e.target.value);setCountry("");setCityInput("");}} title="Region" className="cmd-input">
+                    <option value="">Global</option>
                     {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
                   </select>
-                  <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} title="Country" className="cmd-input">
+                  <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} title="Country" className="cmd-input" disabled={!region}>
+                    <option value="">All Countries</option>
                     {countries.map(c=><option key={c}>{c}</option>)}
                   </select>
                   <select value={cityInput} onChange={e=>setCityInput(e.target.value)} title="City" className="cmd-input">
