@@ -1141,7 +1141,7 @@ export default function App() {
         return;
       }
 
-      const allKnown = parseJSON(listData.result);
+      const allKnown = parseJSON(listData.result).filter(h => h.hotel_name && h.hotel_name.trim());
       if (!allKnown.length) {
         setError("No hotels found in knowledge base. Try a different brand or market.");
         setProgress(100);
@@ -1227,9 +1227,10 @@ export default function App() {
           setLog(`⚠ Verify failed for batch ${i + 1} — saving basic info. ${debugInfo ? "Debug: " + debugInfo.slice(0,100) : ""}`);
         }
 
-        // Save this batch immediately
+        // Save this batch immediately — skip entries without hotel_name
         const batchFresh = [];
         for (const p of hotelsToSave) {
+          if (!p.hotel_name || !p.hotel_name.trim()) continue; // skip empty entries
           const key = normKey(p.hotel_name, p.city);
           if (existingKeys.has(key)) continue;
           batchFresh.push(p);
