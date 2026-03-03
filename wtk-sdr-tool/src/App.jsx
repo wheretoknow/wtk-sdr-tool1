@@ -414,8 +414,17 @@ const css = `
   .pipeline-summary { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text3); padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; flex-wrap: wrap; }
   .pipeline-summary strong { color: var(--text); font-weight: 700; }
   .ps-sep { color: var(--border2); }
-  .stage-select { font-size: 10px; font-weight: 600; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; appearance: auto; min-width: 60px; }
-  .intent-select { font-size: 10px; font-weight: 600; padding: 2px 2px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; appearance: auto; min-width: 50px; background: white; }
+  .stage-select { font-size: 10px; font-weight: 600; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; min-width: 55px; }
+  .intent-select { font-size: 10px; font-weight: 600; padding: 2px 2px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; min-width: 50px; background: white; }
+  .add-hotel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  .add-hotel-grid label { font-size: 11px; font-weight: 600; color: var(--text2); display: flex; flex-direction: column; gap: 3px; }
+  .add-hotel-grid input, .add-hotel-grid select, .add-hotel-grid textarea { padding: 6px 8px; border: 1px solid var(--border2); border-radius: 5px; font-size: 12px; font-family: inherit; }
+  .add-hotel-grid .full-width { grid-column: 1 / -1; }
+  .contact-tracker { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--surface); }
+  .contact-tracker th { padding: 6px 8px; text-align: left; font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); white-space: nowrap; background: var(--bg); position: sticky; top: 0; }
+  .contact-tracker td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .contact-tracker tr:hover td { background: #f9fafb; }
+  .ct-badge { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
   .track-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow-sm); }
   .track-card:hover { border-color: var(--border2); box-shadow: var(--shadow); }
   .track-card.closed { opacity: 0.55; background: #fafafa; }
@@ -741,26 +750,22 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
 
   const [dragOver, setDragOver] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null);
-
   const hasActiveFilters = outreachSearch || outreachCountry || outreachCity || outreachGroup || outreachTier || outreachProvider;
-  function clearOutreachFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); }
-
-  if (filteredT.length === 0 && !hasActiveFilters) {
-    return <div className="empty"><div className="empty-icon">{String.fromCodePoint(0x1F4EC)}</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
-  }
+  function clearFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); }
+  if (filteredT.length === 0 && !hasActiveFilters) return <div className="empty"><div className="empty-icon">{"\u{1F4EC}"}</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
 
   const STAGES = [
-    { key: "new",   label: "New",     color: "#6b7280", bg: "#f9fafb" },
-    { key: "1st",   label: "1st",     color: "#2563eb", bg: "#eff6ff" },
-    { key: "2nd",   label: "2nd",     color: "#0891b2", bg: "#ecfeff" },
-    { key: "3rd",   label: "3rd",     color: "#7c3aed", bg: "#f5f3ff" },
-    { key: "4th",   label: "4th",     color: "#6d28d9", bg: "#ede9fe" },
-    { key: "demo",  label: "Demo",    color: "#c026d3", bg: "#fdf4ff" },
-    { key: "trial", label: "Trial",   color: "#ea580c", bg: "#fff7ed" },
-    { key: "won",   label: "Won",     color: "#059669", bg: "#ecfdf5" },
-    { key: "lost",  label: "Lost",    color: "#dc2626", bg: "#fef2f2" },
+    { key: "new", label: "New", color: "#6b7280", bg: "#f9fafb" },
+    { key: "1st", label: "1st", color: "#2563eb", bg: "#eff6ff" },
+    { key: "2nd", label: "2nd", color: "#0891b2", bg: "#ecfeff" },
+    { key: "3rd", label: "3rd", color: "#7c3aed", bg: "#f5f3ff" },
+    { key: "4th", label: "4th", color: "#6d28d9", bg: "#ede9fe" },
+    { key: "demo", label: "Demo", color: "#c026d3", bg: "#fdf4ff" },
+    { key: "trial", label: "Trial", color: "#ea580c", bg: "#fff7ed" },
+    { key: "won", label: "Won", color: "#059669", bg: "#ecfdf5" },
+    { key: "lost", label: "Lost", color: "#dc2626", bg: "#fef2f2" },
   ];
-  const STAGE_KEYS = STAGES.map(s => s.key);
+  const SK = STAGES.map(s => s.key);
 
   function effectiveStage(t) {
     const s = t.pipeline_stage || "new";
@@ -768,237 +773,168 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     if (s === "emailed") return "1st";
     if (s === "followup") return "2nd";
     if (s === "dead") return "lost";
-    if (s === "new") {
-      const done = t.done || [];
-      if (done.length === 0) return "new";
-      if (done.length === 1) return "1st";
-      if (done.length === 2) return "2nd";
-      if (done.length === 3) return "3rd";
-      if (done.length >= 4) return "4th";
-    }
-    return STAGE_KEYS.includes(s) ? s : "new";
+    if (s === "new") { const d = t.done || []; return d.length === 0 ? "new" : d.length === 1 ? "1st" : d.length === 2 ? "2nd" : d.length === 3 ? "3rd" : "4th"; }
+    return SK.includes(s) ? s : "new";
   }
 
   const stageMap = {};
   STAGES.forEach(s => { stageMap[s.key] = []; });
-  filteredT.forEach(t => {
-    const s = effectiveStage(t);
-    if (stageMap[s]) stageMap[s].push(t);
-    else stageMap["new"].push(t);
-  });
+  filteredT.forEach(t => { const s = effectiveStage(t); (stageMap[s] || stageMap["new"]).push(t); });
 
-  const INTENT_LABELS = { 1: "Cold", 2: "Low", 3: "Medium", 4: "Warm", 5: "Hot" };
-  const INTENT_COLORS = { 1: "#9ca3af", 2: "#6b7280", 3: "#eab308", 4: "#f59e0b", 5: "#ef4444" };
-  function intentionLabel(val) {
-    if (!val || val < 1) return null;
-    return { text: INTENT_LABELS[val] || "", cls: val >= 4 ? "int-hot" : val >= 3 ? "int-warm" : "int-cold", color: INTENT_COLORS[val] || "#9ca3af" };
-  }
+  const IL = { 1: "Cold", 2: "Low", 3: "Medium", 4: "Warm", 5: "Hot" };
+  const IC = { 1: "#9ca3af", 2: "#6b7280", 3: "#eab308", 4: "#f59e0b", 5: "#ef4444" };
+  function intLabel(v) { return (!v || v < 1) ? null : { text: IL[v], cls: v >= 4 ? "int-hot" : v >= 3 ? "int-warm" : "int-cold" }; }
 
-  function lastActivity(t) {
-    const done = t.done || [];
-    if (done.length === 0) return "No contact";
-    const lastTouch = done[done.length - 1];
-    const d = t["d" + lastTouch];
-    if (!d) return "Touch " + lastTouch;
-    const days = Math.floor((Date.now() - new Date(d)) / 86400000);
-    if (days === 0) return "Today";
-    if (days === 1) return "Yesterday";
-    return days + "d ago";
+  function lastAct(t) {
+    const d = t.done || [];
+    if (!d.length) return "No contact";
+    const last = d[d.length - 1], dt = t["d" + last];
+    if (!dt) return "Touch " + last;
+    const days = Math.floor((Date.now() - new Date(dt)) / 86400000);
+    return days === 0 ? "Today" : days === 1 ? "Yesterday" : days + "d ago";
   }
 
   function changeStage(tid, stageKey, e) {
     if (e) e.stopPropagation();
     setMenuOpen(null);
-    if (stageKey === "lost") {
-      openRejectModal(tid, "lost", e);
-      return;
+    if (stageKey === "lost") { openRejectModal(tid, "lost", e); return; }
+    // Auto-timestamp: when moving to 1st/2nd/3rd/4th, log the date
+    const stageToTouch = { "1st": 1, "2nd": 2, "3rd": 3, "4th": 4 };
+    const touchN = stageToTouch[stageKey];
+    if (touchN) {
+      const now = new Date().toISOString();
+      const updates = { pipeline_stage: stageKey, ["d" + touchN]: now };
+      // Also mark touch as done
+      const t = filteredT.find(x => x.id === tid);
+      if (t) {
+        const done = [...(t.done || [])];
+        if (!done.includes(touchN)) done.push(touchN);
+        done.sort((a,b) => a - b);
+        updates.done = done;
+      }
+      updatePipeline(tid, updates);
+    } else {
+      updatePipeline(tid, { pipeline_stage: stageKey });
     }
-    updatePipeline(tid, { pipeline_stage: stageKey });
   }
 
-  function onDragStart(e, tid) {
-    e.dataTransfer.setData("text/plain", tid);
-    e.dataTransfer.effectAllowed = "move";
-  }
-  function onDragOver(e, stageKey) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOver(stageKey);
-  }
+  function onDragStart(e, tid) { e.dataTransfer.setData("text/plain", tid); e.dataTransfer.effectAllowed = "move"; }
+  function onDragOver(e, sk) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOver(sk); }
   function onDragLeave() { setDragOver(null); }
-  function onDrop(e, stageKey) {
-    e.preventDefault();
-    setDragOver(null);
-    const tid = e.dataTransfer.getData("text/plain");
-    if (tid) changeStage(tid, stageKey);
-  }
+  function onDrop(e, sk) { e.preventDefault(); setDragOver(null); const tid = e.dataTransfer.getData("text/plain"); if (tid) changeStage(tid, sk); }
 
   function KCard({ t }) {
     const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
-    const int = intentionLabel(t.intention);
-    const last = lastActivity(t);
-    const stage = effectiveStage(t);
-    const isMenuOpen = menuOpen === t.id;
-
+    const int = intLabel(t.intention), last = lastAct(t), stage = effectiveStage(t), isOpen = menuOpen === t.id;
     return (
-      <div className="kb-card" draggable onDragStart={e => onDragStart(e, t.id)}
-        onClick={() => setSelected(t.prospect_id)}>
+      <div className="kb-card" draggable onDragStart={e => onDragStart(e, t.id)} onClick={() => setSelected(t.prospect_id)}>
         <div className="kb-card-top">
           <div className="kb-hotel">{t.hotel}</div>
           <div style={{position:"relative",flexShrink:0,display:"flex",alignItems:"center",gap:3}}>
             {int && <span className={"int-tag " + int.cls}>{int.text}</span>}
-            <button className="kb-menu-btn" onClick={e => { e.stopPropagation(); setMenuOpen(isMenuOpen ? null : t.id); }}>{String.fromCodePoint(0x22EE)}</button>
-            {isMenuOpen && (
-              <div className="kb-menu" onClick={e => e.stopPropagation()}>
-                <div className="kb-menu-title">Move to</div>
-                {STAGES.filter(s => s.key !== stage).map(s => (
-                  <button key={s.key} className="kb-menu-item" onClick={() => changeStage(t.id, s.key)}>
-                    <span className="kb-menu-dot" style={{background: s.color}}/>{s.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <button className="kb-menu-btn" onClick={e => { e.stopPropagation(); setMenuOpen(isOpen ? null : t.id); }}>{"\u22EE"}</button>
+            {isOpen && <div className="kb-menu" onClick={e => e.stopPropagation()}>
+              <div className="kb-menu-title">Move to</div>
+              {STAGES.filter(s => s.key !== stage).map(s => <button key={s.key} className="kb-menu-item" onClick={() => changeStage(t.id, s.key)}><span className="kb-menu-dot" style={{background: s.color}}/>{s.label}</button>)}
+            </div>}
           </div>
         </div>
-        <div className="kb-city">{p?.city || String.fromCodePoint(0x2014)}{p?.country && p.country !== String.fromCodePoint(0x2014) ? ", " + p.country : ""}</div>
-        <div className="kb-bottom">
-          <span className="kb-last">{last}</span>
-          {t.sdr && <span className="kb-sdr">{t.sdr}</span>}
-        </div>
+        <div className="kb-city">{p?.city || "\u2014"}{p?.country && p.country !== "\u2014" ? ", " + p.country : ""}</div>
+        <div className="kb-bottom"><span className="kb-last">{last}</span>{t.sdr && <span className="kb-sdr">{t.sdr}</span>}</div>
       </div>
     );
   }
 
-  const totalActive = filteredT.filter(t => !["won","lost","dead"].includes(effectiveStage(t))).length;
-  const totalDemo = (stageMap["demo"]||[]).length;
-  const totalTrial = (stageMap["trial"]||[]).length;
-  const totalWon = (stageMap["won"]||[]).length;
-  const totalLost = (stageMap["lost"]||[]).length;
-  const convRate = (totalWon + totalLost) > 0 ? Math.round(totalWon / (totalWon + totalLost) * 100) : 0;
+  const tActive = filteredT.filter(t => !["won","lost","dead"].includes(effectiveStage(t))).length;
+  const tDemo = (stageMap.demo||[]).length, tTrial = (stageMap.trial||[]).length;
+  const tWon = (stageMap.won||[]).length, tLost = (stageMap.lost||[]).length;
+  const conv = (tWon+tLost) > 0 ? Math.round(tWon/(tWon+tLost)*100) : 0;
 
-  return (
-    <>
-      <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10,flexWrap:"nowrap",overflowX:"auto"}}>
-        <input className="cmd-input" style={{minWidth:130,flexShrink:0}} placeholder="Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
-        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
-          <option value="">All Countries</option>
-          {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="cmd-input" style={{width:130,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
-          <option value="">All Groups</option>
-          {allGroups.map(g=><option key={g} value={g}>{g.length>20?g.slice(0,18)+"…":g}</option>)}
-        </select>
-        {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>{String.fromCodePoint(0x2715)}</button>}
-        <div style={{marginLeft:"auto"}} className="view-toggle">
-          <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>{String.fromCodePoint(0x25A4)} Kanban</button>
-          <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>{String.fromCodePoint(0x2630)} List</button>
-        </div>
+  return (<>
+    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10,flexWrap:"nowrap",overflowX:"auto"}}>
+      <input className="cmd-input" style={{minWidth:130,flexShrink:0}} placeholder={"\uD83D\uDD0D Search..."} value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
+      <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
+        <option value="">All Countries</option>{allCountries.map(c=><option key={c} value={c}>{c}</option>)}
+      </select>
+      <select className="cmd-input" style={{width:130,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
+        <option value="">All Groups</option>{allGroups.map(g=><option key={g} value={g}>{g.length>20?g.slice(0,18)+"\u2026":g}</option>)}
+      </select>
+      {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearFilters}>{"\u2715"}</button>}
+      <div style={{marginLeft:"auto"}} className="view-toggle">
+        <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>{"\u25A4"} Kanban</button>
+        <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>{"\u2630"} List</button>
       </div>
-
-      <div className="pipeline-summary">
-        <span>Active <strong>{totalActive}</strong></span>
-        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
-        <span>Demo <strong>{totalDemo}</strong></span>
-        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
-        <span>Trial <strong>{totalTrial}</strong></span>
-        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
-        <span style={{color:"var(--green)"}}>Won <strong>{totalWon}</strong></span>
-        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
-        <span style={{color:"var(--red)"}}>Lost <strong>{totalLost}</strong></span>
-        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
-        <span>Conv <strong>{convRate}%</strong></span>
+    </div>
+    <div className="pipeline-summary">
+      <span>Active <strong>{tActive}</strong></span><span className="ps-sep">{"\u00B7"}</span>
+      <span>Demo <strong>{tDemo}</strong></span><span className="ps-sep">{"\u00B7"}</span>
+      <span>Trial <strong>{tTrial}</strong></span><span className="ps-sep">{"\u00B7"}</span>
+      <span style={{color:"var(--green)"}}>Won <strong>{tWon}</strong></span><span className="ps-sep">{"\u00B7"}</span>
+      <span style={{color:"var(--red)"}}>Lost <strong>{tLost}</strong></span><span className="ps-sep">{"\u00B7"}</span>
+      <span>Conv <strong>{conv}%</strong></span>
+    </div>
+    {filteredT.length === 0 ? (
+      <div className="empty"><div className="empty-icon">{"\uD83D\uDD0D"}</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearFilters}>{"\u2190"} Clear</button></div>
+    ) : outreachView === "list" ? (
+      <div className="table-card" style={{overflowX:"auto"}}><table className="outreach-list"><thead><tr>
+        <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>Owner</th><th></th>
+      </tr></thead><tbody>
+        {filteredT.map(t => {
+          const stage = effectiveStage(t), stg = STAGES.find(s=>s.key===stage)||STAGES[0];
+          const p = prospects?prospects.find(x=>x.id===t.prospect_id):null, last = lastAct(t);
+          return (<tr key={t.id}>
+            <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:180}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+            <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"\u2014"}</td>
+            <td style={{color:"var(--text3)",fontSize:11,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"\u2014"}</td>
+            <td style={{color:"var(--text2)",fontSize:12}}>{t.gm||"\u2014"}</td>
+            <td onClick={e=>e.stopPropagation()}>
+              <select className="stage-select" value={stage} style={{color:stg.color,background:stg.bg}} onChange={e=>changeStage(t.id,e.target.value)}>
+                {STAGES.map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </td>
+            <td onClick={e=>e.stopPropagation()}>
+              <select className="intent-select" value={t.intention||0} style={{color:IC[t.intention]||"var(--text3)"}} onChange={e=>updateIntention(t.id,parseInt(e.target.value))}>
+                <option value={0}>{"\u2014"}</option>{[1,2,3,4,5].map(v=><option key={v} value={v}>{"\u25CF"} {v} {IL[v]}</option>)}
+              </select>
+            </td>
+            <td style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>{last}</td>
+            <td onClick={e=>e.stopPropagation()}>
+              {editingNote===t.id ? (<div style={{display:"flex",gap:3}}>
+                <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus/>
+                <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                  <button className="act-btn success" style={{fontSize:9,padding:"2px 4px"}} onClick={()=>saveNote(t.id)}>{"\u2713"}</button>
+                  <button className="act-btn" style={{fontSize:9,padding:"2px 4px"}} onClick={()=>setEditingNote(null)}>{"\u2715"}</button>
+                </div></div>
+              ) : (<div className="notes-cell" onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>{t.sales_notes||<span style={{color:"var(--border2)"}}>+</span>}</div>)}
+            </td>
+            <td><span className="kb-sdr">{t.sdr||"\u2014"}</span></td>
+            <td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)}>{"\uD83D\uDDD1"}</button></td>
+          </tr>);
+        })}
+      </tbody></table></div>
+    ) : (
+      <div className="kanban-board">
+        {STAGES.map(stg => {
+          const cards = stageMap[stg.key]||[], isDrag = dragOver === stg.key;
+          return (<div key={stg.key} className={"kanban-col"+(isDrag?" drag-over":"")} onDragOver={e=>onDragOver(e,stg.key)} onDragLeave={onDragLeave} onDrop={e=>onDrop(e,stg.key)}>
+            <div className="kanban-col-header" style={{borderTopColor:stg.color}}>
+              <span className="kanban-col-title">{stg.label}</span>
+              <span className="kanban-col-count" style={{background:stg.bg,color:stg.color}}>{cards.length}</span>
+            </div>
+            <div className="kanban-col-body">
+              {cards.length===0&&<div style={{padding:"16px 4px",textAlign:"center",color:"var(--text3)",fontSize:10,fontStyle:"italic"}}>Empty</div>}
+              {cards.map(t=><KCard key={t.id} t={t}/>)}
+            </div>
+          </div>);
+        })}
       </div>
-
-      {filteredT.length === 0 ? (
-        <div className="empty"><div className="empty-icon">{String.fromCodePoint(0x1F50D)}</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>{String.fromCodePoint(0x2190)} Clear</button></div>
-      ) : outreachView === "list" ? (
-        <div className="table-card" style={{overflowX:"auto"}}>
-          <table className="outreach-list">
-            <thead><tr>
-              <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>Owner</th><th></th>
-            </tr></thead>
-            <tbody>
-              {filteredT.map(t => {
-                const stage = effectiveStage(t);
-                const stg = STAGES.find(s => s.key === stage) || STAGES[0];
-                const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
-                const last = lastActivity(t);
-                return (
-                  <tr key={t.id}>
-                    <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:180}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
-                    <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"—"}</td>
-                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
-                    <td style={{color:"var(--text2)",fontSize:12}}>{t.gm||"—"}</td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      <select className="stage-select" value={stage} style={{color:stg.color,background:stg.bg}}
-                        onChange={e => changeStage(t.id, e.target.value)}>
-                        {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                      </select>
-                    </td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      <select className="intent-select" value={t.intention||0}
-                        style={{color: INTENT_COLORS[t.intention] || "var(--text3)"}}
-                        onChange={e => updateIntention(t.id, parseInt(e.target.value))}>
-                        <option value={0}>—</option>
-                        {[1,2,3,4,5].map(v => <option key={v} value={v}>{"●"} {v} {INTENT_LABELS[v]}</option>)}
-                      </select>
-                    </td>
-                    <td style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>{last}</td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      {editingNote === t.id ? (
-                        <div style={{display:"flex",gap:3}}>
-                          <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus/>
-                          <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                            <button className="act-btn success" style={{fontSize:9,padding:"2px 4px"}} onClick={()=>saveNote(t.id)}>{String.fromCodePoint(0x2713)}</button>
-                            <button className="act-btn" style={{fontSize:9,padding:"2px 4px"}} onClick={()=>setEditingNote(null)}>{String.fromCodePoint(0x2715)}</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="notes-cell" onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
-                          {t.sales_notes || <span style={{color:"var(--border2)"}}>+</span>}
-                        </div>
-                      )}
-                    </td>
-                    <td><span className="kb-sdr">{t.sdr||"—"}</span></td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)}>{String.fromCodePoint(0x1F5D1)}</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="kanban-board">
-          {STAGES.map(stg => {
-            const cards = stageMap[stg.key] || [];
-            const isDragTarget = dragOver === stg.key;
-            return (
-              <div key={stg.key} className={"kanban-col" + (isDragTarget ? " drag-over" : "")}
-                onDragOver={e => onDragOver(e, stg.key)}
-                onDragLeave={onDragLeave}
-                onDrop={e => onDrop(e, stg.key)}>
-                <div className="kanban-col-header" style={{borderTopColor: stg.color}}>
-                  <span className="kanban-col-title">{stg.label}</span>
-                  <span className="kanban-col-count" style={{background: stg.bg, color: stg.color}}>{cards.length}</span>
-                </div>
-                <div className="kanban-col-body">
-                  {cards.length === 0 && (
-                    <div style={{padding:"16px 4px",textAlign:"center",color:"var(--text3)",fontSize:10,fontStyle:"italic"}}>Empty</div>
-                  )}
-                  {cards.map(t => <KCard key={t.id} t={t} />)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </>
-  );
+    )}
+  </>);
 }
 export default function App() {
   const [tab, setTab] = useState("hotels");
+  const [addHotelModal, setAddHotelModal] = useState(false);
+  const [addHotelForm, setAddHotelForm] = useState({});
   // Geo state
   const [region, setRegion] = useState("Europe");
   const [country, setCountry] = useState("Austria");
@@ -1033,6 +969,7 @@ export default function App() {
   const [tracking, setTracking] = useState([]);
   const [rejectModal, setRejectModal] = useState(null); // { tid, stage: 'dead'|'reopen' }
   const [rejectReason, setRejectReason] = useState("");
+  const [rejectOtherText, setRejectOtherText] = useState("");
   const [outreachView, setOutreachView] = useState("card");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [cooldown, setCooldown] = useState(0); // seconds until next search allowed
@@ -1396,15 +1333,18 @@ export default function App() {
   function openRejectModal(tid, stage, e) {
     if (e) e.stopPropagation();
     setRejectReason("");
+    setRejectOtherText("");
     setRejectModal({ tid, stage });
   }
 
   async function confirmReject() {
     if (!rejectModal) return;
     const stageVal = rejectModal.stage === "dead" ? "lost" : rejectModal.stage;
-    const updates = { pipeline_stage: stageVal, rejection_reason: rejectReason || "Not specified" };
+    const reason = rejectReason === "Other" && rejectOtherText ? "Other: " + rejectOtherText.trim() : (rejectReason || "Not specified");
+    const updates = { pipeline_stage: stageVal, rejection_reason: reason };
     await updatePipeline(rejectModal.tid, updates);
     setRejectModal(null);
+    setRejectOtherText("");
   }
 
   async function reopenSequence(tid, e) {
@@ -1424,6 +1364,29 @@ export default function App() {
 
 
   function copy(text, key) { navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 1500); }); }
+
+  async function saveManualHotel() {
+    const f = addHotelForm;
+    if (!f.hotel_name || !f.hotel_name.trim()) { alert("Hotel name is required"); return; }
+    const record = {
+      hotel_name: f.hotel_name.trim(), city: f.city?.trim() || null, country: f.country?.trim() || null,
+      hotel_group: f.hotel_group?.trim() || null, brand: f.brand?.trim() || null,
+      address: f.address?.trim() || null, website: f.website?.trim() || null,
+      adr_usd: f.adr_usd ? Number(f.adr_usd) : null, rooms: f.rooms ? Number(f.rooms) : null,
+      current_provider: f.current_provider || null, research_notes: f.notes?.trim() || "Manually added",
+      sdr: sdr || "Unknown", batch: "manual-" + new Date().toISOString().slice(0,10),
+    };
+    try {
+      const resp = await sbFetch("/prospects", { method: "POST", prefer: "return=representation", body: JSON.stringify(record) });
+      if (resp && resp.length > 0) {
+        setProspects(prev => [...prev, resp[0]]);
+        const tEntry = { prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdr || "Unknown", pipeline_stage: "new", done: [], intention: 0 };
+        const tResp = await sbFetch("/tracking", { method: "POST", prefer: "return=representation", body: JSON.stringify(tEntry) });
+        if (tResp && tResp.length > 0) setTracking(prev => [...prev, tResp[0]]);
+      }
+      setAddHotelModal(false); setAddHotelForm({});
+    } catch (err) { console.error(err); alert("Failed: " + err.message); }
+  }
 
   function exportCSV() {
     const h = ["Hotel","Brand","Tier","City","Country","Rooms","F&B","ADR USD","Rating","Reviews","GM","Title","Email","LinkedIn","Confidence","Strategy","Provider","SDR","Batch","Added"];
@@ -1676,7 +1639,8 @@ export default function App() {
 
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
-            {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
+            {filteredP.length > 0 && <button className="cmd-btn" style={{background:"var(--accent)",color:"white",fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
+              <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
               <input type="file" accept=".csv" style={{display:"none"}} onChange={importCSV}/>
@@ -1685,9 +1649,9 @@ export default function App() {
           </div>
 
           <div className="tabs">
-            {[["hotels","Hotels",sortedP.length],["outreach","Outreach Tracker",filteredT.length]].map(([id,label,cnt])=>(
-              <button key={id} className={`tab ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}<span className="tab-badge">{cnt}</span></button>
-            ))}
+            <button className={`tab ${tab==="hotels"?"active":""}`} onClick={()=>setTab("hotels")}>Hotels<span className="tab-badge">{sortedP.length}</span></button>
+              <button className={`tab ${tab==="outreach"?"active":""}`} onClick={()=>setTab("outreach")}>Pipeline<span className="tab-badge">{filteredT.length}</span></button>
+              <button className={`tab ${tab==="contacts"?"active":""}`} onClick={()=>setTab("contacts")}>Contact Tracker<span className="tab-badge">{tracking.filter(t=>t.d1).length}</span></button>
           </div>
 
           {tab==="hotels" && (
@@ -1807,6 +1771,97 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Contact Tracker page */}
+      {tab === "contacts" && (() => {
+        const CADENCE = { 1: 4, 2: 7, 3: 7, 4: 7 };
+        const rows = tracking.filter(t => t.d1).map(t => {
+          const p = prospects.find(x => x.id === t.prospect_id);
+          const done = t.done || [];
+          const dates = { 1: t.d1, 2: t.d2, 3: t.d3, 4: t.d4 };
+          const lastN = done.length > 0 ? Math.max(...done) : 0;
+          const lastDate = lastN > 0 ? dates[lastN] : null;
+          const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
+          let nextDue = null, nextLabel = null;
+          if (lastN >= 1 && lastN < 4 && lastDate) {
+            const cad = CADENCE[lastN + 1] || 7;
+            nextDue = new Date(new Date(lastDate).getTime() + cad * 86400000);
+            nextLabel = ["","","2nd","3rd","4th"][lastN + 1] + " follow-up";
+          }
+          const isClosed = ["won","lost","dead"].includes(t.pipeline_stage);
+          let status = "ok";
+          if (isClosed) status = "closed";
+          else if (lastN >= 4) status = "complete";
+          else if (nextDue) {
+            const daysUntil = Math.floor((nextDue - Date.now()) / 86400000);
+            if (daysUntil < 0) status = "overdue";
+            else if (daysUntil <= 2) status = "due-soon";
+          }
+          return { t, p, dates, lastN, daysSince, nextDue, nextLabel, status };
+        }).sort((a, b) => {
+          const pri = { overdue: 0, "due-soon": 1, ok: 2, complete: 3, closed: 4 };
+          return (pri[a.status]||2) - (pri[b.status]||2);
+        });
+        const overdueN = rows.filter(r => r.status === "overdue").length;
+        const dueSoonN = rows.filter(r => r.status === "due-soon").length;
+        return (<>
+          <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDate(new Date())}</div>
+            {overdueN > 0 && <span className="ct-badge" style={{background:"var(--red-bg,#fef2f2)",color:"var(--red)"}}>{overdueN} Overdue</span>}
+            {dueSoonN > 0 && <span className="ct-badge" style={{background:"var(--amber-bg,#fffbeb)",color:"var(--amber,#d97706)"}}>{dueSoonN} Due soon</span>}
+            <span style={{fontSize:12,color:"var(--text3)"}}>{rows.length} contacts tracked</span>
+          </div>
+          <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
+            <th>Hotel</th><th>GM</th><th>Email</th><th>Stage</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>Days Since</th><th>Next Due</th><th>Status</th><th>Owner</th>
+          </tr></thead><tbody>
+            {rows.map(({t, p, dates, daysSince, nextDue, nextLabel, status}) => (
+              <tr key={t.id}>
+                <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)"}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+                <td style={{fontSize:11,color:"var(--text2)"}}>{t.gm||"\u2014"}</td>
+                <td style={{fontSize:10,color:"var(--text3)",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{p?.email||"\u2014"}</td>
+                <td><span style={{fontSize:10,fontWeight:600}}>{t.pipeline_stage||"new"}</span></td>
+                <td style={{fontSize:11,color:dates[1]?"var(--text2)":"var(--text3)"}}>{dates[1] ? fmtDateShort(dates[1]) : "\u2014"}</td>
+                <td style={{fontSize:11,color:dates[2]?"var(--text2)":"var(--text3)"}}>{dates[2] ? fmtDateShort(dates[2]) : "\u2014"}</td>
+                <td style={{fontSize:11,color:dates[3]?"var(--text2)":"var(--text3)"}}>{dates[3] ? fmtDateShort(dates[3]) : "\u2014"}</td>
+                <td style={{fontSize:11,color:dates[4]?"var(--text2)":"var(--text3)"}}>{dates[4] ? fmtDateShort(dates[4]) : "\u2014"}</td>
+                <td style={{fontSize:11,fontWeight:daysSince>7?600:400,color:daysSince>7?"var(--red)":"var(--text2)"}}>{daysSince !== null ? daysSince + "d" : "\u2014"}</td>
+                <td style={{fontSize:11}}>{nextDue ? <span style={{color:status==="overdue"?"var(--red)":status==="due-soon"?"var(--amber,#d97706)":"var(--text2)",fontWeight:status==="overdue"||status==="due-soon"?600:400}}>{fmtDateShort(nextDue)}</span> : <span style={{color:"var(--text3)"}}>\u2014</span>}</td>
+                <td>{status==="overdue"?<span className="ct-badge" style={{background:"#fef2f2",color:"#dc2626"}}>Overdue</span>:status==="due-soon"?<span className="ct-badge" style={{background:"#fffbeb",color:"#d97706"}}>Due soon</span>:status==="closed"?<span className="ct-badge" style={{background:"#f3f4f6",color:"#6b7280"}}>Closed</span>:status==="complete"?<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>Complete</span>:<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>OK</span>}</td>
+                <td><span className="kb-sdr">{t.sdr||"\u2014"}</span></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        </>);
+      })()}
+
+      {/* Add Hotel Modal */}
+      {addHotelModal && (
+        <div className="modal-overlay" onClick={()=>setAddHotelModal(false)}>
+          <div className="modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">Add Hotel</div>
+            <div className="add-hotel-grid">
+              <label className="full-width">Hotel Name *<input value={addHotelForm.hotel_name||""} onChange={e=>setAddHotelForm(p=>({...p,hotel_name:e.target.value}))} placeholder="e.g. Kimpton Hotel Monaco DC"/></label>
+              <label>City<input value={addHotelForm.city||""} onChange={e=>setAddHotelForm(p=>({...p,city:e.target.value}))} placeholder="Washington"/></label>
+              <label>Country<input value={addHotelForm.country||""} onChange={e=>setAddHotelForm(p=>({...p,country:e.target.value}))} placeholder="United States"/></label>
+              <label>Group<input value={addHotelForm.hotel_group||""} onChange={e=>setAddHotelForm(p=>({...p,hotel_group:e.target.value}))} placeholder="IHG"/></label>
+              <label>Brand<input value={addHotelForm.brand||""} onChange={e=>setAddHotelForm(p=>({...p,brand:e.target.value}))} placeholder="Kimpton"/></label>
+              <label>Address<input value={addHotelForm.address||""} onChange={e=>setAddHotelForm(p=>({...p,address:e.target.value}))} placeholder="1726 M St NW"/></label>
+              <label>Website<input value={addHotelForm.website||""} onChange={e=>setAddHotelForm(p=>({...p,website:e.target.value}))} placeholder="https://..."/></label>
+              <label>ADR (USD)<input type="number" value={addHotelForm.adr_usd||""} onChange={e=>setAddHotelForm(p=>({...p,adr_usd:e.target.value}))} placeholder="250"/></label>
+              <label>Rooms<input type="number" value={addHotelForm.rooms||""} onChange={e=>setAddHotelForm(p=>({...p,rooms:e.target.value}))} placeholder="335"/></label>
+              <label>Provider<select value={addHotelForm.current_provider||""} onChange={e=>setAddHotelForm(p=>({...p,current_provider:e.target.value}))}>
+                <option value="">Select...</option>
+                {["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Unknown","Other"].map(p=><option key={p} value={p}>{p}</option>)}
+              </select></label>
+              <label className="full-width">Notes<input value={addHotelForm.notes||""} onChange={e=>setAddHotelForm(p=>({...p,notes:e.target.value}))} placeholder="Any context..."/></label>
+            </div>
+            <div className="modal-footer">
+              <button className="modal-cancel" onClick={()=>setAddHotelModal(false)}>Cancel</button>
+              <button className="modal-confirm" disabled={!addHotelForm.hotel_name?.trim()} style={{opacity:addHotelForm.hotel_name?.trim()?1:0.5}} onClick={saveManualHotel}>Save Hotel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rejectModal && (
         <div className="modal-overlay" onClick={()=>setRejectModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -1817,9 +1872,18 @@ export default function App() {
                 <button key={r} className={`reason-btn ${rejectReason===r?"selected":""}`} onClick={()=>setRejectReason(r)}>{r}</button>
               ))}
             </div>
+            {rejectReason === "Other" && (
+              <div style={{marginBottom:12}}>
+                <input className="cmd-input" style={{width:"100%"}} placeholder="Please specify reason (required)..." 
+                  value={rejectOtherText||""} onChange={e=>setRejectOtherText(e.target.value)} autoFocus />
+              </div>
+            )}
             <div className="modal-footer">
               <button className="modal-cancel" onClick={()=>setRejectModal(null)}>Cancel</button>
-              <button className="modal-confirm danger-btn" onClick={confirmReject}>Confirm</button>
+              <button className="modal-confirm danger-btn" 
+                disabled={!rejectReason || (rejectReason==="Other" && (!rejectOtherText || rejectOtherText.trim().length<3))}
+                style={{opacity: (!rejectReason || (rejectReason==="Other" && (!rejectOtherText || rejectOtherText.trim().length<3))) ? 0.5 : 1}}
+                onClick={confirmReject}>Confirm</button>
             </div>
           </div>
         </div>
@@ -1874,17 +1938,7 @@ export default function App() {
             {(() => {
               const trk = tracking.find(x => x.prospect_id === sel.id);
               if (!trk) return null;
-              const DS = [
-                { key: "new", label: "New", color: "#6b7280" },
-                { key: "1st", label: "1st", color: "#2563eb" },
-                { key: "2nd", label: "2nd", color: "#0891b2" },
-                { key: "3rd", label: "3rd", color: "#7c3aed" },
-                { key: "4th", label: "4th", color: "#6d28d9" },
-                { key: "demo", label: "Demo", color: "#c026d3" },
-                { key: "trial", label: "Trial", color: "#ea580c" },
-                { key: "won", label: "Won", color: "#059669" },
-                { key: "lost", label: "Lost", color: "#dc2626" },
-              ];
+              const DS = [{key:"new",label:"New",color:"#6b7280"},{key:"1st",label:"1st",color:"#2563eb"},{key:"2nd",label:"2nd",color:"#0891b2"},{key:"3rd",label:"3rd",color:"#7c3aed"},{key:"4th",label:"4th",color:"#6d28d9"},{key:"demo",label:"Demo",color:"#c026d3"},{key:"trial",label:"Trial",color:"#ea580c"},{key:"won",label:"Won",color:"#059669"},{key:"lost",label:"Lost",color:"#dc2626"}];
               const ms = s => { if (s==="active") return "new"; if (s==="emailed") return "1st"; if (s==="followup") return "2nd"; if (s==="dead") return "lost"; return s; };
               const stage = ms(trk.pipeline_stage || "new");
               const so = DS.find(s=>s.key===stage) || DS[0];
@@ -1894,16 +1948,14 @@ export default function App() {
                   <div className="d-row"><span className="d-key">Stage</span><span className="d-val"><span style={{fontWeight:700,color:so.color}}>{so.label}</span></span></div>
                   {trk.intention > 0 && <div className="d-row"><span className="d-key">Intent</span><span className="d-val">{trk.intention}/5 \u2014 {({1:"Cold",2:"Low",3:"Medium",4:"Warm",5:"Hot"})[trk.intention]||"\u2014"}</span></div>}
                   {trk.rejection_reason && <div className="d-row"><span className="d-key">Lost Reason</span><span className="d-val" style={{color:"var(--red)"}}>{trk.rejection_reason}</span></div>}
-                  {trk.d1 && <div className="d-row"><span className="d-key">1st Contact</span><span className="d-val">{fmtDate(trk.d1)}</span></div>}
-                  {trk.sales_notes && <div className="d-row"><span className="d-key">Sales Note</span><span className="d-val" style={{fontSize:12,whiteSpace:"pre-wrap"}}>{trk.sales_notes}</span></div>}
                   <div style={{marginTop:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Activity Timeline</div>
                     {(trk.done||[]).map(n => {
                       const d = trk["d"+n];
-                      const labels = {1:"1st Email",2:"2nd Follow-up",3:"3rd Follow-up",4:"4th Follow-up"};
+                      const lbl = {1:"1st Email sent",2:"2nd Follow-up sent",3:"3rd Follow-up sent",4:"4th Follow-up sent"};
                       return <div key={n} style={{fontSize:11,color:"var(--text2)",padding:"2px 0",display:"flex",gap:8}}>
-                        <span style={{color:"var(--text3)",minWidth:60}}>{d?fmtDate(d):"\u2014"}</span>
-                        <span>{labels[n]||("Touch "+n)} sent</span>
+                        <span style={{color:"var(--text3)",minWidth:70}}>{d?fmtDate(d):"\u2014"}</span>
+                        <span>{lbl[n]||("Touch "+n)}</span>
                       </div>;
                     })}
                     {(trk.done||[]).length===0 && <div style={{fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>No contacts yet</div>}
