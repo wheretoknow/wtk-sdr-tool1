@@ -1060,7 +1060,7 @@ export default function App() {
     setRunning(true); setError(null); setProgress(5);
     const market = getMarket();
     const n = Math.min(Math.max(parseInt(count) || 5, 1), 50);
-    const BATCH_SIZE = 10; // max per API call to stay within token limits
+    const BATCH_SIZE = 5; // 5 hotels per API call — fits within 20 search budget (5×3=15)
     const numBatches = Math.ceil(n / BATCH_SIZE);
 
     // Build exclusion list from existing prospects in same market (city/country match)
@@ -1131,9 +1131,9 @@ export default function App() {
         setProgress(pct);
         setLog(`Searching batch ${i + 1} of ${numBatches} (${batchCount} hotels)${allFresh.length ? ` · ${allFresh.length} found so far` : ""}...`);
 
-        // Inter-batch delay: 65s to stay under 50k input tokens/min
+        // Inter-batch delay: 40s — each 5-hotel batch uses ~10k tokens, limit is 50k/min
         if (i > 0) {
-          await rateLimitWait(65);
+          await rateLimitWait(40);
         }
 
         const alreadyFound = allFresh.map(p => p.hotel_name);
