@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component } from "react";
+import { useState, useEffect, useRef, Component, Fragment } from "react";
 
 const SUPABASE_URL = "https://rzksmbzlmzvodywfasht.supabase.co";
 const SUPABASE_KEY = "sb_publishable_PT6OfaeYiOb_lM5sTP30Lw_XJsir-4E";
@@ -1862,7 +1862,7 @@ export default function App() {
             {rows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
               const isExp = ctExpanded === t.id;
               const ordLabel = ["","1st","2nd","3rd","4th"];
-              return (<React.Fragment key={t.id}>
+              return (<Fragment key={t.id}>
                 <tr style={{cursor:"pointer"}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
                   <td>
                     <div style={{fontWeight:600,color:"var(--accent)"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
@@ -1892,7 +1892,7 @@ export default function App() {
                     })}
                   </div>
                 </td></tr>}
-              </React.Fragment>);
+              </Fragment>);
             })}
           </tbody></table></div>
         </>);
