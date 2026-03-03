@@ -1375,7 +1375,7 @@ export default function App() {
       address: f.address?.trim() || null, website: f.website?.trim() || null,
       adr_usd: f.adr_usd ? Number(f.adr_usd) : null, rooms: f.rooms ? Number(f.rooms) : null,
       current_provider: f.current_provider || null, research_notes: f.notes?.trim() || "Manually added",
-      sdr: sdr || "Unknown", batch: "manual-" + new Date().toISOString().slice(0,10),
+      sdr: sdrName || "Unknown", batch: "manual-" + new Date().toISOString().slice(0,10),
     };
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/prospects`, {
@@ -1391,7 +1391,7 @@ export default function App() {
         const tRes = await fetch(`${SUPABASE_URL}/rest/v1/tracking`, {
           method: "POST",
           headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-          body: JSON.stringify({ prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdr || "Unknown", pipeline_stage: "new", done: [], intention: 0 })
+          body: JSON.stringify({ prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdrName || "Unknown", pipeline_stage: "new", done: [], intention: 0 })
         });
         if (tRes.ok) { const tData = await tRes.json(); if (tData?.length > 0) setTracking(prev => [...prev, tData[0]]); }
       }
