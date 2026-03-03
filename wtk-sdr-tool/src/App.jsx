@@ -1377,15 +1377,25 @@ export default function App() {
       sdr: sdr || "Unknown", batch: "manual-" + new Date().toISOString().slice(0,10),
     };
     try {
-      const resp = await sbFetch("/prospects", { method: "POST", prefer: "return=representation", body: JSON.stringify(record) });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/prospects`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(record)
+      });
+      if (!res.ok) { const e = await res.text(); alert("Save failed: " + e); return; }
+      const resp = await res.json();
       if (resp && resp.length > 0) {
         setProspects(prev => [...prev, resp[0]]);
-        const tEntry = { prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdr || "Unknown", pipeline_stage: "new", done: [], intention: 0 };
-        const tResp = await sbFetch("/tracking", { method: "POST", prefer: "return=representation", body: JSON.stringify(tEntry) });
-        if (tResp && tResp.length > 0) setTracking(prev => [...prev, tResp[0]]);
+        // Auto-create tracking entry
+        const tRes = await fetch(`${SUPABASE_URL}/rest/v1/tracking`, {
+          method: "POST",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+          body: JSON.stringify({ prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdr || "Unknown", pipeline_stage: "new", done: [], intention: 0 })
+        });
+        if (tRes.ok) { const tData = await tRes.json(); if (tData?.length > 0) setTracking(prev => [...prev, tData[0]]); }
       }
       setAddHotelModal(false); setAddHotelForm({});
-    } catch (err) { console.error(err); alert("Failed: " + err.message); }
+    } catch (err) { console.error("Save hotel error:", err); alert("Error: " + err.message); }
   }
 
   function exportCSV() {
@@ -1756,21 +1766,6 @@ export default function App() {
             allCountries={allCountries} allCities={allCities} allGroups={allGroups} allProviders={allProviders}
             updateIntention={updateIntention}
           /></ErrorBoundary>}
-        </div>
-      </div>
-
-      {deleteConfirm && (
-        <div className="confirm-overlay" onClick={()=>setDeleteConfirm(null)}>
-          <div className="confirm-box" onClick={e=>e.stopPropagation()}>
-            <div className="confirm-title">Delete this prospect?</div>
-            <div className="confirm-sub">This will permanently remove the hotel and all outreach history from the shared database. This action cannot be undone.</div>
-            <div className="confirm-btns">
-              <button className="confirm-cancel" onClick={()=>setDeleteConfirm(null)}>Cancel</button>
-              <button className="confirm-del" onClick={()=>deleteProspect(deleteConfirm)}>Delete permanently</button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Contact Tracker page */}
       {tab === "contacts" && (() => {
         const CADENCE = { 1: 4, 2: 7, 3: 7, 4: 7 };
@@ -1832,6 +1827,21 @@ export default function App() {
           </tbody></table></div>
         </>);
       })()}
+        </div>
+      </div>
+
+      {deleteConfirm && (
+        <div className="confirm-overlay" onClick={()=>setDeleteConfirm(null)}>
+          <div className="confirm-box" onClick={e=>e.stopPropagation()}>
+            <div className="confirm-title">Delete this prospect?</div>
+            <div className="confirm-sub">This will permanently remove the hotel and all outreach history from the shared database. This action cannot be undone.</div>
+            <div className="confirm-btns">
+              <button className="confirm-cancel" onClick={()=>setDeleteConfirm(null)}>Cancel</button>
+              <button className="confirm-del" onClick={()=>deleteProspect(deleteConfirm)}>Delete permanently</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Hotel Modal */}
       {addHotelModal && (
