@@ -570,7 +570,7 @@ function ResearchNotes({ text }) {
   for (const line of lines) {
     if (line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) {
       if (current) bullets.push(current);
-      current = line.replace(/^[•\-*]\s*/, "");
+      current = line.replace(/^[•\-*]+\s*/, "").replace(/^[•\-*]+\s*/, "");
     } else if (bullets.length === 0 && !current) {
       // No bullets found yet — paragraph mode, split on sentences
       current = line;
@@ -719,8 +719,8 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
           {allGroups.map(g=><option key={g} value={g}>{g.length>26?g.slice(0,24)+"…":g}</option>)}
         </select>
         <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachTier} onChange={e=>setOutreachTier(e.target.value)}>
-          <option value="">All Tiers</option>
-          {["Luxury","Premium","Lifestyle","Economy","Function"].map(t=><option key={t} value={t}>{t}</option>)}
+          <option value="">All Brands</option>
+          {[...new Set(prospects.map(p=>p.brand).filter(Boolean))].sort().map(b=><option key={b} value={b}>{b}</option>)}
         </select>
         <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachProvider} onChange={e=>setOutreachProvider(e.target.value)}>
           <option value="">All Providers</option>
@@ -933,7 +933,7 @@ export default function App() {
   const [filterCountry, setFilterCountry] = useState("");
   const [filterCity, setFilterCity] = useState("");
   const [filterGroup, setFilterGroup] = useState("");
-  const [filterTier, setFilterTier] = useState("");
+  const [filterBrand, setFilterBrand] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
   const [hotelsPage, setHotelsPage] = useState(1);
   const HOTELS_PER_PAGE = 20;
@@ -1388,7 +1388,7 @@ export default function App() {
     if (filterCountry && (p.country||"") !== filterCountry) return false;
     if (filterCity && (p.city||"") !== filterCity) return false;
     if (filterGroup && normalizeGroup(p.hotel_group||p.brand||"") !== filterGroup) return false;
-    if (filterTier && p.tier !== filterTier) return false;
+    if (filterBrand && p.brand !== filterBrand) return false;
     if (filterProvider) {
       const prov = getProvider(p) || "Unknown";
       if (prov !== filterProvider) return false;
@@ -1418,7 +1418,7 @@ export default function App() {
     if (outreachCountry && (p?.country||"") !== outreachCountry) return false;
     if (outreachCity && (p?.city||"") !== outreachCity) return false;
     if (outreachGroup && normalizeGroup(p?.hotel_group||p?.brand||"") !== outreachGroup) return false;
-    if (outreachTier && p?.tier !== outreachTier) return false;
+    if (outreachTier && p?.brand !== outreachTier) return false;
     if (outreachProvider) {
       const prov = p ? (getProvider(p) || "Unknown") : "Unknown";
       if (prov !== outreachProvider) return false;
@@ -1549,23 +1549,23 @@ export default function App() {
                   <option value="">All Groups</option>
                   {allGroups.map(g=><option key={g} value={g}>{g.length>28?g.slice(0,26)+"…":g}</option>)}
                 </select>
-                <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterTier} onChange={e=>{setFilterTier(e.target.value);setHotelsPage(1);}}>
-                  <option value="">All Tiers</option>
-                  {["Luxury","Premium","Lifestyle","Economy","Function"].map(t=><option key={t} value={t}>{t}</option>)}
+                <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterBrand} onChange={e=>{setFilterBrand(e.target.value);setHotelsPage(1);}}>
+                  <option value="">All Brands</option>
+                  {[...new Set(prospects.map(p=>p.brand).filter(Boolean))].sort().map(b=><option key={b} value={b}>{b}</option>)}
                 </select>
                 <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterProvider} onChange={e=>{setFilterProvider(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Providers</option>
                   {allProviders.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
-                {(filterCountry||filterCity||filterGroup||filterTier||filterSearch||filterProvider) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setFilterProvider("");setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
-                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterTier||filterSearch||filterProvider)?" (filtered)":""}</span>
+                {(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterBrand("");setFilterSearch("");setFilterProvider("");setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
+                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider)?" (filtered)":""}</span>
               </div>
               {filteredP.length === 0 ? (
                 <div className="empty">
                   <div className="empty-icon">{loading ? "⏳" : "🔍"}</div>
                   <div className="empty-title">{loading ? "Loading database..." : "No hotels match your filters"}</div>
                   <div className="empty-sub" style={{marginBottom:12}}>{loading ? "" : "Try adjusting your search or filters."}</div>
-                  {!loading && <button className="act-btn" onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterTier("");setFilterSearch("");setFilterProvider("");setHotelsPage(1);}}>← Clear all filters</button>}
+                  {!loading && <button className="act-btn" onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterBrand("");setFilterSearch("");setFilterProvider("");setHotelsPage(1);}}>← Clear all filters</button>}
                 </div>
               ) : (
               <>
@@ -1576,7 +1576,7 @@ export default function App() {
                   <th style={{width:"8%"}}>City</th>
                   <th style={{width:"8%"}}>Country</th>
                   <th style={{width:"10%"}}>Group</th>
-                  <th style={{width:"7%"}}>Tier</th>
+                  <th style={{width:"7%"}}>Brand</th>
                   <th style={{width:"12%"}}>GM</th>
                   <th style={{width:"15%"}}>Email</th>
                   <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
@@ -1593,7 +1593,7 @@ export default function App() {
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.city||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
-                      <td><TierBadge tier={p.tier}/></td>
+                      <td><span className="cell-muted" style={{fontSize:12}}>{p.brand||"—"}</span></td>
                       <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title&&p.gm_title!=="General Manager"?p.gm_title:""}</div></td>
                       <td>{(()=>{const em=p.email; if(!em||em.includes('[email')||em.includes('email protected'))return<span className="cell-muted">—</span>; return<a className="email-link" href={`mailto:${em}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={em}>{em}</a>;})()}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
@@ -1704,7 +1704,7 @@ export default function App() {
               </span></div>
               <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const group = normalizeGroup(sel.hotel_group||sel.brand); const brand = sel.brand; if (!brand && !group) return "Independent"; if (brand && group && brand !== group) return `${brand} · ${group}`; return brand || group || "Independent"; })()}</span></div>
               <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val"><EditableField value={getProvider(sel) || ""} placeholder="Add provider" onSave={v => updateProspectField(sel.id, 'current_provider', v)} options={["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Olery","Guestfeedback"]} /></span></div>
-              <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
+              <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website.startsWith("http")?sel.website:`https://${sel.website}`} target="_blank" rel="noreferrer" title={sel.website}>↗ {sel.website.replace(/^https?:\/\/(www\.)?/,"").slice(0,40)}</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
             </div>
             <div className="d-sec">
               <div className="d-sec-title">Decision Maker</div>
