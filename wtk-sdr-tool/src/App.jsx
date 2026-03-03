@@ -1059,8 +1059,8 @@ export default function App() {
     return "Global";
   }
 
-  // ── Cooldown timer: 60s between API calls to stay under 50k tokens/min ────
-  const COOLDOWN_SEC = 60;
+  // ── Cooldown timer: 70s between API calls to stay under 50k tokens/min ────
+  const COOLDOWN_SEC = 70;
 
   function startCooldown() {
     lastBatchTime.current = Date.now();
@@ -1081,7 +1081,7 @@ export default function App() {
     if (remaining > 0 && lastBatchTime.current > 0) {
       setRunning(true); setError(null);
       for (let s = remaining; s > 0; s--) {
-        setLog(`Cooling down from last search — ${s}s remaining...`);
+        setLog(`Cooling down — ${s}s remaining...`);
         setCooldown(s);
         await new Promise(r => setTimeout(r, 1000));
       }
@@ -1090,153 +1090,167 @@ export default function App() {
 
     setRunning(true); setError(null); setProgress(5);
     const market = getMarket();
-    const n = Math.min(Math.max(parseInt(count) || 5, 1), 50);
-    const BATCH_SIZE = 10; // 10 hotels × 2 searches = 20, within budget
-    const numBatches = Math.ceil(n / BATCH_SIZE);
+    const n = Math.min(Math.max(parseInt(count) || 10, 1), 100);
 
-    // Build exclusion list from existing prospects in same market (city/country match)
     const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
     const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
 
-    // Hotels already in DB for this market — pass to API so model skips them
-    const marketLower = market.toLowerCase();
-    const existingInMarket = prospects
-      .filter(p => marketLower.includes((p.city||"").toLowerCase()) || marketLower.includes((p.country||"").toLowerCase()))
-      .map(p => p.hotel_name)
-      .filter(Boolean);
-
-    setLog(`Searching ${n} hotels in ${market}${existingInMarket.length ? ` · skipping ${existingInMarket.length} already in DB` : ""}...`);
-
     const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
     const sdr = sdrName || "Unknown";
-    const batch = `${market} · ${fmtDateShort(new Date())}`;
+    const batchLabel = `${market} · ${fmtDateShort(new Date())}`;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    let allFresh = [];
-    let allDupes = [];
-    let totalErrors = 0;
+    async function rateLimitWait(seconds) {
+      for (let s = seconds; s > 0; s--) {
+        setLog(`Cooling down — ${s}s before next batch...`);
+        setCooldown(s);
+        await sleep(1000);
+      }
+      setCooldown(0);
+    }
+
+    async function apiFetch(body, attempt = 0) {
+      const r = await fetch("/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (data?.error && data.error.toLowerCase().includes("rate limit")) {
+        if (attempt >= 1) return { ...data, rateLimited: true };
+        await rateLimitWait(70);
+        return apiFetch(body, attempt + 1);
+      }
+      return data;
+    }
 
     try {
-      // Run batches — parallel if >1 batch, but cap at 3 concurrent to avoid rate limits
-      const batchPromises = [];
-      for (let i = 0; i < numBatches; i++) {
-        const batchCount = Math.min(BATCH_SIZE, n - i * BATCH_SIZE);
-        // Pass exclusion list = existing in market + hotels found in previous batches (updated progressively)
-        batchPromises.push({ batchIdx: i, batchCount });
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1: LIST — get hotel names (no web search, instant, ~$0.001)
+      // ═══════════════════════════════════════════════════════════════════
+      setProgress(10);
+      setLog("Step 1: Building hotel list from knowledge base...");
+
+      const listData = await apiFetch({
+        mode: "list", city: market, brand, group, scope, minAdr
+      });
+
+      if (listData?.error) {
+        setError("List step failed: " + listData.error);
+        return;
       }
 
-      // 1 batch at a time — sequential to stay within 50k tokens/min rate limit
-      // Each batch uses ~15k tokens (system prompt + web search results)
-      // At 1 batch/15s we stay safely under limit
-      const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-      // Countdown helper — shows live "waiting Xs..." in the log
-      async function rateLimitWait(seconds) {
-        for (let s = seconds; s > 0; s--) {
-          setLog(`Rate limit — waiting ${s}s before next batch...`);
-          await sleep(1000);
-        }
+      const allKnown = parseJSON(listData.result);
+      if (!allKnown.length) {
+        setError("No hotels found in knowledge base. Try a different brand or market.");
+        setProgress(100);
+        return;
       }
 
-      // Fetch with single rate-limit retry (don't waste tokens on repeated retries)
-      async function fetchWithRetry(body, attempt = 0) {
-        const r = await fetch("/api/research", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body)
-        });
-        const data = await r.json();
-        if (data?.error && data.error.toLowerCase().includes("rate limit")) {
-          if (attempt >= 1) return { ...data, rateLimited: true }; // only 1 retry, then give up
-          const waitSec = 65; // wait full 65s to reset the 1-minute window
-          await rateLimitWait(waitSec);
-          return fetchWithRetry(body, attempt + 1);
-        }
-        return data;
+      // Filter out hotels already in DB
+      const newHotels = allKnown.filter(h => !existingKeys.has(normKey(h.hotel_name, h.city)));
+      const dupeCount = allKnown.length - newHotels.length;
+
+      // Take only up to requested count
+      const toVerify = newHotels.slice(0, n);
+
+      setLog(`Found ${allKnown.length} known hotels · ${dupeCount} already in DB · ${toVerify.length} to verify`);
+      setProgress(20);
+
+      if (toVerify.length === 0) {
+        setLog(`All ${allKnown.length} known hotels already in database. ${allKnown.length < 50 ? "This may not be the complete list — the model only knows hotels from its training data." : ""}`);
+        setProgress(100);
+        setTab("hotels");
+        return;
       }
 
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 2: VERIFY — web search for rooms + GM (batches of 10)
+      // ═══════════════════════════════════════════════════════════════════
+      const BATCH_SIZE = 10;
+      const batches = [];
+      for (let i = 0; i < toVerify.length; i += BATCH_SIZE) {
+        batches.push(toVerify.slice(i, i + BATCH_SIZE));
+      }
+
+      let allFresh = [];
+      let totalErrors = 0;
       let rateLimitHit = false;
 
-      for (let i = 0; i < batchPromises.length; i++) {
-        const { batchCount } = batchPromises[i];
-        const pct = Math.round(10 + (i / batchPromises.length) * 75);
+      for (let i = 0; i < batches.length; i++) {
+        const batchHotels = batches[i];
+        const pct = Math.round(20 + (i / batches.length) * 70);
         setProgress(pct);
-        setLog(`Searching batch ${i + 1} of ${numBatches} (${batchCount} hotels)${allFresh.length ? ` · ${allFresh.length} found so far` : ""}...`);
+        setLog(`Step 2: Verifying batch ${i + 1}/${batches.length} (${batchHotels.length} hotels)${allFresh.length ? ` · ${allFresh.length} saved so far` : ""}...`);
 
-        // Inter-batch delay: 40s — each 5-hotel batch uses ~10k tokens, limit is 50k/min
+        // Inter-batch cooldown — 70s to stay under 50k tokens/min
         if (i > 0) {
-          await rateLimitWait(40);
+          startCooldown();
+          await rateLimitWait(70);
         }
 
-        const alreadyFound = allFresh.map(p => p.hotel_name);
-        const excludeList = [...existingInMarket, ...alreadyFound];
-        const data = await fetchWithRetry({ city: market, brand, group, scope, minAdr, count: batchCount, exclude: excludeList });
+        const data = await apiFetch({ mode: "verify", hotels: batchHotels });
 
-        // Rate limit: stop immediately, keep what we have
         if (data?.rateLimited) {
           rateLimitHit = true;
           startCooldown();
-          setError(`Rate limit reached after batch ${i + 1}. ${allFresh.length} hotels saved. Wait 1 min and run again for more.`);
+          setError(`Rate limit after batch ${i + 1}. ${allFresh.length} hotels saved. Wait and run again — remaining hotels are queued.`);
           break;
         }
 
         if (data?.error) {
           totalErrors++;
-          setError("API error: " + data.error);
-          // On error, stop if no results yet; continue if we have some
-          if (allFresh.length === 0) break;
-          continue;
-        }
-        const raw = parseJSON(data.result);
-        if (!raw.length) {
-          const debugInfo = data.debug || (data.result || "").slice(0, 400);
-          setError("Parse failed. Debug: " + debugInfo);
+          setError("Verify error: " + data.error);
+          if (allFresh.length === 0 && i === 0) break;
           continue;
         }
 
-        // ── Progressive save: write this batch to DB + state immediately ──
+        const raw = parseJSON(data.result);
+        if (!raw.length) {
+          setError("Parse failed for batch " + (i + 1));
+          continue;
+        }
+
+        // Save this batch immediately
         const batchFresh = [];
         for (const p of raw) {
           const key = normKey(p.hotel_name, p.city);
-          if (existingKeys.has(key)) { allDupes.push(p.hotel_name); }
-          else { batchFresh.push(p); allFresh.push(p); existingKeys.add(key); }
+          if (existingKeys.has(key)) continue;
+          batchFresh.push(p);
+          existingKeys.add(key);
         }
 
         if (batchFresh.length > 0) {
-          const enrichedBatch = batchFresh.map(p => {
-            const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
+          const enriched = batchFresh.map(p => {
+            const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch: batchLabel, sdr };
             const safe = {};
             PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
             return safe;
           });
-          const newTBatch = enrichedBatch.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
+          const newT = enriched.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
 
-          // Write to Supabase immediately
           try {
-            await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enrichedBatch) });
-            await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newTBatch) });
+            await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched) });
+            await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT) });
           } catch (e) { console.error("Batch save error:", e); }
 
-          // Update state immediately — hotels appear in table right away
-          setProspects(prev => [...enrichedBatch, ...prev]);
-          setTracking(prev => [...newTBatch, ...prev]);
-          startCooldown(); // reset cooldown timer after each batch
+          setProspects(prev => [...enriched, ...prev]);
+          setTracking(prev => [...newT, ...prev]);
+          allFresh.push(...enriched);
+          startCooldown();
 
-          const totalSoFar = allFresh.length;
-          const dupesSoFar = allDupes.length;
-          setLog(`✓ ${totalSoFar} hotels found${dupesSoFar ? ` · ${dupesSoFar} skipped` : ""}${i < batchPromises.length - 1 ? ` · searching batch ${i + 2}...` : ""}`);
+          setLog(`✓ ${allFresh.length} hotels verified & saved${i < batches.length - 1 ? ` · batch ${i + 2} next...` : ""}`);
         }
       }
 
-      if (allFresh.length === 0 && !rateLimitHit) {
-        const msg = allDupes.length > 0
-          ? `All ${allDupes.length} hotels already in database`
-          : `No hotels found. Try adjusting market or filters.`;
-        setLog(msg);
-      } else if (allFresh.length > 0) {
-        const dupeNote = allDupes.length > 0 ? ` · ${allDupes.length} skipped (already in DB)` : "";
-        const errNote = totalErrors > 0 ? ` · ${totalErrors} batch(es) failed` : "";
-        const rlNote = rateLimitHit ? " · rate limited, run again for more" : "";
-        setLog(`Done — ${allFresh.length} new hotels saved · ${allFresh.filter(p => p.email).length} emails found${dupeNote}${errNote}${rlNote}`);
+      // Final summary
+      const dupeNote = dupeCount > 0 ? ` · ${dupeCount} already in DB` : "";
+      const errNote = totalErrors > 0 ? ` · ${totalErrors} batch(es) failed` : "";
+      const rlNote = rateLimitHit ? ` · rate limited, ${toVerify.length - allFresh.length} remaining` : "";
+      if (allFresh.length > 0) {
+        setLog(`Done — ${allFresh.length} new hotels saved${dupeNote}${errNote}${rlNote}`);
+      } else if (!rateLimitHit) {
+        setLog(`No new hotels verified${dupeNote}. Try a different market.`);
       }
       setProgress(100);
       setTab("hotels");
