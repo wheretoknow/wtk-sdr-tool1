@@ -170,32 +170,14 @@ RULES:
 - Start with [ immediately. End with ]. Nothing else.`;
 
 // Step 2: VERIFY — web search to fill in rooms + GM
-const VERIFY_SYSTEM = `You are a hotel research API. Output ONLY a JSON array. No explanation. Start with [ immediately.
+const VERIFY_SYSTEM = `Hotel research API. Output ONLY a JSON array. Start with [ immediately.
 
-You will receive hotel names with approximate cities. Verify each via web search.
+For each hotel: search official site (rooms, address, website) and GM name (${CURRENT_YEAR}/${PREV_YEAR} only).
 
-For EACH hotel, run exactly 2 searches:
-1. "[hotel name] Booking.com" → EXACT hotel name as listed on Booking.com, rooms, address, city, country, website
-2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → GM name
+Return: hotel_name (use Booking.com name if different), brand, hotel_group, tier, city (from actual address), country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes
 
-Return for each hotel:
-hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes
-
-★ HOTEL NAME RULE: hotel_name MUST match the EXACT name on Booking.com. Example: "Kimpton Hotel Monaco Portland" not "Hotel Monaco Portland".
-★ CITY RULE: Use the ACTUAL city from the hotel's address, not the approximate city from the input.
-
-RULES:
-- brand: keep as given in input.
-- rooms: from official site or Booking.com. Never guess.
-- gm_name: SOURCE and YEAR in research_notes. Before ${PREV_YEAR} = "⚠ possibly outdated", contact_confidence="L".
-- contact_confidence: "H" = official/press ${PREV_YEAR}+. "M" = LinkedIn/news. "L" = old/unverified.
-- research_notes: "Field: value (source, date)" per line. No bullet characters.
-- Set rating, rating_scale, rating_platform, review_count to null.
-- tier: "Luxury" (5-star), "Premium" (4-star+), "Lifestyle" (boutique), "Economy" (3-star-).
-
-★★★ CRITICAL ★★★
-- Output JSON array even if you only verified 1 hotel. Use null for unfound fields.
-- NEVER output explanation text. Just the array. Start with [ immediately.`;
+Rules: rooms from official site only. GM must have source+year in research_notes. contact_confidence H/M/L. Set rating fields to null. No bullets in research_notes.
+Partial data OK. Use null for missing fields. NEVER output explanation. Start with [.`;
 
 
 // ─── API HANDLER ────────────────────────────────────────────────────────────
@@ -273,22 +255,22 @@ export default async function handler(req, res) {
     // Takes hotel names, verifies rooms + GM via web search
     // ═════════════════════════════════════════════════════════════════════
     if (mode === 'verify' && hotels && hotels.length > 0) {
-      const batch = hotels.slice(0, 10); // 10 × 2 = 20 searches at limit; fallback if parse fails
-      const maxUses = Math.min(20, batch.length * 2);
-      const maxTokens = Math.min(12000, batch.length * 600 + 1000);
+      const batch = hotels.slice(0, 5); // 5×2=10 searches, safe margin under 20
+      const maxUses = Math.min(20, batch.length * 2 + 5); // +5 buffer
+      const maxTokens = Math.min(8000, batch.length * 800 + 1500);
 
       const hotelList = batch.map((h, i) =>
         `${i+1}. "${h.hotel_name}" in ${h.city}, ${h.country} (brand: ${h.brand || "unknown"})`
       ).join('\n');
 
-      const prompt = `[${hotelList}]
+      const prompt = `Verify these ${batch.length} hotels and return JSON array:
 
-Verify these ${batch.length} hotels. For EACH:
-1. Search "[hotel name] Booking.com" → get EXACT Booking.com name, rooms, address, actual city
-2. Search "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → GM name
+${hotelList}
 
-hotel_name must match Booking.com listing exactly. City must be from actual address.
-Output JSON array. Start with [ immediately.`;
+For each hotel search: 1) official site for rooms and address, 2) GM name from ${PREV_YEAR}-${CURRENT_YEAR}.
+Use the hotel's Booking.com listing name as hotel_name if different.
+Return JSON array with: hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes.
+Use null for unfound fields. Start with [ immediately.`;
 
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
