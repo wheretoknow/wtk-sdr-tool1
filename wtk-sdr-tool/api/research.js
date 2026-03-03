@@ -137,11 +137,24 @@ Then output the JSON array.`;
     const data = await r.json();
     if (!r.ok) return res.status(500).json({ error: data.error?.message || 'API error' });
 
+    // Collect all text blocks
+    const allText = (data.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text || '')
+      .join('\n');
+
     const jsonStr = extractJSON(data.content);
-    if (!jsonStr) return res.status(200).json({ result: '[]' });
+
+    if (!jsonStr) {
+      const preview = allText.slice(0, 500);
+      return res.status(200).json({ result: '[]', debug: preview || `stop_reason: ${data.stop_reason}, blocks: ${(data.content||[]).length}` });
+    }
 
     try {
       const arr = JSON.parse(jsonStr);
+      if (!Array.isArray(arr) || arr.length === 0) {
+        return res.status(200).json({ result: '[]', debug: 'Empty array. Raw: ' + allText.slice(0, 400) });
+      }
       const enriched = JSON.stringify(arr.map(p => ({
         ...p,
         current_provider: inferProvider(p.brand, p.hotel_name) || p.current_provider || null,
@@ -149,7 +162,7 @@ Then output the JSON array.`;
       })));
       return res.status(200).json({ result: enriched });
     } catch (e) {
-      return res.status(200).json({ result: jsonStr });
+      return res.status(200).json({ result: jsonStr, debug: 'JSON.parse failed: ' + e.message });
     }
 
   } catch (err) {
