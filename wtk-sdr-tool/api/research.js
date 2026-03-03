@@ -172,30 +172,30 @@ RULES:
 // Step 2: VERIFY — web search to fill in rooms + GM
 const VERIFY_SYSTEM = `You are a hotel research API. Output ONLY a JSON array. No explanation. Start with [ immediately.
 
-You will receive a list of specific hotels with their confirmed name, city, country, and brand.
-Your job is to VERIFY additional details via web search. Do NOT change hotel_name, city, country, or brand.
+You will receive hotel names with approximate cities. Verify each via web search.
 
 For EACH hotel, run exactly 2 searches:
-1. "[hotel name] official site" → rooms, address, website
+1. "[hotel name] Booking.com" → EXACT hotel name as listed on Booking.com, rooms, address, city, country, website
 2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → GM name
 
 Return for each hotel:
-hotel_name (KEEP AS GIVEN), brand (KEEP AS GIVEN), hotel_group, tier, city (KEEP AS GIVEN), country (KEEP AS GIVEN), address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes
+hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes
+
+★ HOTEL NAME RULE: hotel_name MUST match the EXACT name on Booking.com. Example: "Kimpton Hotel Monaco Portland" not "Hotel Monaco Portland".
+★ CITY RULE: Use the ACTUAL city from the hotel's address, not the approximate city from the input.
 
 RULES:
-- hotel_name, city, country, brand: COPY EXACTLY from the input. Never change these.
-- rooms: from official site or booking platform. Never guess.
-- gm_name: include SOURCE and YEAR in research_notes. Before ${PREV_YEAR} = "⚠ possibly outdated", contact_confidence="L".
+- brand: keep as given in input.
+- rooms: from official site or Booking.com. Never guess.
+- gm_name: SOURCE and YEAR in research_notes. Before ${PREV_YEAR} = "⚠ possibly outdated", contact_confidence="L".
 - contact_confidence: "H" = official/press ${PREV_YEAR}+. "M" = LinkedIn/news. "L" = old/unverified.
 - research_notes: "Field: value (source, date)" per line. No bullet characters.
 - Set rating, rating_scale, rating_platform, review_count to null.
 - tier: "Luxury" (5-star), "Premium" (4-star+), "Lifestyle" (boutique), "Economy" (3-star-).
 
 ★★★ CRITICAL ★★★
-- Output JSON array even if you only verified 1 hotel.
-- Use null for fields you couldn't find. Partial data is fine.
-- NEVER output explanation text. Just the array.
-- Start with [ immediately.`;
+- Output JSON array even if you only verified 1 hotel. Use null for unfound fields.
+- NEVER output explanation text. Just the array. Start with [ immediately.`;
 
 
 // ─── API HANDLER ────────────────────────────────────────────────────────────
@@ -283,8 +283,11 @@ export default async function handler(req, res) {
 
       const prompt = `[${hotelList}]
 
-Verify these ${batch.length} hotels. For EACH, search official site (rooms/address) + GM name.
-Keep hotel_name, city, country, brand EXACTLY as given. Fill in: address, website, rooms, gm_name, gm_title, contact_confidence, research_notes. Use null if not found.
+Verify these ${batch.length} hotels. For EACH:
+1. Search "[hotel name] Booking.com" → get EXACT Booking.com name, rooms, address, actual city
+2. Search "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → GM name
+
+hotel_name must match Booking.com listing exactly. City must be from actual address.
 Output JSON array. Start with [ immediately.`;
 
       const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -330,17 +333,16 @@ Output JSON array. Start with [ immediately.`;
         let email = p.email || null;
         if (email && (email.includes('[email') || email.includes('email protected'))) email = null;
 
-        // Force-preserve fields from Step 1 input (model sometimes overwrites these)
+        // Force-preserve only hotel_name and brand from Step 1
+        // Let verify overwrite city/country with search results (Step 1 cities can be wrong)
         const key = (p.hotel_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const original = inputLookup[key];
 
         return {
           ...p,
-          // Preserve Step 1 anchored fields
           hotel_name: original?.hotel_name || p.hotel_name,
-          city: original?.city || p.city,
-          country: original?.country || p.country,
           brand: original?.brand || p.brand,
+          // city and country come from verify search results (more accurate)
           email,
           current_provider: provider,
           provider_source: p.provider_source || (providerSrc ? providerSrc.url : null),
