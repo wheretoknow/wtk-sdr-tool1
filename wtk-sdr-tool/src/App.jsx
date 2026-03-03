@@ -780,11 +780,11 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
 
   function effectiveStage(t) {
     const s = t.pipeline_stage || "new";
+    // Legacy migration only — never use done to derive stage
     if (s === "active") return "new";
     if (s === "emailed") return "1st";
     if (s === "followup") return "2nd";
     if (s === "dead") return "lost";
-    if (s === "new") { const d = t.done || []; return d.length === 0 ? "new" : d.length === 1 ? "1st" : d.length === 2 ? "2nd" : d.length === 3 ? "3rd" : "4th"; }
     return SK.includes(s) ? s : "new";
   }
 
@@ -802,7 +802,10 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     const last = d[d.length - 1], dt = t["d" + last];
     if (!dt) return "Touch " + last;
     const days = Math.floor((Date.now() - new Date(dt)) / 86400000);
-    return days === 0 ? "Today" : days === 1 ? "Yesterday" : days + "d ago";
+    if (days === 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days < 0) return "in " + Math.abs(days) + "d";
+    return days + "d ago";
   }
 
   function changeStage(tid, stageKey, e) {
@@ -2065,6 +2068,21 @@ export default function App() {
                     })}
                     {(trk.done||[]).length===0 && <div style={{fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>No contacts yet</div>}
                   </div>
+                </div>
+              );
+            })()}
+            {(() => {
+              const trk = tracking.find(x => x.prospect_id === sel.id);
+              if (!trk) return null;
+              return (
+                <div className="d-sec">
+                  <div className="d-sec-title">Sales Notes</div>
+                  <textarea className="note-input" style={{width:"100%",minHeight:60,fontSize:12,padding:6,border:"1px solid var(--border2)",borderRadius:5,fontFamily:"inherit",resize:"vertical"}}
+                    value={editingNote === trk.id ? noteText : (trk.sales_notes || "")}
+                    onFocus={() => { if (editingNote !== trk.id) { setEditingNote(trk.id); setNoteText(trk.sales_notes || ""); } }}
+                    onChange={e => setNoteText(e.target.value)}
+                    onBlur={() => { if (editingNote === trk.id) saveNote(trk.id); }}
+                    placeholder="Add sales notes..." />
                 </div>
               );
             })()}
