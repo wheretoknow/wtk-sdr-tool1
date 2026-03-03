@@ -1167,7 +1167,7 @@ export default function App() {
       // ═══════════════════════════════════════════════════════════════════
       // STEP 2: VERIFY — web search for rooms + GM (batches of 10)
       // ═══════════════════════════════════════════════════════════════════
-      const BATCH_SIZE = 10;
+      const BATCH_SIZE = 10; // 10 × 2 = 20 searches, at the limit but fallback protects us
       const batches = [];
       for (let i = 0; i < toVerify.length; i += BATCH_SIZE) {
         batches.push(toVerify.slice(i, i + BATCH_SIZE));
@@ -1206,14 +1206,30 @@ export default function App() {
         }
 
         const raw = parseJSON(data.result);
+        
+        // FALLBACK: if verify parse failed, use Step 1 data directly (hotel_name + city + country + brand)
+        const hotelsToSave = raw.length > 0 ? raw : batchHotels.map(h => ({
+          hotel_name: h.hotel_name,
+          brand: h.brand,
+          hotel_group: h.hotel_group || h.brand,
+          city: h.city,
+          country: h.country,
+          tier: null,
+          rooms: null,
+          gm_name: null,
+          gm_title: null,
+          contact_confidence: null,
+          research_notes: "Verify failed — basic info from knowledge base only. Rooms and GM need manual lookup."
+        }));
+        
         if (!raw.length) {
-          setError("Parse failed for batch " + (i + 1));
-          continue;
+          const debugInfo = data.debug || (data.result || "").slice(0, 300);
+          setLog(`⚠ Verify failed for batch ${i + 1} — saving basic info. ${debugInfo ? "Debug: " + debugInfo.slice(0,100) : ""}`);
         }
 
         // Save this batch immediately
         const batchFresh = [];
-        for (const p of raw) {
+        for (const p of hotelsToSave) {
           const key = normKey(p.hotel_name, p.city);
           if (existingKeys.has(key)) continue;
           batchFresh.push(p);
