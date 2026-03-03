@@ -527,6 +527,17 @@ const css = `
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function addBusinessDays(date, days) {
+  const d = new Date(date);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d;
+}
 function parseJSON(raw) {
   try { const c = raw.replace(/```json|```/g, "").trim(); const s = c.indexOf("["), e = c.lastIndexOf("]"); if (s < 0 || e < 0) return []; return JSON.parse(c.slice(s, e + 1)); } catch { return []; }
 }
@@ -1370,7 +1381,7 @@ export default function App() {
     const f = addHotelForm;
     if (!f.hotel_name || !f.hotel_name.trim()) { alert("Hotel name is required"); return; }
     const record = {
-      hotel_name: f.hotel_name.trim(), city: f.city?.trim() || null, country: f.country?.trim() || null,
+      id: uid(), hotel_name: f.hotel_name.trim(), city: f.city?.trim() || null, country: f.country?.trim() || null,
       hotel_group: f.hotel_group?.trim() || null, brand: f.brand?.trim() || null,
       address: f.address?.trim() || null, website: f.website?.trim() || null,
       adr_usd: f.adr_usd ? Number(f.adr_usd) : null, rooms: f.rooms ? Number(f.rooms) : null,
@@ -1391,7 +1402,7 @@ export default function App() {
         const tRes = await fetch(`${SUPABASE_URL}/rest/v1/tracking`, {
           method: "POST",
           headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-          body: JSON.stringify({ prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdrName || "Unknown", pipeline_stage: "new", done: [], intention: 0 })
+          body: JSON.stringify({ id: uid(), prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdrName || "Unknown", pipeline_stage: "new", done: [], intention: 0 })
         });
         if (tRes.ok) { const tData = await tRes.json(); if (tData?.length > 0) setTracking(prev => [...prev, tData[0]]); }
       }
@@ -1769,9 +1780,30 @@ export default function App() {
           /></ErrorBoundary>}
       {/* Contact Tracker page */}
       {tab === "contacts" && (() => {
-        const CADENCE = { 1: 4, 2: 7, 3: 7, 4: 7 };
+        const CADENCE = { 1: 3, 2: 7, 3: 7 };
         const STAGE_MAP = { active: "new", emailed: "1st", followup: "2nd", dead: "lost" };
-        function mapStage(s) { return STAGE_MAP[s] || s || "new"; }
+        function mapStg(s) { return STAGE_MAP[s] || s || "new"; }
+        const EM = String.fromCodePoint(0x2014);
+        function toDateStr(d) { if (!d) return ""; const dt = new Date(d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),dd=String(dt.getDate()).padStart(2,"0"); return y+"-"+m+"-"+dd; }
+        function updateContactDate(tid, touchNum, dateVal) {
+          const key = "d" + touchNum;
+          const isoVal = dateVal ? new Date(dateVal + "T12:00:00").toISOString() : null;
+          const t = tracking.find(x => x.id === tid);
+          const done = [...((t && t.done) || [])];
+          if (dateVal && !done.includes(touchNum)) { done.push(touchNum); done.sort((a,b)=>a-b); }
+          if (!dateVal) { const idx = done.indexOf(touchNum); if (idx >= 0) done.splice(idx,1); }
+          const updates = { [key]: isoVal, done };
+          // Auto-derive stage from highest done touch
+          const maxDone = done.length > 0 ? Math.max(...done) : 0;
+          const stageFromDone = {0:"new",1:"1st",2:"2nd",3:"3rd",4:"4th"};
+          if (stageFromDone[maxDone] && t) {
+            const cur = mapStg(t.pipeline_stage);
+            if (!["demo","trial","won","lost"].includes(cur)) {
+              updates.pipeline_stage = stageFromDone[maxDone];
+            }
+          }
+          updatePipeline(tid, updates);
+        }
         const rows = tracking.filter(t => t.d1).map(t => {
           const p = prospects.find(x => x.id === t.prospect_id);
           const done = t.done || [];
@@ -1779,16 +1811,19 @@ export default function App() {
           const lastN = done.length > 0 ? Math.max(...done) : 0;
           const lastDate = lastN > 0 ? dates[lastN] : t.d1;
           const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
-          let nextDue = null, nextLabel = null, daysUntilDue = null;
-          const stage = mapStage(t.pipeline_stage);
+          const stage = mapStg(t.pipeline_stage);
           const isClosed = ["won","lost"].includes(stage);
-          if (!isClosed && lastN >= 1 && lastN < 4 && lastDate) {
-            const nextN = lastN + 1;
-            const cad = CADENCE[nextN] || 7;
-            nextDue = new Date(new Date(lastDate).getTime() + cad * 86400000);
-            const ordinal = ["","1st","2nd","3rd","4th"];
-            nextLabel = ordinal[nextN] + " follow-up";
-            daysUntilDue = Math.floor((nextDue - Date.now()) / 86400000);
+          // Compute all due dates using business days
+          const d2Due = dates[1] ? addBusinessDays(dates[1], CADENCE[1]) : null;
+          const d3Due = (dates[2] || d2Due) ? addBusinessDays(dates[2] || d2Due, CADENCE[2]) : null;
+          const d4Due = (dates[3] || d3Due) ? addBusinessDays(dates[3] || d3Due, CADENCE[3]) : null;
+          const dueDates = { 2: d2Due, 3: d3Due, 4: d4Due };
+          let nextDue = null, nextLabel = null, daysUntilDue = null;
+          if (!isClosed && lastN >= 1 && lastN < 4) {
+            nextDue = dueDates[lastN + 1];
+            const ord = ["","","2nd","3rd","4th"];
+            nextLabel = ord[lastN + 1] + " follow-up";
+            if (nextDue) daysUntilDue = Math.floor((nextDue - Date.now()) / 86400000);
           }
           let status = "ok";
           if (isClosed) status = "closed";
@@ -1797,14 +1832,14 @@ export default function App() {
             if (daysUntilDue < 0) status = "overdue";
             else if (daysUntilDue <= 2) status = "due-soon";
           }
-          return { t, p, dates, lastN, daysSince, nextDue, nextLabel, daysUntilDue, status, stage };
+          return { t, p, dates, dueDates, lastN, daysSince, nextDue, nextLabel, daysUntilDue, status, stage };
         }).sort((a, b) => {
           const pri = { overdue: 0, "due-soon": 1, ok: 2, complete: 3, closed: 4 };
           return (pri[a.status]||2) - (pri[b.status]||2);
         });
         const overdueN = rows.filter(r => r.status === "overdue").length;
         const dueSoonN = rows.filter(r => r.status === "due-soon").length;
-        const STCLR = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+        const SC = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
         return (<>
           <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDateShort(new Date())}</div>
@@ -1813,24 +1848,40 @@ export default function App() {
             <span style={{fontSize:12,color:"var(--text3)"}}>{rows.length} contacts tracked</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
-            <th>Hotel</th><th>GM</th><th>Stage</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>Days Since</th><th>Next Due</th><th>Countdown</th><th>Status</th><th>Owner</th>
+            <th>Hotel</th><th>GM</th><th>Stage</th><th>1st Contact</th><th>2nd Due / Actual</th><th>3rd Due / Actual</th><th>4th Due / Actual</th><th>Days Since</th><th>Next Due</th><th>Countdown</th><th>Status</th><th>Owner</th>
           </tr></thead><tbody>
-            {rows.map(({t, p, dates, daysSince, nextDue, nextLabel, daysUntilDue, status, stage}) => (
-              <tr key={t.id}>
-                <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)"}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
-                <td style={{fontSize:11,color:"var(--text2)"}}>{t.gm||String.fromCodePoint(0x2014)}</td>
-                <td><span style={{fontSize:10,fontWeight:600,color:STCLR[stage]||"#6b7280"}}>{stage}</span></td>
-                <td style={{fontSize:11,color:dates[1]?"var(--text2)":"var(--text3)"}}>{dates[1] ? fmtDateShort(dates[1]) : String.fromCodePoint(0x2014)}</td>
-                <td style={{fontSize:11,color:dates[2]?"var(--text2)":"var(--text3)"}}>{dates[2] ? fmtDateShort(dates[2]) : String.fromCodePoint(0x2014)}</td>
-                <td style={{fontSize:11,color:dates[3]?"var(--text2)":"var(--text3)"}}>{dates[3] ? fmtDateShort(dates[3]) : String.fromCodePoint(0x2014)}</td>
-                <td style={{fontSize:11,color:dates[4]?"var(--text2)":"var(--text3)"}}>{dates[4] ? fmtDateShort(dates[4]) : String.fromCodePoint(0x2014)}</td>
-                <td style={{fontSize:11,fontWeight:daysSince!==null&&daysSince>7?600:400,color:daysSince!==null&&daysSince>7?"var(--red)":"var(--text2)"}}>{daysSince !== null ? daysSince + "d" : String.fromCodePoint(0x2014)}</td>
-                <td style={{fontSize:11}}>{nextDue ? <span>{fmtDateShort(nextDue)}{nextLabel ? <span style={{fontSize:9,color:"var(--text3)",marginLeft:4}}>({nextLabel})</span> : null}</span> : <span style={{color:"var(--text3)"}}>{String.fromCodePoint(0x2014)}</span>}</td>
-                <td style={{fontSize:11,fontWeight:600,color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text2)"}}>{daysUntilDue!==null ? (daysUntilDue<0 ? Math.abs(daysUntilDue)+"d overdue" : daysUntilDue===0 ? "Today!" : daysUntilDue+"d left") : String.fromCodePoint(0x2014)}</td>
+            {rows.map(({t, p, dates, dueDates, daysSince, nextDue, nextLabel, daysUntilDue, status, stage}) => {
+              function dateCell(n) {
+                const actual = dates[n];
+                const due = dueDates[n];
+                return (<td style={{padding:"2px 4px",position:"relative"}}>
+                  <input type="date" value={toDateStr(actual)} onChange={e => updateContactDate(t.id, n, e.target.value)}
+                    style={{fontSize:11,border:"1px solid transparent",borderRadius:3,padding:"2px 3px",background:"transparent",width:110,cursor:"pointer",color:actual?"var(--text)":"var(--text3)",fontFamily:"inherit"}}
+                    onFocus={e=>{e.target.style.borderColor="var(--accent)";e.target.style.background="white"}}
+                    onBlur={e=>{e.target.style.borderColor="transparent";e.target.style.background="transparent"}} />
+                  {!actual && due && <div style={{fontSize:9,color:"var(--text3)",marginTop:-2}}>due {fmtDateShort(due)}</div>}
+                </td>);
+              }
+              return (<tr key={t.id}>
+                <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:140}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+                <td style={{fontSize:11,color:"var(--text2)"}}>{t.gm||EM}</td>
+                <td><span style={{fontSize:10,fontWeight:600,color:SC[stage]||"#6b7280"}}>{stage}</span></td>
+                <td style={{padding:"2px 4px"}}>
+                  <input type="date" value={toDateStr(dates[1])} onChange={e => updateContactDate(t.id, 1, e.target.value)}
+                    style={{fontSize:11,border:"1px solid transparent",borderRadius:3,padding:"2px 3px",background:"transparent",width:110,cursor:"pointer",color:dates[1]?"var(--text)":"var(--text3)",fontFamily:"inherit"}}
+                    onFocus={e=>{e.target.style.borderColor="var(--accent)";e.target.style.background="white"}}
+                    onBlur={e=>{e.target.style.borderColor="transparent";e.target.style.background="transparent"}} />
+                </td>
+                {dateCell(2)}
+                {dateCell(3)}
+                {dateCell(4)}
+                <td style={{fontSize:11,fontWeight:daysSince!==null&&daysSince>7?600:400,color:daysSince!==null&&daysSince>7?"var(--red)":"var(--text2)"}}>{daysSince!==null?daysSince+"d":EM}</td>
+                <td style={{fontSize:11}}>{nextDue ? <span>{fmtDateShort(nextDue)}{nextLabel?<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({nextLabel})</span>:null}</span> : <span style={{color:"var(--text3)"}}>{EM}</span>}</td>
+                <td style={{fontSize:11,fontWeight:600,color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text2)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+"d overdue":daysUntilDue===0?"Today!":daysUntilDue+"d left"):EM}</td>
                 <td>{status==="overdue"?<span className="ct-badge" style={{background:"#fef2f2",color:"#dc2626"}}>Overdue</span>:status==="due-soon"?<span className="ct-badge" style={{background:"#fffbeb",color:"#d97706"}}>Due soon</span>:status==="closed"?<span className="ct-badge" style={{background:"#f3f4f6",color:"#6b7280"}}>Closed</span>:status==="complete"?<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>Done</span>:<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>OK</span>}</td>
-                <td><span className="kb-sdr">{t.sdr||String.fromCodePoint(0x2014)}</span></td>
-              </tr>
-            ))}
+                <td><span className="kb-sdr">{t.sdr||EM}</span></td>
+              </tr>);
+            })}
           </tbody></table></div>
         </>);
       })()}
