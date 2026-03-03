@@ -918,7 +918,7 @@ export default function App() {
   const [group, setGroup] = useState("");
   const [brand, setBrand] = useState("");
   const [minAdr, setMinAdr] = useState("150");
-  const [count, setCount] = useState("5");
+  const [count, setCount] = useState("8");
   const [sdrName, setSdrName] = useState("");
   // State
   const [running, setRunning] = useState(false);
@@ -1090,7 +1090,7 @@ export default function App() {
 
     setRunning(true); setError(null); setProgress(5);
     const market = getMarket();
-    const n = Math.min(Math.max(parseInt(count) || 10, 1), 100);
+    const n = Math.min(Math.max(parseInt(count) || 8, 1), 8);
 
     const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
     const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
@@ -1569,7 +1569,7 @@ export default function App() {
                   <input type="number" min="50" max="2000" step="50" value={minAdr} onChange={e=>setMinAdr(e.target.value)} className="cmd-input" style={{width:60}} title="Minimum ADR in USD" />
                 </div>
               )}
-              <input type="number" min="1" max="50" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count" />
+              <input type="number" min="1" max="8" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count (max 8)" />
               <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="Your name" className="cmd-input" style={{width:90}} />
               <button className="run-btn" onClick={run} disabled={running}>
                 {running ? <><div className="spinner"/>Searching...</> : cooldown > 0 ? `⏱ ${cooldown}s` : "▶ Run"}
