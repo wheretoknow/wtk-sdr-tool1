@@ -1,13 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Where to know Insights GmbH — SDR Research API Handler v4.1
+// Where to know Insights GmbH — SDR Research API Handler v4.2
 // ═══════════════════════════════════════════════════════════════════════════════
-// v4.1 changes:
-//   - scope=chain|independent|all filter logic (replaces tier/segment)
-//   - 5-hotel cap per API call (was 10 — model can't handle 10 within 20 searches)
-//   - PARTIAL RESULTS rule in prompt (model must output JSON even if incomplete)
-//   - Fallback JSON extraction: collects scattered {} objects
-//   - Email sanitization: strips "[email protected]" artifacts
-//   - No deep research / email-only modes (discovery only)
+// v4.2: batch 10 × 2 searches (skip rating). Rating/ADR added manually later.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── PROVIDER KNOWLEDGE BASE ────────────────────────────────────────────────
@@ -166,29 +160,27 @@ const PREV_YEAR = CURRENT_YEAR - 1;
 const DISCOVERY_SYSTEM = `You are a hotel research API. Your ONLY output is a valid JSON array. No thinking, no explanation, no markdown. Start with [ immediately.
 
 TASK: Discover hotels in a given market. For each hotel return these fields:
-hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, rating, rating_scale, rating_platform, review_count, contact_confidence, research_notes
+hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes
 
-SEARCH STRATEGY — for each hotel, run up to 3 searches:
-1. "[hotel name] official site" → rooms, address, website
+SEARCH STRATEGY — for each hotel, run exactly 2 searches:
+1. "[hotel name] official site" → rooms, address, website, brand
 2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → GM name. ONLY accept results from ${PREV_YEAR} or ${CURRENT_YEAR}. Older = flag "⚠ possibly outdated".
-3. "[hotel name] Booking.com" OR "[hotel name] Google reviews" → rating + review count
+
+DO NOT search for ratings, reviews, ADR, email addresses, or restaurants. Set rating, rating_scale, rating_platform, review_count to null.
 
 CRITICAL RULES:
 - rooms: MUST come from official hotel website or a verified booking platform. Never guess.
 - gm_name: MUST include the SOURCE and YEAR in research_notes. If source is before ${PREV_YEAR}, mark "⚠ possibly outdated" and set contact_confidence to "L".
 - contact_confidence: "H" = official website or press release from ${PREV_YEAR}+. "M" = LinkedIn or news article. "L" = old/unverified.
-- rating: note the platform (Google/Booking.com/TripAdvisor) and scale (out of 5 or 10).
-- research_notes: MANDATORY. Format each line as "• Field: value (source, date)".
-- tier: classify as "Luxury" (5-star, ADR>$200), "Premium" (4-star+, ADR $100-200), "Lifestyle" (boutique/design), "Economy" (3-star or below).
-
-DO NOT generate emails. DO NOT search for email addresses or restaurants.
+- research_notes: MANDATORY. Format: "Field: value (source, date)" per line. No bullet characters.
+- tier: classify as "Luxury" (5-star), "Premium" (4-star+), "Lifestyle" (boutique/design), "Economy" (3-star or below).
 
 ★★★ CRITICAL OUTPUT RULES ★★★
-1. You MUST output a JSON array even if you only found 1 hotel. Example: [{"hotel_name":"X",...}]
-2. If you run out of search budget, output what you have. Partial data is fine — use null for missing fields.
+1. You MUST output a JSON array even if you only found 1 hotel.
+2. If you run out of search budget, output what you have. Use null for missing fields.
 3. NEVER output explanation text. NEVER say "I cannot fulfill". Just output the array.
 4. If you found 0 hotels, output: []
-5. Start your response with [ and end with ]. Nothing else.
+5. Start with [ and end with ]. Nothing else.
 
 Start with [ immediately.`;
 
@@ -205,8 +197,8 @@ export default async function handler(req, res) {
   try {
     const { city, brand, group, scope, minAdr, count, exclude } = req.body;
 
-    // Cap per-call at 5 hotels — 5×3 = 15 searches, fits in 20 budget
-    const safeCount = Math.min(Math.max(parseInt(count) || 5, 1), 5);
+    // Cap per-call at 10 hotels — 10×2 = 20 searches, fits in budget
+    const safeCount = Math.min(Math.max(parseInt(count) || 5, 1), 10);
 
     // ── Build scope instruction ─────────────────────────────────────
     let scopeInstruction = "";
@@ -234,20 +226,18 @@ export default async function handler(req, res) {
     const marketDesc = city || "the requested market";
     const prompt = `Find ${safeCount} hotels in ${marketDesc}.${scopeInstruction ? '\n' + scopeInstruction : ''}${excludeClause}
 
-For EACH hotel found, search for:
+For EACH hotel found, run exactly 2 searches:
 1. "[hotel name] official site" → rooms, address, website
 2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → current GM
-3. "[hotel name] Booking.com" → rating and review count
 
-DO NOT generate emails. Focus ALL searches on rooms, GM, and rating.
-If you find fewer than ${safeCount}, output what you found. Partial results are fine.
-Use null for any field you couldn't verify. DO NOT explain — just output JSON.
+DO NOT search for ratings, reviews, or email. Use null for rating fields.
+If you find fewer than ${safeCount}, output what you found. Use null for missing fields.
 
 Start with [ immediately.`;
 
-    // Search budget: 3 per hotel, min 6, max 18
-    const maxUses = Math.min(18, Math.max(6, safeCount * 3));
-    const maxTokens = Math.min(8000, Math.max(3000, safeCount * 600 + 1000));
+    // Search budget: 2 per hotel (skip rating), max 20
+    const maxUses = Math.min(20, Math.max(6, safeCount * 2));
+    const maxTokens = Math.min(12000, Math.max(4000, safeCount * 500 + 1000));
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
