@@ -1103,8 +1103,8 @@ export default function App() {
     return "Global";
   }
 
-  // ── Cooldown timer: 62s between web search API calls ────
-  const COOLDOWN_SEC = 62;
+  // ── Cooldown timer: 15s between verify batches (Claude Haiku rate limit) ────
+  const COOLDOWN_SEC = 15;
 
   function startCooldown() {
     lastBatchTime.current = Date.now();
@@ -1228,9 +1228,9 @@ export default function App() {
         setProgress(pct);
         setLog(`Step 2: Verifying batch ${i + 1}/${batches.length} (${batchHotels.length} hotels)${allFresh.length ? ` · ${allFresh.length} saved so far` : ""}...`);
 
-        // Inter-batch cooldown — 62s to stay under 50k tokens/min
+        // Inter-batch cooldown — 15s between verify calls
         if (i > 0) {
-          await rateLimitWait(62);
+          await rateLimitWait(15);
         }
 
         const data = await apiFetch({ mode: "verify", hotels: batchHotels, brand, group });
