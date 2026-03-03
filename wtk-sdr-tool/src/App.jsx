@@ -430,6 +430,10 @@ const css = `
   .research-notes .bullet { display: flex; gap: 8px; margin-bottom: 3px; }
   .research-notes .bullet-dot { color: var(--accent); font-weight: 700; flex-shrink: 0; }
   .research-notes .bullet-text { color: var(--text2); }
+
+  /* Editable field in drawer */
+  .d-val-edit { cursor: pointer; border-bottom: 1px dashed var(--border2); padding-bottom: 1px; transition: all 0.15s; }
+  .d-val-edit:hover { border-bottom-color: var(--accent); color: var(--accent); }
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -586,6 +590,54 @@ function TierBadge({ tier }) {
   const t = (tier || "").toLowerCase();
   const cls = t.includes("lux") ? "badge-luxury" : t.includes("prem") ? "badge-premium" : t.includes("life") ? "badge-lifestyle" : "badge-economy";
   return <span className={`badge ${cls}`}>{tier || "—"}</span>;
+}
+
+// ── Inline editable field for the drawer ────────────────────────────────────
+function EditableField({ value, placeholder, onSave, type, options }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+
+  function startEdit() { setDraft(value || ""); setEditing(true); }
+  function cancel() { setEditing(false); }
+  function save() {
+    const trimmed = draft.trim();
+    if (trimmed !== (value || "")) onSave(trimmed);
+    setEditing(false);
+  }
+  function handleKey(e) {
+    if (e.key === "Enter") save();
+    if (e.key === "Escape") cancel();
+  }
+
+  if (editing) {
+    if (options) {
+      return (
+        <select value={draft} onChange={e => { setDraft(e.target.value); }} onBlur={save} autoFocus
+          style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",background:"white",outline:"none",minWidth:100}}>
+          <option value="">—</option>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    return (
+      <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={save} onKeyDown={handleKey} autoFocus
+        type={type === "number" ? "number" : "text"}
+        placeholder={placeholder || ""}
+        style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",width:"100%",background:"white",outline:"none",boxSizing:"border-box"}} />
+    );
+  }
+
+  // Sanitize display: strip "[email protected]" artifacts
+  let display = value;
+  if (display && (display.includes('[email') || display.includes('email protected'))) {
+    display = null;
+  }
+
+  return (
+    <span onClick={startEdit} style={{cursor:"pointer",borderBottom:"1px dashed var(--border2)",paddingBottom:1}} title="Click to edit">
+      {display || <span style={{color:"var(--text3)",fontStyle:"italic"}}>{placeholder || "Click to add"}</span>}
+    </span>
+  );
 }
 
 
@@ -865,7 +917,6 @@ export default function App() {
   const [tracking, setTracking] = useState([]);
   const [rejectModal, setRejectModal] = useState(null); // { tid, stage: 'dead'|'reopen' }
   const [rejectReason, setRejectReason] = useState("");
-  const [deepLoading, setDeepLoading] = useState(false);
   const [outreachView, setOutreachView] = useState("card");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [editingNote, setEditingNote] = useState(null);
@@ -906,21 +957,37 @@ export default function App() {
     setEditingNote(null);
   }
 
-  async function runDeepResearch(prospectId) {
-    const p = prospects.find(x => x.id === prospectId);
-    if (!p) return;
-    setDeepLoading(prospectId);
-    try {
-      const res = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "deep", hotel_name: `${p.hotel_name}, ${p.city}, ${p.country}` }) });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      const upd = JSON.parse(data.result);
-      const safe = {};
-      ["adr_usd","rating","review_count","research_notes"].forEach(k => { if (upd[k] != null) safe[k] = upd[k]; });
-      setProspects(prev => prev.map(x => x.id === prospectId ? { ...x, ...safe } : x));
-      await sbFetch(`/prospects?id=eq.${prospectId}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(safe) });
-    } catch(e) { alert("Deep research failed: " + e.message); }
-    setDeepLoading(false);
+  // ── Inline editing for prospect fields ──────────────────────────────
+  async function updateProspectField(pid, field, value) {
+    // Sanitize email values
+    if (field === 'email' && value) {
+      if (value.includes('[email') || value.includes('email protected') || value.includes('email\u00a0protected')) {
+        value = null;
+      }
+    }
+    // Coerce numeric fields
+    if (['rooms', 'restaurants', 'review_count'].includes(field)) {
+      value = value ? parseInt(value) || null : null;
+    }
+    if (['adr_usd', 'rating'].includes(field)) {
+      value = value ? parseFloat(value) || null : null;
+    }
+    const patch = { [field]: value || null };
+    // If updating gm_name, auto-update gm_first_name
+    if (field === 'gm_name' && value) {
+      patch.gm_first_name = value.split(' ')[0];
+    }
+    // Also sync tracking table if updating gm or email
+    if (field === 'gm_name' || field === 'email') {
+      const t = tracking.find(x => x.prospect_id === pid);
+      if (t) {
+        const tPatch = field === 'gm_name' ? { gm: value } : { email: value };
+        setTracking(prev => prev.map(x => x.prospect_id === pid ? { ...x, ...tPatch } : x));
+        try { await sbFetch(`/tracking?prospect_id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(tPatch) }); } catch(e) { console.error(e); }
+      }
+    }
+    setProspects(prev => prev.map(p => p.id === pid ? { ...p, ...patch } : p));
+    try { await sbFetch(`/prospects?id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(patch) }); } catch(e) { console.error(e); }
   }
 
   useEffect(() => {
@@ -1466,7 +1533,7 @@ export default function App() {
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
                       <td><TierBadge tier={p.tier}/></td>
                       <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title&&p.gm_title!=="General Manager"?p.gm_title:""}</div></td>
-                      <td>{p.email?<a className="email-link" href={`mailto:${p.email}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={p.email}>{p.email}</a>:<span className="cell-muted">—</span>}</td>
+                      <td>{(()=>{const em=p.email; if(!em||em.includes('[email')||em.includes('email protected'))return<span className="cell-muted">—</span>; return<a className="email-link" href={`mailto:${em}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={em}>{em}</a>;})()}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:11}}>{getProvider(p)||"—"}</span></td>
@@ -1549,44 +1616,40 @@ export default function App() {
             <div className="d-sec">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span className="d-sec-title" style={{margin:0}}>Property</span>
-                <button className="act-btn" style={{fontSize:11}} onClick={()=>runDeepResearch(sel.id)} disabled={deepLoading===sel.id}>
-                  {deepLoading===sel.id ? "🔍 Researching..." : "🔍 Deep Research"}
-                </button>
               </div>
-              <div className="d-row"><span className="d-key">Address</span><span className="d-val">{sel.address||"—"}</span></div>
-              <div className="d-row"><span className="d-key">Rooms</span><span className="d-val">{sel.rooms||"—"}</span></div>
-              <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val">{sel.restaurants||"—"}</span></div>
-              <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val">{sel.adr_usd?`~$${sel.adr_usd}/night`:"—"}</span></div>
+              <div className="d-row"><span className="d-key">Address</span><span className="d-val"><EditableField value={sel.address} placeholder="Add address" onSave={v => updateProspectField(sel.id, 'address', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Rooms</span><span className="d-val"><EditableField value={sel.rooms ? String(sel.rooms) : ""} placeholder="Add rooms" type="number" onSave={v => updateProspectField(sel.id, 'rooms', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val"><EditableField value={sel.restaurants ? String(sel.restaurants) : ""} placeholder="Add count" type="number" onSave={v => updateProspectField(sel.id, 'restaurants', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val"><EditableField value={sel.adr_usd ? String(sel.adr_usd) : ""} placeholder="Add ADR (USD)" type="number" onSave={v => updateProspectField(sel.id, 'adr_usd', v)} /></span></div>
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
                 {(() => {
-                  if (!sel.rating) return "—";
+                  if (!sel.rating) return <EditableField value="" placeholder="Add rating" type="number" onSave={v => updateProspectField(sel.id, 'rating', v)} />;
                   const notes = (sel.research_notes || "").toLowerCase();
                   const hasGoogle = notes.includes("google");
                   const hasBooking = notes.includes("booking");
                   const hasTripAdvisor = notes.includes("tripadvisor");
                   const hasAgoda = notes.includes("agoda");
                   const hasTripCom = notes.includes("trip.com");
-                  // Determine source and scale
                   let src = null, scale = null;
                   if (hasBooking && !hasGoogle) { src = "Booking.com"; scale = 10; }
                   else if (hasGoogle && !hasBooking) { src = "Google"; scale = 5; }
                   else if (hasTripAdvisor) { src = "TripAdvisor"; scale = 5; }
                   else if (hasAgoda) { src = "Agoda"; scale = 10; }
                   else if (hasTripCom) { src = "Trip.com"; scale = 10; }
-                  else { return <span>{sel.rating} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews` : ""} · source unknown)</span></span>; }
-                  return <span>{sel.rating} / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
+                  else { return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews` : ""} · source unknown)</span></span>; }
+                  return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
                 })()}
               </span></div>
               <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const group = normalizeGroup(sel.hotel_group||sel.brand); const brand = sel.brand; if (!brand && !group) return "Independent"; if (brand && group && brand !== group) return `${brand} · ${group}`; return brand || group || "Independent"; })()}</span></div>
-              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val">{getProvider(sel) || "Unknown"}</span></div>
-              <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:"—"}</span></div>
+              <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val"><EditableField value={getProvider(sel) || ""} placeholder="Add provider" onSave={v => updateProspectField(sel.id, 'current_provider', v)} options={["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Olery","Guestfeedback"]} /></span></div>
+              <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
             </div>
             <div className="d-sec">
               <div className="d-sec-title">Decision Maker</div>
-              <div className="d-row"><span className="d-key">Name</span><span className="d-val" style={{fontWeight:700}}>{sel.gm_name||"—"}</span></div>
-              <div className="d-row"><span className="d-key">Title</span><span className="d-val">{sel.gm_title||"—"}</span></div>
-              <div className="d-row"><span className="d-key">Email</span><span className="d-val">{sel.email?<a className="email-link" href={`mailto:${sel.email}`}>{sel.email}</a>:<span className="cell-muted">Not found</span>}</span></div>
-              <div className="d-row"><span className="d-key">LinkedIn</span><span className="d-val">{sel.linkedin?<a className="email-link" href={sel.linkedin} target="_blank" rel="noreferrer">↗ View Profile</a>:<span className="cell-muted">Not found</span>}</span></div>
+              <div className="d-row"><span className="d-key">Name</span><span className="d-val" style={{fontWeight:700}}><EditableField value={sel.gm_name} placeholder="Add GM name" onSave={v => updateProspectField(sel.id, 'gm_name', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Title</span><span className="d-val"><EditableField value={sel.gm_title} placeholder="Add title" onSave={v => updateProspectField(sel.id, 'gm_title', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Email</span><span className="d-val"><EditableField value={sel.email} placeholder="Add email" onSave={v => updateProspectField(sel.id, 'email', v)} /></span></div>
+              <div className="d-row"><span className="d-key">LinkedIn</span><span className="d-val"><EditableField value={sel.linkedin} placeholder="Add LinkedIn URL" onSave={v => updateProspectField(sel.id, 'linkedin', v)} /></span></div>
             </div>
             {(sel.outreach_email_subject || sel.outreach_email_body) && (
               <div className="d-sec">
