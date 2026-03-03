@@ -411,6 +411,11 @@ const css = `
   .int-hot { background: #fef2f2; color: #dc2626; }
   .int-warm { background: #fffbeb; color: #d97706; }
   .int-cold { background: #eff6ff; color: #6b7280; }
+  .pipeline-summary { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text3); padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; flex-wrap: wrap; }
+  .pipeline-summary strong { color: var(--text); font-weight: 700; }
+  .ps-sep { color: var(--border2); }
+  .stage-select { font-size: 10px; font-weight: 600; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; appearance: auto; min-width: 60px; }
+  .intent-select { font-size: 10px; font-weight: 600; padding: 2px 2px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: inherit; appearance: auto; min-width: 50px; background: white; }
   .track-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow-sm); }
   .track-card:hover { border-color: var(--border2); box-shadow: var(--shadow); }
   .track-card.closed { opacity: 0.55; background: #fafafa; }
@@ -527,13 +532,12 @@ const TOUCH_CONFIG = [
 ];
 
 const REJECTION_REASONS = [
-  "Not interested (no reason given)",
-  "Has existing provider — satisfied",
-  "No budget right now",
-  "Come back next quarter",
-  "No authority to decide",
-  "Bad timing / busy period",
-  "Already in evaluation with competitor",
+  "Budget",
+  "Already using competitor",
+  "Not priority",
+  "No response",
+  "Timing issue",
+  "Corporate decision",
   "Other",
 ];
 
@@ -742,7 +746,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
   function clearOutreachFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); }
 
   if (filteredT.length === 0 && !hasActiveFilters) {
-    return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
+    return <div className="empty"><div className="empty-icon">{String.fromCodePoint(0x1F4EC)}</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
 
   const STAGES = [
@@ -756,16 +760,14 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     { key: "won",   label: "Won",     color: "#059669", bg: "#ecfdf5" },
     { key: "lost",  label: "Lost",    color: "#dc2626", bg: "#fef2f2" },
   ];
+  const STAGE_KEYS = STAGES.map(s => s.key);
 
-  // Map old stages to new
   function effectiveStage(t) {
     const s = t.pipeline_stage || "new";
-    // Map legacy values
     if (s === "active") return "new";
     if (s === "emailed") return "1st";
     if (s === "followup") return "2nd";
     if (s === "dead") return "lost";
-    // Auto-derive from touches if still "new"
     if (s === "new") {
       const done = t.done || [];
       if (done.length === 0) return "new";
@@ -774,10 +776,9 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       if (done.length === 3) return "3rd";
       if (done.length >= 4) return "4th";
     }
-    return STAGES.find(x => x.key === s) ? s : "new";
+    return STAGE_KEYS.includes(s) ? s : "new";
   }
 
-  // Group by stage
   const stageMap = {};
   STAGES.forEach(s => { stageMap[s.key] = []; });
   filteredT.forEach(t => {
@@ -786,11 +787,11 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     else stageMap["new"].push(t);
   });
 
+  const INTENT_LABELS = { 1: "Cold", 2: "Low", 3: "Medium", 4: "Warm", 5: "Hot" };
+  const INTENT_COLORS = { 1: "#9ca3af", 2: "#6b7280", 3: "#eab308", 4: "#f59e0b", 5: "#ef4444" };
   function intentionLabel(val) {
-    if (!val || val <= 1) return null;
-    if (val >= 4) return { text: "Hot", cls: "int-hot" };
-    if (val >= 3) return { text: "Warm", cls: "int-warm" };
-    return { text: "Cold", cls: "int-cold" };
+    if (!val || val < 1) return null;
+    return { text: INTENT_LABELS[val] || "", cls: val >= 4 ? "int-hot" : val >= 3 ? "int-warm" : "int-cold", color: INTENT_COLORS[val] || "#9ca3af" };
   }
 
   function lastActivity(t) {
@@ -805,7 +806,16 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     return days + "d ago";
   }
 
-  // Drag & Drop
+  function changeStage(tid, stageKey, e) {
+    if (e) e.stopPropagation();
+    setMenuOpen(null);
+    if (stageKey === "lost") {
+      openRejectModal(tid, "lost", e);
+      return;
+    }
+    updatePipeline(tid, { pipeline_stage: stageKey });
+  }
+
   function onDragStart(e, tid) {
     e.dataTransfer.setData("text/plain", tid);
     e.dataTransfer.effectAllowed = "move";
@@ -820,16 +830,9 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     e.preventDefault();
     setDragOver(null);
     const tid = e.dataTransfer.getData("text/plain");
-    if (tid) updatePipeline(tid, { pipeline_stage: stageKey });
+    if (tid) changeStage(tid, stageKey);
   }
 
-  // Move via menu
-  function moveTo(tid, stageKey) {
-    updatePipeline(tid, { pipeline_stage: stageKey });
-    setMenuOpen(null);
-  }
-
-  // Kanban card — minimal
   function KCard({ t }) {
     const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
     const int = intentionLabel(t.intention);
@@ -842,15 +845,14 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         onClick={() => setSelected(t.prospect_id)}>
         <div className="kb-card-top">
           <div className="kb-hotel">{t.hotel}</div>
-          <div style={{position:"relative",flexShrink:0}}>
+          <div style={{position:"relative",flexShrink:0,display:"flex",alignItems:"center",gap:3}}>
             {int && <span className={"int-tag " + int.cls}>{int.text}</span>}
-            <button className="kb-menu-btn" onClick={e => { e.stopPropagation(); setMenuOpen(isMenuOpen ? null : t.id); }}
-              title="Move to...">⋮</button>
+            <button className="kb-menu-btn" onClick={e => { e.stopPropagation(); setMenuOpen(isMenuOpen ? null : t.id); }}>{String.fromCodePoint(0x22EE)}</button>
             {isMenuOpen && (
               <div className="kb-menu" onClick={e => e.stopPropagation()}>
                 <div className="kb-menu-title">Move to</div>
                 {STAGES.filter(s => s.key !== stage).map(s => (
-                  <button key={s.key} className="kb-menu-item" onClick={() => moveTo(t.id, s.key)}>
+                  <button key={s.key} className="kb-menu-item" onClick={() => changeStage(t.id, s.key)}>
                     <span className="kb-menu-dot" style={{background: s.color}}/>{s.label}
                   </button>
                 ))}
@@ -858,7 +860,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
             )}
           </div>
         </div>
-        <div className="kb-city">{p?.city || "—"}{p?.country && p.country !== "—" ? ", " + p.country : ""}</div>
+        <div className="kb-city">{p?.city || String.fromCodePoint(0x2014)}{p?.country && p.country !== String.fromCodePoint(0x2014) ? ", " + p.country : ""}</div>
         <div className="kb-bottom">
           <span className="kb-last">{last}</span>
           {t.sdr && <span className="kb-sdr">{t.sdr}</span>}
@@ -867,56 +869,88 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     );
   }
 
+  const totalActive = filteredT.filter(t => !["won","lost","dead"].includes(effectiveStage(t))).length;
+  const totalDemo = (stageMap["demo"]||[]).length;
+  const totalTrial = (stageMap["trial"]||[]).length;
+  const totalWon = (stageMap["won"]||[]).length;
+  const totalLost = (stageMap["lost"]||[]).length;
+  const convRate = (totalWon + totalLost) > 0 ? Math.round(totalWon / (totalWon + totalLost) * 100) : 0;
+
   return (
     <>
-      <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:12,flexWrap:"nowrap",overflowX:"auto"}}>
-        <input className="cmd-input" style={{minWidth:130,flexShrink:0}} placeholder="🔍 Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
+      <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10,flexWrap:"nowrap",overflowX:"auto"}}>
+        <input className="cmd-input" style={{minWidth:130,flexShrink:0}} placeholder="Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
         <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
           <option value="">All Countries</option>
           {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
-        <select className="cmd-input" style={{minWidth:80,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
+        <select className="cmd-input" style={{width:130,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
           <option value="">All Groups</option>
           {allGroups.map(g=><option key={g} value={g}>{g.length>20?g.slice(0,18)+"…":g}</option>)}
         </select>
-        {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>✕</button>}
+        {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>{String.fromCodePoint(0x2715)}</button>}
         <div style={{marginLeft:"auto"}} className="view-toggle">
-          <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>▤ Kanban</button>
-          <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>☰ List</button>
+          <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>{String.fromCodePoint(0x25A4)} Kanban</button>
+          <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>{String.fromCodePoint(0x2630)} List</button>
         </div>
       </div>
 
+      <div className="pipeline-summary">
+        <span>Active <strong>{totalActive}</strong></span>
+        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
+        <span>Demo <strong>{totalDemo}</strong></span>
+        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
+        <span>Trial <strong>{totalTrial}</strong></span>
+        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
+        <span style={{color:"var(--green)"}}>Won <strong>{totalWon}</strong></span>
+        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
+        <span style={{color:"var(--red)"}}>Lost <strong>{totalLost}</strong></span>
+        <span className="ps-sep">{String.fromCodePoint(0xB7)}</span>
+        <span>Conv <strong>{convRate}%</strong></span>
+      </div>
+
       {filteredT.length === 0 ? (
-        <div className="empty"><div className="empty-icon">🔍</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>← Clear</button></div>
+        <div className="empty"><div className="empty-icon">{String.fromCodePoint(0x1F50D)}</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>{String.fromCodePoint(0x2190)} Clear</button></div>
       ) : outreachView === "list" ? (
         <div className="table-card" style={{overflowX:"auto"}}>
           <table className="outreach-list">
             <thead><tr>
-              <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>SDR</th><th></th>
+              <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>Owner</th><th></th>
             </tr></thead>
             <tbody>
               {filteredT.map(t => {
                 const stage = effectiveStage(t);
                 const stg = STAGES.find(s => s.key === stage) || STAGES[0];
                 const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
-                const int = intentionLabel(t.intention);
                 const last = lastActivity(t);
                 return (
                   <tr key={t.id}>
-                    <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:200}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+                    <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:180}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
                     <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"—"}</td>
-                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
+                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
                     <td style={{color:"var(--text2)",fontSize:12}}>{t.gm||"—"}</td>
-                    <td><span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:4,background:stg.bg,color:stg.color}}>{stg.label}</span></td>
-                    <td>{int ? <span className={"int-tag " + int.cls}>{int.text}</span> : "—"}</td>
-                    <td style={{fontSize:11,color:"var(--text3)"}}>{last}</td>
+                    <td onClick={e=>e.stopPropagation()}>
+                      <select className="stage-select" value={stage} style={{color:stg.color,background:stg.bg}}
+                        onChange={e => changeStage(t.id, e.target.value)}>
+                        {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                      </select>
+                    </td>
+                    <td onClick={e=>e.stopPropagation()}>
+                      <select className="intent-select" value={t.intention||0}
+                        style={{color: INTENT_COLORS[t.intention] || "var(--text3)"}}
+                        onChange={e => updateIntention(t.id, parseInt(e.target.value))}>
+                        <option value={0}>—</option>
+                        {[1,2,3,4,5].map(v => <option key={v} value={v}>{"●"} {v} {INTENT_LABELS[v]}</option>)}
+                      </select>
+                    </td>
+                    <td style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>{last}</td>
                     <td onClick={e=>e.stopPropagation()}>
                       {editingNote === t.id ? (
-                        <div style={{display:"flex",gap:4}}>
+                        <div style={{display:"flex",gap:3}}>
                           <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus/>
                           <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                            <button className="act-btn success" style={{fontSize:10,padding:"2px 5px"}} onClick={()=>saveNote(t.id)}>✓</button>
-                            <button className="act-btn" style={{fontSize:10,padding:"2px 5px"}} onClick={()=>setEditingNote(null)}>✕</button>
+                            <button className="act-btn success" style={{fontSize:9,padding:"2px 4px"}} onClick={()=>saveNote(t.id)}>{String.fromCodePoint(0x2713)}</button>
+                            <button className="act-btn" style={{fontSize:9,padding:"2px 4px"}} onClick={()=>setEditingNote(null)}>{String.fromCodePoint(0x2715)}</button>
                           </div>
                         </div>
                       ) : (
@@ -927,7 +961,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                     </td>
                     <td><span className="kb-sdr">{t.sdr||"—"}</span></td>
                     <td onClick={e=>e.stopPropagation()}>
-                      <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)}>🗑</button>
+                      <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)}>{String.fromCodePoint(0x1F5D1)}</button>
                     </td>
                   </tr>
                 );
@@ -951,7 +985,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                 </div>
                 <div className="kanban-col-body">
                   {cards.length === 0 && (
-                    <div style={{padding:"16px 6px",textAlign:"center",color:"var(--text3)",fontSize:10,fontStyle:"italic"}}>Empty</div>
+                    <div style={{padding:"16px 4px",textAlign:"center",color:"var(--text3)",fontSize:10,fontStyle:"italic"}}>Empty</div>
                   )}
                   {cards.map(t => <KCard key={t.id} t={t} />)}
                 </div>
@@ -1367,14 +1401,15 @@ export default function App() {
 
   async function confirmReject() {
     if (!rejectModal) return;
-    const updates = { pipeline_stage: rejectModal.stage, rejection_reason: rejectReason || "Not specified" };
+    const stageVal = rejectModal.stage === "dead" ? "lost" : rejectModal.stage;
+    const updates = { pipeline_stage: stageVal, rejection_reason: rejectReason || "Not specified" };
     await updatePipeline(rejectModal.tid, updates);
     setRejectModal(null);
   }
 
   async function reopenSequence(tid, e) {
     if (e) e.stopPropagation();
-    const upd = { pipeline_stage: "active", done: [], d1: null, d2: null, d3: null, d4: null, rejection_reason: null };
+    const upd = { pipeline_stage: "new", done: [], d1: null, d2: null, d3: null, d4: null, rejection_reason: null };
     setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...upd } : x));
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(upd) }); } catch (e) { console.error(e); }
   }
@@ -1775,8 +1810,8 @@ export default function App() {
       {rejectModal && (
         <div className="modal-overlay" onClick={()=>setRejectModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-title">Mark as Not Interested</div>
-            <div className="modal-sub">Select the reason (helps improve targeting)</div>
+            <div className="modal-title">Mark as Lost</div>
+            <div className="modal-sub">Select lost reason (required)</div>
             <div className="reason-grid">
               {REJECTION_REASONS.map(r=>(
                 <button key={r} className={`reason-btn ${rejectReason===r?"selected":""}`} onClick={()=>setRejectReason(r)}>{r}</button>
@@ -1836,6 +1871,46 @@ export default function App() {
               <div className="d-row"><span className="d-key">Email</span><span className="d-val"><EditableField value={sel.email} placeholder="Add email" onSave={v => updateProspectField(sel.id, 'email', v)} /></span></div>
               <div className="d-row"><span className="d-key">LinkedIn</span><span className="d-val"><EditableField value={sel.linkedin} placeholder="Add LinkedIn URL" onSave={v => updateProspectField(sel.id, 'linkedin', v)} /></span></div>
             </div>
+            {(() => {
+              const trk = tracking.find(x => x.prospect_id === sel.id);
+              if (!trk) return null;
+              const DS = [
+                { key: "new", label: "New", color: "#6b7280" },
+                { key: "1st", label: "1st", color: "#2563eb" },
+                { key: "2nd", label: "2nd", color: "#0891b2" },
+                { key: "3rd", label: "3rd", color: "#7c3aed" },
+                { key: "4th", label: "4th", color: "#6d28d9" },
+                { key: "demo", label: "Demo", color: "#c026d3" },
+                { key: "trial", label: "Trial", color: "#ea580c" },
+                { key: "won", label: "Won", color: "#059669" },
+                { key: "lost", label: "Lost", color: "#dc2626" },
+              ];
+              const ms = s => { if (s==="active") return "new"; if (s==="emailed") return "1st"; if (s==="followup") return "2nd"; if (s==="dead") return "lost"; return s; };
+              const stage = ms(trk.pipeline_stage || "new");
+              const so = DS.find(s=>s.key===stage) || DS[0];
+              return (
+                <div className="d-sec">
+                  <div className="d-sec-title">Pipeline Status</div>
+                  <div className="d-row"><span className="d-key">Stage</span><span className="d-val"><span style={{fontWeight:700,color:so.color}}>{so.label}</span></span></div>
+                  {trk.intention > 0 && <div className="d-row"><span className="d-key">Intent</span><span className="d-val">{trk.intention}/5 \u2014 {({1:"Cold",2:"Low",3:"Medium",4:"Warm",5:"Hot"})[trk.intention]||"\u2014"}</span></div>}
+                  {trk.rejection_reason && <div className="d-row"><span className="d-key">Lost Reason</span><span className="d-val" style={{color:"var(--red)"}}>{trk.rejection_reason}</span></div>}
+                  {trk.d1 && <div className="d-row"><span className="d-key">1st Contact</span><span className="d-val">{fmtDate(trk.d1)}</span></div>}
+                  {trk.sales_notes && <div className="d-row"><span className="d-key">Sales Note</span><span className="d-val" style={{fontSize:12,whiteSpace:"pre-wrap"}}>{trk.sales_notes}</span></div>}
+                  <div style={{marginTop:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Activity Timeline</div>
+                    {(trk.done||[]).map(n => {
+                      const d = trk["d"+n];
+                      const labels = {1:"1st Email",2:"2nd Follow-up",3:"3rd Follow-up",4:"4th Follow-up"};
+                      return <div key={n} style={{fontSize:11,color:"var(--text2)",padding:"2px 0",display:"flex",gap:8}}>
+                        <span style={{color:"var(--text3)",minWidth:60}}>{d?fmtDate(d):"\u2014"}</span>
+                        <span>{labels[n]||("Touch "+n)} sent</span>
+                      </div>;
+                    })}
+                    {(trk.done||[]).length===0 && <div style={{fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>No contacts yet</div>}
+                  </div>
+                </div>
+              );
+            })()}
             {(sel.outreach_email_subject || sel.outreach_email_body) && (
               <div className="d-sec">
                 <div className="d-sec-title">4-Touch Email Sequence</div>
