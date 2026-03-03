@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Where to know Insights GmbH — SDR Research API Handler v3.1
+// Where to know Insights GmbH — SDR Research API Handler v4.0
 // ═══════════════════════════════════════════════════════════════════════════════
 // Changes from v3.0:
-//   1. REMOVED deep research mode (will re-add later if needed)
-//   2. REMOVED email-only mode (will re-add later if needed)
-//   3. Email sanitization: strips "[email protected]" web-scraping artifacts
-//   4. Discovery-only: single mode, batch hotel search
+//   1. REMOVED deep research + email-only modes (discovery only)
+//   2. New filter logic: scope=chain (group+brand) vs scope=independent (minADR)
+//   3. Parse-safe: prompt enforces partial results over giving up
+//   4. Fallback JSON extraction: collects individual {} objects from text
+//   5. Email sanitization: strips "[email protected]" web-scraping artifacts
+//   6. Max 10 hotels per API call to prevent prompt overload
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── PROVIDER KNOWLEDGE BASE ────────────────────────────────────────────────
@@ -94,7 +96,6 @@ const PROVIDER_MAP = {
   "aman":"Medallia",
 };
 
-// Verification sources — these are the URLs we can cite when a GM asks "how do you know?"
 const PROVIDER_SOURCES = {
   "Qualtrics":  { brands: "Marriott International", url: "https://www.qualtrics.com/customers/marriott/" },
   "Medallia":   { brands: "IHG, Hilton, Hyatt, Four Seasons, Wyndham", url: "https://www.medallia.com/customers/" },
@@ -104,7 +105,6 @@ const PROVIDER_SOURCES = {
 
 function inferProvider(brand, hotelName) {
   const s = ((brand || "") + " " + (hotelName || "")).toLowerCase();
-  // Try longer keys first (more specific matches beat shorter ones)
   const sorted = Object.entries(PROVIDER_MAP).sort((a, b) => b[0].length - a[0].length);
   for (const [k, v] of sorted) { if (s.includes(k)) return v; }
   return null;
@@ -115,8 +115,6 @@ function getProviderSource(provider) {
 }
 
 // ─── ROBUST JSON EXTRACTION ─────────────────────────────────────────────────
-// The model sometimes wraps JSON in markdown fences or adds preamble text.
-// This parser tries multiple strategies to find valid JSON.
 
 function extractJSON(content, expectArray = true) {
   const blocks = (content || []).filter(b => b.type === 'text').map(b => b.text || '');
@@ -144,13 +142,33 @@ function extractJSON(content, expectArray = true) {
       if (depth === 0 && start >= 0) {
         const candidate = fullText.slice(start, i + 1);
         try { JSON.parse(candidate); return candidate; } catch {}
-        // If parse fails, keep looking
         start = -1;
       }
     }
   }
 
-  // Strategy 3: Last resort — try each text block individually
+  // Strategy 3: Collect individual {} hotel objects from scattered text
+  if (expectArray) {
+    const objects = [];
+    let objDepth = 0, objStart = -1;
+    for (let i = 0; i < fullText.length; i++) {
+      if (fullText[i] === '{') { if (objDepth === 0) objStart = i; objDepth++; }
+      else if (fullText[i] === '}') {
+        objDepth--;
+        if (objDepth === 0 && objStart >= 0) {
+          const candidate = fullText.slice(objStart, i + 1);
+          try {
+            const obj = JSON.parse(candidate);
+            if (obj.hotel_name) objects.push(obj);
+          } catch {}
+          objStart = -1;
+        }
+      }
+    }
+    if (objects.length > 0) return JSON.stringify(objects);
+  }
+
+  // Strategy 4: Try each text block individually
   for (let i = blocks.length - 1; i >= 0; i--) {
     const t = blocks[i].trim();
     try {
@@ -162,16 +180,15 @@ function extractJSON(content, expectArray = true) {
   return null;
 }
 
-// ─── SYSTEM PROMPTS ─────────────────────────────────────────────────────────
+// ─── SYSTEM PROMPT ──────────────────────────────────────────────────────────
 
 const CURRENT_YEAR = new Date().getFullYear();
 const PREV_YEAR = CURRENT_YEAR - 1;
 
-// ── DISCOVERY (batch mode): find hotels + critical fields only ──────────────
-const DISCOVERY_SYSTEM = `You are a hotel research API. Output ONLY a valid JSON array. No text before or after. Start with [ immediately.
+const DISCOVERY_SYSTEM = `You are a hotel research API. Your ONLY output is a valid JSON array. No thinking, no explanation, no markdown. Start with [ immediately.
 
 TASK: Discover hotels in a given market. For each hotel return these fields:
-hotel_name, brand, hotel_group, tier (Luxury|Premium|Lifestyle), city, country, address, website, rooms, gm_name, gm_first_name, gm_title, rating, rating_scale, rating_platform, review_count, contact_confidence, research_notes
+hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, rating, rating_scale, rating_platform, review_count, contact_confidence, research_notes
 
 SEARCH STRATEGY — for each hotel, run these searches:
 1. "[hotel name] official site" → rooms, address, website
@@ -183,11 +200,21 @@ CRITICAL RULES:
 - gm_name: MUST include the SOURCE and YEAR in research_notes. If source is before ${PREV_YEAR}, mark "⚠ possibly outdated" and set contact_confidence to "L".
 - contact_confidence: "H" = official website or press release from ${PREV_YEAR}+. "M" = LinkedIn or news article. "L" = old/unverified.
 - rating: note the platform (Google/Booking.com/TripAdvisor) and scale (out of 5 or 10).
-- research_notes: MANDATORY. Format each line as "• Field: value (source, date)". This is how we verify data quality.
+- research_notes: MANDATORY. Format each line as "• Field: value (source, date)".
+- tier: classify as "Luxury" (5-star, ADR>$200), "Premium" (4-star+, ADR $100-200), "Lifestyle" (boutique/design), "Economy" (3-star or below).
 
-DO NOT generate emails. DO NOT search for ADR, email addresses, or restaurants.
+DO NOT generate emails. DO NOT search for email addresses or restaurants.
+
+★ PARTIAL RESULTS RULE (CRITICAL) ★
+If you run out of search budget or cannot find all requested hotels:
+- Output whatever you HAVE found so far as a valid JSON array
+- An array with 1-2 hotels is BETTER than no output
+- NEVER output explanation text instead of JSON
+- NEVER say "I cannot fulfill" — just return the partial array
+- Even if you found 0 verified hotels, output an empty array: []
 
 Output the JSON array now. Start with [ immediately.`;
+
 
 // ─── API HANDLER ────────────────────────────────────────────────────────────
 
@@ -199,38 +226,50 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { city, brand, segment, count, exclude } = req.body;
+    const { city, brand, group, scope, minAdr, count, exclude } = req.body;
 
-    // ═════════════════════════════════════════════════════════════════════
-    // BATCH / DISCOVERY MODE — find hotels in a market
-    // ═════════════════════════════════════════════════════════════════════
-    const tiers = {
-      "Luxury": "luxury 5-star",
-      "Premium": "premium upper-upscale 4-star",
-      "Lifestyle": "lifestyle boutique",
-      "Economy": "economy 3-star",
-      "Function": "airport/convention"
-    };
-    const t = tiers[segment] || "luxury";
-    const brandFilter = brand ? ` Only CONFIRMED ${brand} properties. Exclude all non-${brand}.` : "";
+    // Cap per-call hotel count at 10 to prevent prompt overload
+    const safeCount = Math.min(Math.max(parseInt(count) || 5, 1), 10);
+
+    // ── Build scope instruction ─────────────────────────────────────
+    let scopeInstruction = "";
+
+    if (scope === "chain" && (brand || group)) {
+      if (brand && group) {
+        scopeInstruction = `Only CONFIRMED ${brand} brand properties (part of ${group} group). Exclude all non-${brand} hotels.`;
+      } else if (brand) {
+        scopeInstruction = `Only CONFIRMED ${brand} properties. Exclude all non-${brand} hotels.`;
+      } else {
+        scopeInstruction = `Only hotels belonging to ${group} group (any brand within ${group}). Exclude non-${group} hotels.`;
+      }
+    } else if (scope === "independent") {
+      const adr = parseInt(minAdr) || 150;
+      scopeInstruction = `Only INDEPENDENT hotels (NOT part of any major chain like Marriott, IHG, Hilton, Hyatt, Accor, Radisson, Kempinski, etc). Target upscale/luxury independents with estimated ADR above $${adr}/night. Include boutique hotels, members of Relais & Châteaux, Leading Hotels of the World, Small Luxury Hotels, and local luxury brands.`;
+    } else if (brand) {
+      // Legacy fallback
+      scopeInstruction = `Only CONFIRMED ${brand} properties. Exclude all non-${brand} hotels.`;
+    }
+
     const excludeClause = (exclude && exclude.length)
       ? `\nSkip these (already in database): ${exclude.slice(0, 60).join(', ')}.`
       : "";
 
-    const prompt = `Find ${count} ${t} hotels in ${city}.${brandFilter}${excludeClause}
+    const marketDesc = city || "the requested market";
+    const prompt = `Find ${safeCount} hotels in ${marketDesc}.${scopeInstruction ? '\n' + scopeInstruction : ''}${excludeClause}
 
-For EACH hotel, run these searches:
+For EACH hotel found, search for:
 1. "[hotel name] official site" → rooms, address, website
-2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → current GM name (MUST be from ${PREV_YEAR}+)
+2. "[hotel name] general manager ${CURRENT_YEAR} OR ${PREV_YEAR}" → current GM
 3. "[hotel name] Booking.com" → rating and review count
 
-DO NOT generate emails. DO NOT search for email, ADR, or restaurants. Focus ALL searches on rooms, GM, and rating.
+DO NOT generate emails. Focus ALL searches on rooms, GM, and rating.
+If you find fewer than ${safeCount}, output what you found. Partial results are fine.
 
 Start with [ immediately.`;
 
-    // Scale search budget: 3 per hotel is the sweet spot for discovery
-    const maxUses = Math.min(20, Math.max(6, count * 3));
-    const maxTokens = Math.min(16000, Math.max(4000, count * 600 + 1000));
+    // Scale search budget: 3 per hotel, min 6, max 20
+    const maxUses = Math.min(20, Math.max(6, safeCount * 3));
+    const maxTokens = Math.min(16000, Math.max(4000, safeCount * 600 + 1000));
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -280,10 +319,9 @@ Start with [ immediately.`;
       const provider = inferProvider(p.brand, p.hotel_name) || p.current_provider || null;
       const providerSrc = provider ? getProviderSource(provider) : null;
 
-      // Sanitize email: strip "[email protected]" artifacts from web scraping
+      // Sanitize email
       let email = p.email || null;
       if (email) {
-        // Common anti-spam patterns from web scraping
         if (email.includes('[email') || email.includes('email protected') || email.includes('email\u00a0protected')) {
           email = null;
         }
@@ -295,7 +333,7 @@ Start with [ immediately.`;
         current_provider: provider,
         provider_source: p.provider_source || (providerSrc ? providerSrc.url : null),
         hotel_group: p.hotel_group || p.brand || "Independent",
-        // No email copy in discovery mode — that's for deep research
+        tier: p.tier || "Luxury",
         outreach_email_subject: null,
         outreach_email_body: null,
         followup_email_body: null,
