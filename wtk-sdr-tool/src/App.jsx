@@ -383,30 +383,31 @@ const css = `
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 
-  /* ═══ KANBAN BOARD ═══ */
-  .kanban-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; min-height: 400px; }
-  .kanban-col { min-width: 220px; max-width: 260px; flex: 1; display: flex; flex-direction: column; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border); }
-  .kanban-col-header { padding: 10px 12px; border-top: 3px solid; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius) var(--radius) 0 0; background: var(--surface); }
-  .kanban-col-title { font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
-  .kanban-col-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; }
-  .kanban-col-body { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 65vh; }
-  .kb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; cursor: pointer; transition: all 0.12s; }
+/* ═══ KANBAN BOARD ═══ */
+  .kanban-board { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; min-height: 400px; }
+  .kanban-col { min-width: 155px; width: 155px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border); transition: all 0.15s; }
+  .kanban-col.drag-over { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+  .kanban-col-header { padding: 8px 10px; border-top: 3px solid; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius) var(--radius) 0 0; background: var(--surface); }
+  .kanban-col-title { font-size: 11px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.04em; }
+  .kanban-col-count { font-size: 10px; font-weight: 700; padding: 0px 6px; border-radius: 8px; min-width: 18px; text-align: center; }
+  .kanban-col-body { flex: 1; padding: 4px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; max-height: 65vh; }
+  .kb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; cursor: grab; transition: all 0.12s; }
   .kb-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-  .kb-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
-  .kb-hotel { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.3; }
-  .kb-gm { font-size: 11px; color: var(--text2); margin-top: 2px; }
-  .kb-meta { font-size: 10px; color: var(--text3); margin-top: 4px; display: flex; justify-content: space-between; }
-  .kb-next { font-size: 10px; color: var(--text3); margin-top: 4px; padding: 3px 0; }
-  .kb-next.overdue { color: var(--red); font-weight: 600; }
-  .kb-next.soon { color: var(--amber); }
-  .kb-footer { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
-  .kb-touches { display: flex; gap: 2px; }
-  .kb-advance { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--green); background: var(--green-bg); color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.12s; flex-shrink: 0; }
-  .kb-advance:hover { background: var(--green); color: white; }
-  .kb-reopen { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border2); background: var(--surface); color: var(--text3); font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .kb-reopen:hover { border-color: var(--accent); color: var(--accent); }
-  .kb-sdr { font-size: 10px; font-weight: 600; color: var(--text3); margin-left: auto; }
-  .int-tag { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+  .kb-card:active { cursor: grabbing; opacity: 0.85; }
+  .kb-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; }
+  .kb-hotel { font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.25; }
+  .kb-city { font-size: 10px; color: var(--text3); margin-top: 3px; line-height: 1.2; }
+  .kb-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--border); }
+  .kb-last { font-size: 9px; color: var(--text3); }
+  .kb-sdr { font-size: 9px; font-weight: 600; color: var(--text3); }
+  .kb-menu-btn { background: none; border: none; font-size: 14px; color: var(--text3); cursor: pointer; padding: 0 2px; line-height: 1; }
+  .kb-menu-btn:hover { color: var(--text); }
+  .kb-menu { position: absolute; right: 0; top: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow-md); z-index: 50; min-width: 120px; padding: 4px 0; }
+  .kb-menu-title { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 10px 2px; }
+  .kb-menu-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 10px; border: none; background: none; font-size: 11px; color: var(--text2); cursor: pointer; font-family: inherit; text-align: left; }
+  .kb-menu-item:hover { background: var(--accent-light); color: var(--accent); }
+  .kb-menu-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .int-tag { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; white-space: nowrap; }
   .int-hot { background: #fef2f2; color: #dc2626; }
   .int-warm { background: #fffbeb; color: #d97706; }
   .int-cold { background: #eff6ff; color: #6b7280; }
@@ -733,37 +734,56 @@ class ErrorBoundary extends Component {
 function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote, prospects,
   outreachSearch, setOutreachSearch, outreachCountry, setOutreachCountry, outreachCity, setOutreachCity, outreachGroup, setOutreachGroup, outreachTier, setOutreachTier, outreachProvider, setOutreachProvider,
   allCountries, allCities, allGroups, allProviders, updateIntention }) {
+
+  const [dragOver, setDragOver] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(null);
+
   const hasActiveFilters = outreachSearch || outreachCountry || outreachCity || outreachGroup || outreachTier || outreachProvider;
   function clearOutreachFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); }
+
   if (filteredT.length === 0 && !hasActiveFilters) {
     return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
 
   const STAGES = [
-    { key: "active", label: "New", color: "#6b7280", bg: "#f9fafb" },
-    { key: "emailed", label: "Emailed", color: "#2563eb", bg: "#eff6ff" },
-    { key: "followup", label: "Follow-up", color: "#d97706", bg: "#fffbeb" },
-    { key: "demo", label: "Demo", color: "#7c3aed", bg: "#f5f3ff" },
-    { key: "won", label: "Won", color: "#059669", bg: "#ecfdf5" },
-    { key: "dead", label: "Lost", color: "#dc2626", bg: "#fef2f2" },
+    { key: "new",   label: "New",     color: "#6b7280", bg: "#f9fafb" },
+    { key: "1st",   label: "1st",     color: "#2563eb", bg: "#eff6ff" },
+    { key: "2nd",   label: "2nd",     color: "#0891b2", bg: "#ecfeff" },
+    { key: "3rd",   label: "3rd",     color: "#7c3aed", bg: "#f5f3ff" },
+    { key: "4th",   label: "4th",     color: "#6d28d9", bg: "#ede9fe" },
+    { key: "demo",  label: "Demo",    color: "#c026d3", bg: "#fdf4ff" },
+    { key: "trial", label: "Trial",   color: "#ea580c", bg: "#fff7ed" },
+    { key: "won",   label: "Won",     color: "#059669", bg: "#ecfdf5" },
+    { key: "lost",  label: "Lost",    color: "#dc2626", bg: "#fef2f2" },
   ];
 
+  // Map old stages to new
   function effectiveStage(t) {
-    const s = t.pipeline_stage || "active";
-    if (s !== "active") return s;
-    const done = t.done || [];
-    if (done.length === 0) return "active";
-    if (done.length === 1) return "emailed";
-    if (done.length >= 2) return "followup";
-    return "active";
+    const s = t.pipeline_stage || "new";
+    // Map legacy values
+    if (s === "active") return "new";
+    if (s === "emailed") return "1st";
+    if (s === "followup") return "2nd";
+    if (s === "dead") return "lost";
+    // Auto-derive from touches if still "new"
+    if (s === "new") {
+      const done = t.done || [];
+      if (done.length === 0) return "new";
+      if (done.length === 1) return "1st";
+      if (done.length === 2) return "2nd";
+      if (done.length === 3) return "3rd";
+      if (done.length >= 4) return "4th";
+    }
+    return STAGES.find(x => x.key === s) ? s : "new";
   }
 
+  // Group by stage
   const stageMap = {};
   STAGES.forEach(s => { stageMap[s.key] = []; });
   filteredT.forEach(t => {
     const s = effectiveStage(t);
     if (stageMap[s]) stageMap[s].push(t);
-    else stageMap["active"].push(t);
+    else stageMap["new"].push(t);
   });
 
   function intentionLabel(val) {
@@ -778,82 +798,69 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     if (done.length === 0) return "No contact";
     const lastTouch = done[done.length - 1];
     const d = t["d" + lastTouch];
-    if (!d) return "Touch " + lastTouch + " done";
+    if (!d) return "Touch " + lastTouch;
     const days = Math.floor((Date.now() - new Date(d)) / 86400000);
     if (days === 0) return "Today";
     if (days === 1) return "Yesterday";
     return days + "d ago";
   }
 
-  function nextAction(t) {
-    const stage = effectiveStage(t);
-    if (stage === "won" || stage === "dead") return null;
-    if (stage === "demo") return { text: "Prep demo" };
-    const done = t.done || [];
-    const nextN = done.length + 1;
-    if (nextN > 4) return { text: "All touches sent" };
-    const tc = TOUCH_CONFIG.find(c => c.n === nextN);
-    if (!tc) return null;
-    if (!t.d1) return { text: tc.label };
-    const base = new Date(t.d1);
-    const due = new Date(base.getTime() + tc.day * 86400000);
-    const days = Math.floor((due - Date.now()) / 86400000);
-    if (days < 0) return { text: tc.label + " (" + Math.abs(days) + "d overdue)", overdue: true };
-    if (days === 0) return { text: tc.label + " today", soon: true };
-    if (days <= 2) return { text: tc.label + " in " + days + "d", soon: true };
-    return { text: tc.label + " in " + days + "d" };
+  // Drag & Drop
+  function onDragStart(e, tid) {
+    e.dataTransfer.setData("text/plain", tid);
+    e.dataTransfer.effectAllowed = "move";
+  }
+  function onDragOver(e, stageKey) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOver(stageKey);
+  }
+  function onDragLeave() { setDragOver(null); }
+  function onDrop(e, stageKey) {
+    e.preventDefault();
+    setDragOver(null);
+    const tid = e.dataTransfer.getData("text/plain");
+    if (tid) updatePipeline(tid, { pipeline_stage: stageKey });
   }
 
-  function moveNext(t, e) {
-    if (e) e.stopPropagation();
-    const s = effectiveStage(t);
-    const order = ["active","emailed","followup","demo","won"];
-    const idx = order.indexOf(s);
-    if (idx >= 0 && idx < order.length - 1) {
-      updatePipeline(t.id, { pipeline_stage: order[idx + 1] }, e);
-    }
+  // Move via menu
+  function moveTo(tid, stageKey) {
+    updatePipeline(tid, { pipeline_stage: stageKey });
+    setMenuOpen(null);
   }
 
-  function KanbanCard({ t }) {
+  // Kanban card — minimal
+  function KCard({ t }) {
     const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
     const int = intentionLabel(t.intention);
     const last = lastActivity(t);
-    const next = nextAction(t);
     const stage = effectiveStage(t);
-    const isClosed = stage === "dead" || stage === "won";
+    const isMenuOpen = menuOpen === t.id;
 
     return (
-      <div className="kb-card" onClick={() => setSelected(t.prospect_id)}>
-        <div className="kb-card-header">
+      <div className="kb-card" draggable onDragStart={e => onDragStart(e, t.id)}
+        onClick={() => setSelected(t.prospect_id)}>
+        <div className="kb-card-top">
           <div className="kb-hotel">{t.hotel}</div>
-          {int && <span className={"int-tag " + int.cls}>{int.text}</span>}
-        </div>
-        {t.gm && <div className="kb-gm">{t.gm}</div>}
-        <div className="kb-meta">
-          <span>{p?.city || "—"}{p?.country ? ", " + p.country : ""}</span>
-          <span>{last}</span>
-        </div>
-        {next && !isClosed && (
-          <div className={"kb-next" + (next.overdue ? " overdue" : next.soon ? " soon" : "")}>
-            {"→ " + next.text}
+          <div style={{position:"relative",flexShrink:0}}>
+            {int && <span className={"int-tag " + int.cls}>{int.text}</span>}
+            <button className="kb-menu-btn" onClick={e => { e.stopPropagation(); setMenuOpen(isMenuOpen ? null : t.id); }}
+              title="Move to...">⋮</button>
+            {isMenuOpen && (
+              <div className="kb-menu" onClick={e => e.stopPropagation()}>
+                <div className="kb-menu-title">Move to</div>
+                {STAGES.filter(s => s.key !== stage).map(s => (
+                  <button key={s.key} className="kb-menu-item" onClick={() => moveTo(t.id, s.key)}>
+                    <span className="kb-menu-dot" style={{background: s.color}}/>{s.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-        <div className="kb-footer" onClick={e => e.stopPropagation()}>
-          <div className="kb-touches">
-            {TOUCH_CONFIG.map(tc => {
-              const ts = getTouchState(t, tc);
-              const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
-              return <div key={tc.n} className={"touch-dot " + cls} title={tc.label}
-                onClick={e => { if (ts !== "t-locked" && !isClosed) touchToggle(t.id, tc.n, e); }}
-              >{ts === "t-done" ? "✓" : tc.n}</div>;
-            })}
-          </div>
-          {!isClosed && stage !== "won" && (
-            <button className="kb-advance" onClick={e => moveNext(t, e)} title="Advance stage">→</button>
-          )}
-          {isClosed && (
-            <button className="kb-reopen" onClick={e => { e.stopPropagation(); reopenSequence(t.id, e); }} title="Re-open">⟳</button>
-          )}
+        </div>
+        <div className="kb-city">{p?.city || "—"}{p?.country && p.country !== "—" ? ", " + p.country : ""}</div>
+        <div className="kb-bottom">
+          <span className="kb-last">{last}</span>
           {t.sdr && <span className="kb-sdr">{t.sdr}</span>}
         </div>
       </div>
@@ -863,24 +870,16 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
   return (
     <>
       <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:12,flexWrap:"nowrap",overflowX:"auto"}}>
-        <input className="cmd-input" style={{minWidth:140,flexShrink:0}} placeholder="🔍 Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
-        <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
+        <input className="cmd-input" style={{minWidth:130,flexShrink:0}} placeholder="🔍 Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
+        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
           <option value="">All Countries</option>
           {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
-        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCity} onChange={e=>setOutreachCity(e.target.value)}>
-          <option value="">All Cities</option>
-          {allCities.map(c=><option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="cmd-input" style={{width:140,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
+        <select className="cmd-input" style={{minWidth:80,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
           <option value="">All Groups</option>
-          {allGroups.map(g=><option key={g} value={g}>{g.length>24?g.slice(0,22)+"…":g}</option>)}
+          {allGroups.map(g=><option key={g} value={g}>{g.length>20?g.slice(0,18)+"…":g}</option>)}
         </select>
-        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachProvider} onChange={e=>setOutreachProvider(e.target.value)}>
-          <option value="">All Providers</option>
-          {allProviders.map(p=><option key={p} value={p}>{p}</option>)}
-        </select>
-        {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>✕ Clear</button>}
+        {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>✕</button>}
         <div style={{marginLeft:"auto"}} className="view-toggle">
           <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>▤ Kanban</button>
           <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>☰ List</button>
@@ -893,54 +892,42 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         <div className="table-card" style={{overflowX:"auto"}}>
           <table className="outreach-list">
             <thead><tr>
-              <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Touches</th><th>Next</th><th>Notes</th><th>SDR</th><th></th>
+              <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>SDR</th><th></th>
             </tr></thead>
             <tbody>
               {filteredT.map(t => {
                 const stage = effectiveStage(t);
                 const stg = STAGES.find(s => s.key === stage) || STAGES[0];
-                const isClosed = stage === "dead" || stage === "won";
                 const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
                 const int = intentionLabel(t.intention);
-                const next = nextAction(t);
+                const last = lastActivity(t);
                 return (
                   <tr key={t.id}>
                     <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:200}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
                     <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"—"}</td>
-                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
-                    <td style={{color:"var(--text2)"}}>{t.gm||"—"}</td>
-                    <td><span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:stg.bg,color:stg.color}}>{stg.label}</span></td>
-                    <td>{int ? <span className={"int-tag " + int.cls}>{int.text}</span> : <span style={{color:"var(--text3)",fontSize:11}}>—</span>}</td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      <div className="touch-mini">
-                        {TOUCH_CONFIG.map(tc => {
-                          const ts = getTouchState(t, tc);
-                          const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
-                          return <div key={tc.n} className={"touch-dot " + cls}
-                            onClick={e => { if (ts !== "t-locked" && !isClosed) touchToggle(t.id, tc.n, e); }}
-                          >{ts === "t-done" ? "✓" : tc.n}</div>;
-                        })}
-                      </div>
-                    </td>
-                    <td style={{fontSize:11,color:next?.overdue?"var(--red)":next?.soon?"var(--amber)":"var(--text3)"}}>{next?.text||"—"}</td>
+                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
+                    <td style={{color:"var(--text2)",fontSize:12}}>{t.gm||"—"}</td>
+                    <td><span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:4,background:stg.bg,color:stg.color}}>{stg.label}</span></td>
+                    <td>{int ? <span className={"int-tag " + int.cls}>{int.text}</span> : "—"}</td>
+                    <td style={{fontSize:11,color:"var(--text3)"}}>{last}</td>
                     <td onClick={e=>e.stopPropagation()}>
                       {editingNote === t.id ? (
-                        <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
+                        <div style={{display:"flex",gap:4}}>
                           <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus/>
-                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                            <button className="act-btn success" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>saveNote(t.id)}>Save</button>
-                            <button className="act-btn" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>setEditingNote(null)}>✕</button>
+                          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                            <button className="act-btn success" style={{fontSize:10,padding:"2px 5px"}} onClick={()=>saveNote(t.id)}>✓</button>
+                            <button className="act-btn" style={{fontSize:10,padding:"2px 5px"}} onClick={()=>setEditingNote(null)}>✕</button>
                           </div>
                         </div>
                       ) : (
-                        <div className="notes-cell" title={t.sales_notes||"Click to add"} onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
+                        <div className="notes-cell" onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
                           {t.sales_notes || <span style={{color:"var(--border2)"}}>+</span>}
                         </div>
                       )}
                     </td>
                     <td><span className="kb-sdr">{t.sdr||"—"}</span></td>
                     <td onClick={e=>e.stopPropagation()}>
-                      <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)} title="Delete">🗑</button>
+                      <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)}>🗑</button>
                     </td>
                   </tr>
                 );
@@ -952,17 +939,21 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         <div className="kanban-board">
           {STAGES.map(stg => {
             const cards = stageMap[stg.key] || [];
+            const isDragTarget = dragOver === stg.key;
             return (
-              <div key={stg.key} className="kanban-col">
+              <div key={stg.key} className={"kanban-col" + (isDragTarget ? " drag-over" : "")}
+                onDragOver={e => onDragOver(e, stg.key)}
+                onDragLeave={onDragLeave}
+                onDrop={e => onDrop(e, stg.key)}>
                 <div className="kanban-col-header" style={{borderTopColor: stg.color}}>
                   <span className="kanban-col-title">{stg.label}</span>
                   <span className="kanban-col-count" style={{background: stg.bg, color: stg.color}}>{cards.length}</span>
                 </div>
                 <div className="kanban-col-body">
                   {cards.length === 0 && (
-                    <div style={{padding:"20px 8px",textAlign:"center",color:"var(--text3)",fontSize:11,fontStyle:"italic"}}>No prospects</div>
+                    <div style={{padding:"16px 6px",textAlign:"center",color:"var(--text3)",fontSize:10,fontStyle:"italic"}}>Empty</div>
                   )}
-                  {cards.map(t => <KanbanCard key={t.id} t={t} />)}
+                  {cards.map(t => <KCard key={t.id} t={t} />)}
                 </div>
               </div>
             );
