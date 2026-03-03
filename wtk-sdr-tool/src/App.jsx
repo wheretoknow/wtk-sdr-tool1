@@ -180,7 +180,6 @@ function normalizeGroup(g) {
   // Strip common suffixes for unknown groups
   return g.replace(/\s*(Hotels?( & Resorts?)?|International|Group|Collection|Worldwide|Ltd\.?|Inc\.?|plc|S\.?A\.?|GmbH)\s*/gi, '').trim() || g;
 }
-// Chain → Brand hierarchy for filter UI
 const CHAIN_BRANDS = {
   "IHG": ["InterContinental","Kimpton","Six Senses","Regent","Vignette Collection","Hotel Indigo","Crowne Plaza","voco","Holiday Inn"],
   "Marriott": ["Ritz-Carlton","St. Regis","JW Marriott","W Hotels","Luxury Collection","EDITION","Sheraton","Westin","Le Méridien","Renaissance","Autograph Collection","Tribute Portfolio","Design Hotels"],
@@ -453,6 +452,10 @@ const css = `
   .research-notes .bullet { display: flex; gap: 8px; margin-bottom: 3px; }
   .research-notes .bullet-dot { color: var(--accent); font-weight: 700; flex-shrink: 0; }
   .research-notes .bullet-text { color: var(--text2); }
+
+  /* Editable field in drawer */
+  .d-val-edit { cursor: pointer; border-bottom: 1px dashed var(--border2); padding-bottom: 1px; transition: all 0.15s; }
+  .d-val-edit:hover { border-bottom-color: var(--accent); color: var(--accent); }
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -611,20 +614,54 @@ function TierBadge({ tier }) {
   return <span className={`badge ${cls}`}>{tier || "—"}</span>;
 }
 
+// ── Inline editable field for the drawer ────────────────────────────────────
 function EditableField({ value, placeholder, onSave, type, options }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
+
   function startEdit() { setDraft(value || ""); setEditing(true); }
-  function save() { const trimmed = draft.trim(); if (trimmed !== (value || "")) onSave(trimmed); setEditing(false); }
-  function handleKey(e) { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }
-  if (editing) {
-    if (options) return <select value={draft} onChange={e=>setDraft(e.target.value)} onBlur={save} autoFocus style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",background:"white",outline:"none",minWidth:100}}><option value="">—</option>{options.map(o=><option key={o} value={o}>{o}</option>)}</select>;
-    return <input value={draft} onChange={e=>setDraft(e.target.value)} onBlur={save} onKeyDown={handleKey} autoFocus type={type==="number"?"number":"text"} placeholder={placeholder||""} style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",width:"100%",background:"white",outline:"none",boxSizing:"border-box"}} />;
+  function cancel() { setEditing(false); }
+  function save() {
+    const trimmed = draft.trim();
+    if (trimmed !== (value || "")) onSave(trimmed);
+    setEditing(false);
   }
+  function handleKey(e) {
+    if (e.key === "Enter") save();
+    if (e.key === "Escape") cancel();
+  }
+
+  if (editing) {
+    if (options) {
+      return (
+        <select value={draft} onChange={e => { setDraft(e.target.value); }} onBlur={save} autoFocus
+          style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",background:"white",outline:"none",minWidth:100}}>
+          <option value="">—</option>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    return (
+      <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={save} onKeyDown={handleKey} autoFocus
+        type={type === "number" ? "number" : "text"}
+        placeholder={placeholder || ""}
+        style={{fontSize:13,border:"1px solid var(--accent)",borderRadius:4,padding:"2px 6px",fontFamily:"'Inter',sans-serif",width:"100%",background:"white",outline:"none",boxSizing:"border-box"}} />
+    );
+  }
+
+  // Sanitize display: strip "[email protected]" artifacts
   let display = value;
-  if (display && (display.includes('[email') || display.includes('email protected'))) display = null;
-  return <span onClick={startEdit} style={{cursor:"pointer",borderBottom:"1px dashed var(--border2)",paddingBottom:1}} title="Click to edit">{display || <span style={{color:"var(--text3)",fontStyle:"italic"}}>{placeholder||"Click to add"}</span>}</span>;
+  if (display && (display.includes('[email') || display.includes('email protected'))) {
+    display = null;
+  }
+
+  return (
+    <span onClick={startEdit} style={{cursor:"pointer",borderBottom:"1px dashed var(--border2)",paddingBottom:1}} title="Click to edit">
+      {display || <span style={{color:"var(--text3)",fontStyle:"italic"}}>{placeholder || "Click to add"}</span>}
+    </span>
+  );
 }
+
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -876,8 +913,8 @@ export default function App() {
   const [cityInput, setCityInput] = useState("Vienna");
   const [customMarket, setCustomMarket] = useState("");
   const [multiMode, setMultiMode] = useState(false);
-  // Scope & filter state
-  const [scope, setScope] = useState("chain"); // "chain" | "independent" | "all"
+  // Other filters
+  const [scope, setScope] = useState("chain");
   const [group, setGroup] = useState("");
   const [brand, setBrand] = useState("");
   const [minAdr, setMinAdr] = useState("150");
@@ -946,13 +983,25 @@ export default function App() {
 
   // ── Inline editing for prospect fields ──────────────────────────────
   async function updateProspectField(pid, field, value) {
+    // Sanitize email values
     if (field === 'email' && value) {
-      if (value.includes('[email') || value.includes('email protected')) value = null;
+      if (value.includes('[email') || value.includes('email protected') || value.includes('email\u00a0protected')) {
+        value = null;
+      }
     }
-    if (['rooms', 'restaurants', 'review_count'].includes(field)) value = value ? parseInt(value) || null : null;
-    if (['adr_usd', 'rating'].includes(field)) value = value ? parseFloat(value) || null : null;
+    // Coerce numeric fields
+    if (['rooms', 'restaurants', 'review_count'].includes(field)) {
+      value = value ? parseInt(value) || null : null;
+    }
+    if (['adr_usd', 'rating'].includes(field)) {
+      value = value ? parseFloat(value) || null : null;
+    }
     const patch = { [field]: value || null };
-    if (field === 'gm_name' && value) patch.gm_first_name = value.split(' ')[0];
+    // If updating gm_name, auto-update gm_first_name
+    if (field === 'gm_name' && value) {
+      patch.gm_first_name = value.split(' ')[0];
+    }
+    // Also sync tracking table if updating gm or email
     if (field === 'gm_name' || field === 'email') {
       const t = tracking.find(x => x.prospect_id === pid);
       if (t) {
@@ -1057,7 +1106,7 @@ export default function App() {
         }
       }
 
-      // Fetch with automatic rate-limit retry
+      // Fetch with single rate-limit retry (don't waste tokens on repeated retries)
       async function fetchWithRetry(body, attempt = 0) {
         const r = await fetch("/api/research", {
           method: "POST",
@@ -1065,81 +1114,98 @@ export default function App() {
           body: JSON.stringify(body)
         });
         const data = await r.json();
-        // Detect rate limit error from Anthropic (passed through from research.js)
         if (data?.error && data.error.toLowerCase().includes("rate limit")) {
-          if (attempt >= 3) return data; // give up after 3 retries
-          const waitSec = 30 + attempt * 15; // 30s, 45s, 60s
+          if (attempt >= 1) return { ...data, rateLimited: true }; // only 1 retry, then give up
+          const waitSec = 65; // wait full 65s to reset the 1-minute window
           await rateLimitWait(waitSec);
           return fetchWithRetry(body, attempt + 1);
         }
         return data;
       }
 
+      let rateLimitHit = false;
+
       for (let i = 0; i < batchPromises.length; i++) {
         const { batchCount } = batchPromises[i];
         const pct = Math.round(10 + (i / batchPromises.length) * 75);
         setProgress(pct);
-        setLog(`Searching batch ${i + 1} of ${numBatches} (${batchCount} hotels)...`);
+        setLog(`Searching batch ${i + 1} of ${numBatches} (${batchCount} hotels)${allFresh.length ? ` · ${allFresh.length} found so far` : ""}...`);
 
-        // Inter-batch delay: 20s after batch 1, scaled up for large runs
+        // Inter-batch delay: 65s to stay under 50k input tokens/min
         if (i > 0) {
-          const delaySec = n <= 10 ? 20 : n <= 25 ? 25 : 35;
-          await rateLimitWait(delaySec);
+          await rateLimitWait(65);
         }
 
         const alreadyFound = allFresh.map(p => p.hotel_name);
         const excludeList = [...existingInMarket, ...alreadyFound];
         const data = await fetchWithRetry({ city: market, brand, group, scope, minAdr, count: batchCount, exclude: excludeList });
 
+        // Rate limit: stop immediately, keep what we have
+        if (data?.rateLimited) {
+          rateLimitHit = true;
+          setError(`Rate limit reached after batch ${i + 1}. ${allFresh.length} hotels saved. Wait 1 min and run again for more.`);
+          break;
+        }
+
         if (data?.error) {
           totalErrors++;
           setError("API error: " + data.error);
+          // On error, stop if no results yet; continue if we have some
+          if (allFresh.length === 0) break;
           continue;
         }
         const raw = parseJSON(data.result);
         if (!raw.length) {
           const debugInfo = data.debug || (data.result || "").slice(0, 400);
           setError("Parse failed. Debug: " + debugInfo);
+          continue;
         }
+
+        // ── Progressive save: write this batch to DB + state immediately ──
+        const batchFresh = [];
         for (const p of raw) {
           const key = normKey(p.hotel_name, p.city);
           if (existingKeys.has(key)) { allDupes.push(p.hotel_name); }
-          else { allFresh.push(p); existingKeys.add(key); }
+          else { batchFresh.push(p); allFresh.push(p); existingKeys.add(key); }
+        }
+
+        if (batchFresh.length > 0) {
+          const enrichedBatch = batchFresh.map(p => {
+            const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
+            const safe = {};
+            PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
+            return safe;
+          });
+          const newTBatch = enrichedBatch.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
+
+          // Write to Supabase immediately
+          try {
+            await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enrichedBatch) });
+            await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newTBatch) });
+          } catch (e) { console.error("Batch save error:", e); }
+
+          // Update state immediately — hotels appear in table right away
+          setProspects(prev => [...enrichedBatch, ...prev]);
+          setTracking(prev => [...newTBatch, ...prev]);
+
+          const totalSoFar = allFresh.length;
+          const dupesSoFar = allDupes.length;
+          setLog(`✓ ${totalSoFar} hotels found${dupesSoFar ? ` · ${dupesSoFar} skipped` : ""}${i < batchPromises.length - 1 ? ` · searching batch ${i + 2}...` : ""}`);
         }
       }
 
-      if (allFresh.length === 0) {
-        setProgress(100);
+      if (allFresh.length === 0 && !rateLimitHit) {
         const msg = allDupes.length > 0
           ? `All ${allDupes.length} hotels already in database`
-          : `No hotels found. Try adjusting market or brand filters.`;
+          : `No hotels found. Try adjusting market or filters.`;
         setLog(msg);
-        setTab("hotels");
-        return;
+      } else if (allFresh.length > 0) {
+        const dupeNote = allDupes.length > 0 ? ` · ${allDupes.length} skipped (already in DB)` : "";
+        const errNote = totalErrors > 0 ? ` · ${totalErrors} batch(es) failed` : "";
+        const rlNote = rateLimitHit ? " · rate limited, run again for more" : "";
+        setLog(`Done — ${allFresh.length} new hotels saved · ${allFresh.filter(p => p.email).length} emails found${dupeNote}${errNote}${rlNote}`);
       }
-
-      setProgress(88); setLog(`Saving ${allFresh.length} new hotels to database...`);
-
-      const enriched = allFresh.map(p => {
-        const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch, sdr };
-        const safe = {};
-        PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
-        return safe;
-      });
-      const newT = enriched.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
-
-      // Insert in chunks of 500 (Supabase limit)
-      for (let i = 0; i < enriched.length; i += 500) {
-        await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched.slice(i, i+500)) });
-        await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT.slice(i, i+500)) });
-      }
-      setProspects(prev => [...enriched, ...prev]);
-      setTracking(prev => [...newT, ...prev]);
-
-      const dupeNote = allDupes.length > 0 ? ` · ${allDupes.length} skipped (already in DB)` : "";
-      const errNote = totalErrors > 0 ? ` · ${totalErrors} batch(es) failed` : "";
       setProgress(100);
-      setLog(`${enriched.length} new hotels saved · ${enriched.filter(p => p.email).length} emails found${dupeNote}${errNote}`);
       setTab("hotels");
     } catch (err) { setError(err.message); }
     finally { setRunning(false); setTimeout(() => setProgress(0), 3000); }
@@ -1415,7 +1481,6 @@ export default function App() {
                 </div>
               )}
               <div className="cmd-divider"/>
-              {/* Scope toggle: Chain | Independent | All */}
               <button className={`tier-btn ${scope==="chain"?"active":""}`} onClick={()=>{setScope("chain");setBrand("");}} title="Search by hotel chain/brand">Chain</button>
               <button className={`tier-btn ${scope==="independent"?"active":""}`} onClick={()=>{setScope("independent");setGroup("");setBrand("");}} title="Independent/boutique hotels">Independent</button>
               <button className={`tier-btn ${scope==="all"?"active":""}`} onClick={()=>{setScope("all");setGroup("");setBrand("");}} title="All hotels in market">All</button>
@@ -1619,9 +1684,25 @@ export default function App() {
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val"><EditableField value={sel.restaurants ? String(sel.restaurants) : ""} placeholder="Add count" type="number" onSave={v => updateProspectField(sel.id, 'restaurants', v)} /></span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val"><EditableField value={sel.adr_usd ? String(sel.adr_usd) : ""} placeholder="Add ADR (USD)" type="number" onSave={v => updateProspectField(sel.id, 'adr_usd', v)} /></span></div>
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
-                {!sel.rating ? <EditableField value="" placeholder="Add rating" type="number" onSave={v => updateProspectField(sel.id, 'rating', v)} /> : <><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> {sel.review_count && <span style={{fontSize:11,color:"var(--text3)"}}>({Number(sel.review_count).toLocaleString()} reviews)</span>}</>}
+                {(() => {
+                  if (!sel.rating) return <EditableField value="" placeholder="Add rating" type="number" onSave={v => updateProspectField(sel.id, 'rating', v)} />;
+                  const notes = (sel.research_notes || "").toLowerCase();
+                  const hasGoogle = notes.includes("google");
+                  const hasBooking = notes.includes("booking");
+                  const hasTripAdvisor = notes.includes("tripadvisor");
+                  const hasAgoda = notes.includes("agoda");
+                  const hasTripCom = notes.includes("trip.com");
+                  let src = null, scale = null;
+                  if (hasBooking && !hasGoogle) { src = "Booking.com"; scale = 10; }
+                  else if (hasGoogle && !hasBooking) { src = "Google"; scale = 5; }
+                  else if (hasTripAdvisor) { src = "TripAdvisor"; scale = 5; }
+                  else if (hasAgoda) { src = "Agoda"; scale = 10; }
+                  else if (hasTripCom) { src = "Trip.com"; scale = 10; }
+                  else { return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews` : ""} · source unknown)</span></span>; }
+                  return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
+                })()}
               </span></div>
-              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const g = normalizeGroup(sel.hotel_group||sel.brand); const b = sel.brand; if (!b && !g) return "Independent"; if (b && g && b !== g) return `${b} · ${g}`; return b || g || "Independent"; })()}</span></div>
+              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const group = normalizeGroup(sel.hotel_group||sel.brand); const brand = sel.brand; if (!brand && !group) return "Independent"; if (brand && group && brand !== group) return `${brand} · ${group}`; return brand || group || "Independent"; })()}</span></div>
               <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val"><EditableField value={getProvider(sel) || ""} placeholder="Add provider" onSave={v => updateProspectField(sel.id, 'current_provider', v)} options={["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Olery","Guestfeedback"]} /></span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website} target="_blank" rel="noreferrer">↗ Visit</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
             </div>
