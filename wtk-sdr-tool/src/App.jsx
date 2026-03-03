@@ -181,33 +181,58 @@ function normalizeGroup(g) {
   return g.replace(/\s*(Hotels?( & Resorts?)?|International|Group|Collection|Worldwide|Ltd\.?|Inc\.?|plc|S\.?A\.?|GmbH)\s*/gi, '').trim() || g;
 }
 const CHAIN_BRANDS = {
-  "IHG": ["InterContinental","Kimpton","Six Senses","Regent","Vignette Collection","Hotel Indigo","Crowne Plaza","voco","Holiday Inn"],
-  "Marriott": ["Ritz-Carlton","St. Regis","JW Marriott","W Hotels","Luxury Collection","EDITION","Sheraton","Westin","Le Méridien","Renaissance","Autograph Collection","Tribute Portfolio","Design Hotels"],
-  "Hilton": ["Waldorf Astoria","Conrad","LXR","Canopy","Curio","DoubleTree","Tapestry","Hilton"],
-  "Hyatt": ["Park Hyatt","Andaz","Grand Hyatt","Hyatt Regency","Hyatt Centric","Alila","Thompson Hotels"],
-  "Accor": ["Raffles","Fairmont","Sofitel","MGallery","Pullman","Swissôtel","Mövenpick","Novotel","25hours","Banyan Tree"],
-  "Radisson": ["Radisson Collection","Radisson Blu","Radisson RED","Park Plaza","Park Inn"],
-  "Minor": ["Anantara","Avani","Oaks","Tivoli","NH Collection","NH Hotels","nhow"],
-  "Kempinski": ["Kempinski"],
-  "Shangri-La": ["Shangri-La","Kerry Hotels"],
-  "Mandarin Oriental": ["Mandarin Oriental"],
+  "Marriott": ["Ritz-Carlton","Ritz-Carlton Reserve","St. Regis","W Hotels","JW Marriott","Luxury Collection","EDITION","Autograph Collection","Tribute Portfolio","Design Hotels","Marriott Hotels","Sheraton","Delta Hotels","Le Méridien","Westin","Renaissance","Gaylord Hotels","Courtyard","Four Points","SpringHill Suites","AC Hotels","Moxy","Protea Hotels","Fairfield","Residence Inn","TownePlace Suites","Element","Aloft","City Express"],
+  "IHG": ["Six Senses","Regent","InterContinental","Vignette Collection","Kimpton","Hotel Indigo","voco","Hualuxe","Crowne Plaza","Even Hotels","Holiday Inn","Holiday Inn Express","Staybridge Suites","Candlewood Suites","Garner","Avid Hotels","Atwell Suites"],
+  "Hilton": ["Waldorf Astoria","Conrad","LXR","NoMad","Signia","Hilton Hotels & Resorts","Curio Collection","Canopy","Tempo","Motto","DoubleTree","Embassy Suites","Hilton Garden Inn","Hampton","Tru","Homewood Suites","Home2 Suites","Tapestry Collection","Spark"],
+  "Hyatt": ["Park Hyatt","Miraval","Grand Hyatt","Alila","Andaz","Unbound Collection","Destination by Hyatt","Hyatt Regency","Hyatt","Hyatt Centric","Caption by Hyatt","JdV","Thompson","Dream Hotels","Hyatt Place","Hyatt House","Hyatt Studios"],
+  "Accor": ["Raffles","Orient Express","Fairmont","Sofitel Legend","Sofitel","MGallery","Emblems","Pullman","Swissôtel","Mövenpick","Grand Mercure","Novotel","Mercure","TRIBE","Mama Shelter","25hours","JO&JOE","ibis","ibis Styles","Adagio","Mantra","Peppers"],
   "Four Seasons": ["Four Seasons"],
-  "Peninsula": ["Peninsula"],
-  "Rosewood": ["Rosewood"],
+  "Mandarin Oriental": ["Mandarin Oriental"],
+  "Shangri-La": ["Shangri-La","Kerry Hotels","JEN","Traders"],
+  "Rosewood": ["Rosewood","New World Hotels"],
+  "Kempinski": ["Kempinski"],
   "Aman": ["Aman"],
   "Belmond": ["Belmond"],
-  "Capella": ["Capella","Patina"],
-  "Jumeirah": ["Jumeirah"],
-  "Langham": ["Langham"],
-  "Dorchester": ["Dorchester Collection"],
-  "Oetker": ["Oetker Collection"],
-  "Lore Group": ["Lore Group"],
-  "Barceló": ["Barceló"],
-  "Meliá": ["Meliá","Innside"],
-  "Pestana": ["Pestana"],
-  "Iberostar": ["Iberostar"],
-  "Wyndham": ["Wyndham","Dolce by Wyndham","Ramada"],
+  "Banyan Tree": ["Banyan Tree","Angsana","Cassia","Dhawa"],
   "COMO": ["COMO"],
+  "Oetker Collection": ["Oetker Collection"],
+  "Dorchester Collection": ["Dorchester Collection"],
+  "Auberge Resorts": ["Auberge Resorts"],
+  "Capella": ["Capella","Patina"],
+  "One&Only": ["One&Only"],
+  "Soneva": ["Soneva"],
+  "Langham": ["Langham","Cordis","Eaton"],
+  "Pan Pacific": ["Pan Pacific","Parkroyal"],
+  "Minor Hotels": ["Anantara","Avani","NH Hotels","NH Collection","Tivoli","Oaks","Elewana"],
+  "Radisson": ["Radisson","Radisson Collection","Radisson Blu","Radisson Red","Park Plaza","Park Inn","Country Inn & Suites","Prizeotel","art'otel"],
+  "Wyndham": ["Wyndham","Registry Collection","Wyndham Grand","Dolce by Wyndham","Ramada","La Quinta","Baymont","Days Inn","Super 8","Microtel","Howard Johnson","Trademark Collection"],
+  "Choice Hotels": ["Ascend Collection","Cambria","Radisson Americas","Comfort","Quality","Clarion","Sleep Inn","MainStay Suites","WoodSpring Suites"],
+  "BWH": ["WorldHotels","Best Western","Best Western Plus","Best Western Premier","SureStay"],
+  "Meliá": ["Gran Meliá","ME by Meliá","Paradisus","INNSiDE","Zel","Meliá Hotels"],
+  "Barceló": ["Barceló","Royal Hideaway","Occidental","Allegro"],
+  "Jumeirah": ["Jumeirah"],
+  "Peninsula": ["Peninsula"],
+  "IHCL (Tata)": ["Taj","SeleQtions","Vivanta","Ginger"],
+  "Hoshino Resorts": ["Hoshinoya","Risonare","OMO","BEB"],
+  "Okura Nikko": ["The Okura","Nikko Hotels","Hotel JAL City"],
+  "Centara": ["Centara","Centara Grand","Centara Reserve","Centara Boutique","COSI"],
+  "Dusit": ["Dusit Thani","Dusit Devarana","Dusit Princess","ASAI"],
+  "Onyx Hospitality": ["Amari","OZO","Shama"],
+  "Lotte Hotels": ["Lotte Hotels"],
+  "Scandic": ["Scandic"],
+  "Riu": ["Riu"],
+  "CitizenM": ["CitizenM"],
+  "Virgin Hotels": ["Virgin Hotels"],
+  "Ennismore": ["Hoxton","Gleneagles","Mama Shelter","25hours","Delano","Mondrian","SLS"],
+  "Jin Jiang": ["Jin Jiang Hotels","Campanile","Kyriad","Louvre Hotels"],
+  "Huazhu": ["Steigenberger","IntercityHotel","Jaz in the City","MAXX"],
+  "Bulgari Hotels": ["Bulgari Hotels"],
+  "Rocco Forte": ["Rocco Forte"],
+  "Red Carnation": ["Red Carnation"],
+  "Preferred Hotels": ["Preferred Hotels"],
+  "Leading Hotels": ["Leading Hotels of the World"],
+  "Small Luxury Hotels": ["Small Luxury Hotels"],
+  "Relais & Châteaux": ["Relais & Châteaux"],
 };
 
 
@@ -357,6 +382,34 @@ const css = `
   .legend-item { display: flex; align-items: center; gap: 5px; }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
   .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+
+  /* ═══ KANBAN BOARD ═══ */
+  .kanban-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; min-height: 400px; }
+  .kanban-col { min-width: 220px; max-width: 260px; flex: 1; display: flex; flex-direction: column; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border); }
+  .kanban-col-header { padding: 10px 12px; border-top: 3px solid; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius) var(--radius) 0 0; background: var(--surface); }
+  .kanban-col-title { font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
+  .kanban-col-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; }
+  .kanban-col-body { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 65vh; }
+  .kb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; cursor: pointer; transition: all 0.12s; }
+  .kb-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+  .kb-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+  .kb-hotel { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.3; }
+  .kb-gm { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .kb-meta { font-size: 10px; color: var(--text3); margin-top: 4px; display: flex; justify-content: space-between; }
+  .kb-next { font-size: 10px; color: var(--text3); margin-top: 4px; padding: 3px 0; }
+  .kb-next.overdue { color: var(--red); font-weight: 600; }
+  .kb-next.soon { color: var(--amber); }
+  .kb-footer { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+  .kb-touches { display: flex; gap: 2px; }
+  .kb-advance { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--green); background: var(--green-bg); color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.12s; flex-shrink: 0; }
+  .kb-advance:hover { background: var(--green); color: white; }
+  .kb-reopen { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border2); background: var(--surface); color: var(--text3); font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kb-reopen:hover { border-color: var(--accent); color: var(--accent); }
+  .kb-sdr { font-size: 10px; font-weight: 600; color: var(--text3); margin-left: auto; }
+  .int-tag { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+  .int-hot { background: #fef2f2; color: #dc2626; }
+  .int-warm { background: #fffbeb; color: #d97706; }
+  .int-cold { background: #eff6ff; color: #6b7280; }
   .track-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow-sm); }
   .track-card:hover { border-color: var(--border2); box-shadow: var(--shadow); }
   .track-card.closed { opacity: 0.55; background: #fafafa; }
@@ -685,129 +738,222 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
   if (filteredT.length === 0 && !hasActiveFilters) {
     return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
-  const stageGroups = { all: filteredT.length, active: 0, demo: 0, won: 0, dead: 0 };
-  filteredT.forEach(t => { const s = t.pipeline_stage || "active"; if (stageGroups[s] !== undefined) stageGroups[s]++; else stageGroups.active++; });
-  const visibleT = stageFilter === "all" ? filteredT : filteredT.filter(t => (t.pipeline_stage || "active") === stageFilter);
 
-  function MiniTouches({ t }) {
+  // Pipeline stages
+  const STAGES = [
+    { key: "active", label: "New", color: "#6b7280", bg: "#f9fafb" },
+    { key: "emailed", label: "Emailed", color: "#2563eb", bg: "#eff6ff" },
+    { key: "followup", label: "Follow-up", color: "#d97706", bg: "#fffbeb" },
+    { key: "demo", label: "Demo", color: "#7c3aed", bg: "#f5f3ff" },
+    { key: "won", label: "Won", color: "#059669", bg: "#ecfdf5" },
+    { key: "dead", label: "Lost", color: "#dc2626", bg: "#fef2f2" },
+  ];
+
+  // Auto-derive stage from touches if stage is still "active"
+  function effectiveStage(t) {
+    const s = t.pipeline_stage || "active";
+    if (s !== "active") return s;
+    const done = t.done || [];
+    if (done.length === 0) return "active";
+    if (done.length === 1) return "emailed";
+    if (done.length >= 2) return "followup";
+    return "active";
+  }
+
+  // Group by stage
+  const stageMap = {};
+  STAGES.forEach(s => { stageMap[s.key] = []; });
+  filteredT.forEach(t => {
+    const s = effectiveStage(t);
+    if (stageMap[s]) stageMap[s].push(t);
+    else stageMap["active"].push(t);
+  });
+
+  // Intention label helper
+  function intentionLabel(val) {
+    if (!val || val <= 1) return null;
+    if (val >= 4) return { text: "Hot", cls: "int-hot" };
+    if (val >= 3) return { text: "Warm", cls: "int-warm" };
+    return { text: "Cold", cls: "int-cold" };
+  }
+
+  // Last activity text
+  function lastActivity(t) {
+    const done = t.done || [];
+    if (done.length === 0) return "No contact yet";
+    const lastTouch = done[done.length - 1];
+    const dateKey = "d" + lastTouch;
+    const d = t[dateKey];
+    if (!d) return `Touch ${lastTouch} done`;
+    const days = Math.floor((Date.now() - new Date(d)) / 86400000);
+    if (days === 0) return "Today";
+    if (days === 1) return "Yesterday";
+    return `${days}d ago`;
+  }
+
+  // Next action
+  function nextAction(t) {
+    const stage = effectiveStage(t);
+    if (stage === "won" || stage === "dead") return null;
+    if (stage === "demo") return "Prep demo";
+    const done = t.done || [];
+    const nextTouch = done.length + 1;
+    if (nextTouch > 4) return "All touches done";
+    const tc = TOUCH_CONFIG.find(c => c.n === nextTouch);
+    if (!tc) return null;
+    if (!t.d1) return tc.label;
+    const base = new Date(t.d1);
+    const due = new Date(base.getTime() + tc.day * 86400000);
+    const days = Math.floor((due - Date.now()) / 86400000);
+    if (days < 0) return { text: `${tc.label} (${Math.abs(days)}d overdue)`, overdue: true };
+    if (days === 0) return { text: `${tc.label} today`, soon: true };
+    if (days <= 2) return { text: `${tc.label} in ${days}d`, soon: true };
+    return { text: `${tc.label} in ${days}d` };
+  }
+
+  // Move to next stage
+  function moveNext(t, e) {
+    if (e) e.stopPropagation();
+    const s = effectiveStage(t);
+    const order = ["active","emailed","followup","demo","won"];
+    const idx = order.indexOf(s);
+    if (idx >= 0 && idx < order.length - 1) {
+      updatePipeline(t.id, { pipeline_stage: order[idx + 1] }, e);
+    }
+  }
+
+  // Kanban card
+  function KanbanCard({ t }) {
+    const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
+    const int = intentionLabel(t.intention);
+    const last = lastActivity(t);
+    const next = nextAction(t);
+    const nextText = typeof next === "string" ? next : next?.text;
+    const nextOverdue = typeof next === "object" && next?.overdue;
+    const nextSoon = typeof next === "object" && next?.soon;
+    const stage = effectiveStage(t);
+    const isClosed = stage === "dead" || stage === "won";
+
     return (
-      <div className="touch-mini">
-        {TOUCH_CONFIG.map(tc => {
-          const ts = getTouchState(t, tc);
-          const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
-          return <div key={tc.n} className={`touch-dot ${cls}`}>{ts === "t-done" ? "✓" : tc.n}</div>;
-        })}
+      <div className="kb-card" onClick={() => setSelected(t.prospect_id)}>
+        <div className="kb-card-header">
+          <div className="kb-hotel">{t.hotel}</div>
+          {int && <span className={`int-tag ${int.cls}`}>{int.text}</span>}
+        </div>
+        {t.gm && <div className="kb-gm">{t.gm}</div>}
+        <div className="kb-meta">
+          <span>{p?.city || "—"}{p?.country ? `, ${p.country}` : ""}</span>
+          <span>{last}</span>
+        </div>
+        {nextText && !isClosed && (
+          <div className={`kb-next ${nextOverdue ? "overdue" : nextSoon ? "soon" : ""}`}>
+            → {nextText}
+          </div>
+        )}
+        <div className="kb-footer" onClick={e => e.stopPropagation()}>
+          <div className="kb-touches">
+            {TOUCH_CONFIG.map(tc => {
+              const ts = getTouchState(t, tc);
+              const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
+              return <div key={tc.n} className={`touch-dot ${cls}`} title={tc.label}
+                onClick={e => { if (ts !== "t-locked" && !isClosed) touchToggle(t.id, tc.n, e); }}
+              >{ts === "t-done" ? "✓" : tc.n}</div>;
+            })}
+          </div>
+          {!isClosed && stage !== "won" && (
+            <button className="kb-advance" onClick={e => moveNext(t, e)} title="Move to next stage">→</button>
+          )}
+          {isClosed && (
+            <button className="kb-reopen" onClick={e => { e.stopPropagation(); reopenSequence(t.id, e); }}>⟳</button>
+          )}
+          {t.sdr && <span className="kb-sdr">{t.sdr}</span>}
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      {/* Outreach Filters */}
+      {/* Filters */}
       <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:12,flexWrap:"nowrap",overflowX:"auto"}}>
-        <input className="cmd-input" style={{minWidth:160,flexShrink:0}} placeholder="🔍 Hotel or person..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
-        <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
+        <input className="cmd-input" style={{minWidth:140,flexShrink:0}} placeholder="🔍 Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
+        <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
           <option value="">All Countries</option>
           {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
-        <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachCity} onChange={e=>setOutreachCity(e.target.value)}>
+        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCity} onChange={e=>setOutreachCity(e.target.value)}>
           <option value="">All Cities</option>
           {allCities.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
-        <select className="cmd-input" style={{width:150,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
+        <select className="cmd-input" style={{width:140,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
           <option value="">All Groups</option>
-          {allGroups.map(g=><option key={g} value={g}>{g.length>26?g.slice(0,24)+"…":g}</option>)}
+          {allGroups.map(g=><option key={g} value={g}>{g.length>24?g.slice(0,22)+"…":g}</option>)}
         </select>
-        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachTier} onChange={e=>setOutreachTier(e.target.value)}>
-          <option value="">All Brands</option>
-          {[...new Set(prospects.map(p=>p.brand).filter(Boolean))].sort().map(b=><option key={b} value={b}>{b}</option>)}
-        </select>
-        <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachProvider} onChange={e=>setOutreachProvider(e.target.value)}>
+        <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachProvider} onChange={e=>setOutreachProvider(e.target.value)}>
           <option value="">All Providers</option>
           {allProviders.map(p=><option key={p} value={p}>{p}</option>)}
         </select>
         {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>✕ Clear</button>}
-        <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{filteredT.length} prospects{hasActiveFilters?" (filtered)":""}</span>
-      </div>
-      {filteredT.length === 0 ? (
-        <div className="empty"><div className="empty-icon">🔍</div><div className="empty-title">No outreach matches filters</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>← Clear filters</button></div>
-      ) : (<>
-      <div className="pipeline-legend">
-        <span>Today: <strong>{fmtDate(new Date())}</strong></span>
-        <span className="legend-item"><span className="legend-dot" style={{background:"var(--red)"}}/>Overdue</span>
-        <span className="legend-item"><span className="legend-dot" style={{background:"var(--amber)"}}/>Due soon</span>
-        <span className="legend-item"><span className="legend-dot" style={{background:"var(--green)"}}/>Sent</span>
-        <span className="legend-item"><span className="legend-dot" style={{background:"var(--text3)"}}/>Locked</span>
         <div style={{marginLeft:"auto"}} className="view-toggle">
-          <button className={`view-btn ${outreachView==="card"?"active":""}`} onClick={()=>setOutreachView("card")}>⊞ Cards</button>
+          <button className={`view-btn ${outreachView==="card"?"active":""}`} onClick={()=>setOutreachView("card")}>▤ Kanban</button>
           <button className={`view-btn ${outreachView==="list"?"active":""}`} onClick={()=>setOutreachView("list")}>☰ List</button>
         </div>
       </div>
-      <div className="stage-tabs">
-        {[["all","All"],["active","Active"],["demo","Demo"],["won","Won"],["dead","Closed"]].map(([v,l])=>(
-          <button key={v} className={`stage-tab ${stageFilter===v?"active":""}`} onClick={()=>setStageFilter(v)}>
-            {l} <span className="stage-cnt">{stageGroups[v]||0}</span>
-          </button>
-        ))}
-      </div>
 
-      {outreachView === "list" ? (
+      {filteredT.length === 0 ? (
+        <div className="empty"><div className="empty-icon">🔍</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>← Clear</button></div>
+      ) : outreachView === "list" ? (
+        /* ═══ LIST VIEW ═══ */
         <div className="table-card" style={{overflowX:"auto"}}>
           <table className="outreach-list">
             <thead><tr>
-              <th>Hotel</th><th>Country</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intention</th><th>Touches</th><th>Actions</th><th>Notes</th><th>SDR</th><th></th>
+              <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Touches</th><th>Next</th><th>Notes</th><th>SDR</th><th></th>
             </tr></thead>
             <tbody>
-              {visibleT.map(t => {
-                const stage = t.pipeline_stage || "active";
-                const status = getPipelineStatus(t);
+              {filteredT.map(t => {
+                const stage = effectiveStage(t);
+                const stg = STAGES.find(s => s.key === stage) || STAGES[0];
                 const isClosed = stage === "dead" || stage === "won";
                 const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
+                const int = intentionLabel(t.intention);
+                const next = nextAction(t);
+                const nextText = typeof next === "string" ? next : next?.text;
                 return (
                   <tr key={t.id}>
                     <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:200}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
-                    <td style={{color:"var(--text3)",fontSize:11}}>{p?.country||"—"}</td>
                     <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"—"}</td>
-                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||p?.brand||"Independent"}</td>
+                    <td style={{color:"var(--text3)",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
                     <td style={{color:"var(--text2)"}}>{t.gm||"—"}</td>
-                    <td><span className={`pipeline-status ${status.cls}`} style={{fontSize:10}}>{stage}</span></td>
+                    <td><span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:stg.bg,color:stg.color}}>{stg.label}</span></td>
+                    <td>{int ? <span className={`int-tag ${int.cls}`}>{int.text}</span> : <span style={{color:"var(--text3)",fontSize:11}}>—</span>}</td>
                     <td onClick={e=>e.stopPropagation()}>
-                      <div style={{display:"flex",gap:2}}>{[1,2,3,4,5].map(v=>(
-                        <button key={v} onClick={()=>updateIntention(t.id,v)} title={`Intention ${v}`}
-                          style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:v<=(t.intention||0)?"#f59e0b":"#d1d5db",padding:0,lineHeight:1}}>★</button>
-                      ))}</div>
+                      <div className="touch-mini">
+                        {TOUCH_CONFIG.map(tc => {
+                          const ts = getTouchState(t, tc);
+                          const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
+                          return <div key={tc.n} className={`touch-dot ${cls}`}
+                            onClick={e => { if (ts !== "t-locked" && !isClosed) touchToggle(t.id, tc.n, e); }}
+                          >{ts === "t-done" ? "✓" : tc.n}</div>;
+                        })}
+                      </div>
                     </td>
-                    <td onClick={e=>e.stopPropagation()}><MiniTouches t={t}/></td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      {!isClosed && (
-                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                          {stage !== "demo" && stage !== "won" && (
-                            <button className="act-btn success" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo</button>
-                          )}
-                          {stage === "demo" && (
-                            <button className="act-btn success" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Won</button>
-                          )}
-                          <button className="act-btn danger" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕</button>
-                        </div>
-                      )}
-                      {isClosed && <button className="act-btn" style={{fontSize:10,padding:"3px 7px"}} onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open</button>}
-                    </td>
+                    <td style={{fontSize:11,color:"var(--text3)"}}>{nextText||"—"}</td>
                     <td onClick={e=>e.stopPropagation()}>
                       {editingNote === t.id ? (
                         <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
                           <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus/>
                           <div style={{display:"flex",flexDirection:"column",gap:3}}>
                             <button className="act-btn success" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>saveNote(t.id)}>Save</button>
-                            <button className="act-btn" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>setEditingNote(null)}>Cancel</button>
+                            <button className="act-btn" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>setEditingNote(null)}>✕</button>
                           </div>
                         </div>
                       ) : (
-                        <div className="notes-cell" title={t.sales_notes||"Click to add note"} onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
-                          {t.sales_notes || <span style={{color:"var(--border2)"}}>+ add note</span>}
+                        <div className="notes-cell" title={t.sales_notes||"Click to add"} onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
+                          {t.sales_notes || <span style={{color:"var(--border2)"}}>+</span>}
                         </div>
                       )}
                     </td>
-                    <td><span className="sdr-tag">{t.sdr||"—"}</span></td>
+                    <td><span className="kb-sdr">{t.sdr||"—"}</span></td>
                     <td onClick={e=>e.stopPropagation()}>
                       <button className="del-btn" onClick={()=>setDeleteConfirm(t.prospect_id)} title="Delete">🗑</button>
                     </td>
@@ -818,92 +964,30 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
           </table>
         </div>
       ) : (
-        <div className="cards-grid">
-          {visibleT.map(t => {
-            const stage = t.pipeline_stage || "active";
-            const status = getPipelineStatus(t);
-            const isClosed = stage === "dead" || stage === "won";
+        /* ═══ KANBAN VIEW ═══ */
+        <div className="kanban-board">
+          {STAGES.map(stg => {
+            const cards = stageMap[stg.key] || [];
             return (
-              <div key={t.id} className={`track-card ${isClosed?"closed":""}`} onClick={()=>setSelected(t.prospect_id)}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div className="track-hotel">{t.hotel}</div>
-                  <button className="del-btn" onClick={e=>{e.stopPropagation();setDeleteConfirm(t.prospect_id);}}>🗑</button>
+              <div key={stg.key} className="kanban-col">
+                <div className="kanban-col-header" style={{borderTopColor: stg.color}}>
+                  <span className="kanban-col-title">{stg.label}</span>
+                  <span className="kanban-col-count" style={{background: stg.bg, color: stg.color}}>{cards.length}</span>
                 </div>
-                <div className="track-gm">{t.gm||"—"}{t.d1?` · First contact: ${fmtDate(t.d1)}`:""}</div>
-                <div className="touch-timeline" onClick={e=>e.stopPropagation()}>
-                  {TOUCH_CONFIG.map(tc => {
-                    const tstate = getTouchState(t, tc);
-                    const dateInfo = getTouchDueStr(t, tc);
-                    return (
-                      <div key={tc.n} className={`touch-node ${tstate==="t-done"?"t-done":""}`}>
-                        <div className={`touch-circle ${tstate}`}
-                          onClick={(e)=>{ if(tstate!=="t-locked" && !isClosed) touchToggle(t.id,tc.n,e); else e.stopPropagation(); }}
-                          title={tstate==="t-locked"?"Complete previous touch first":tc.desc}>
-                          {tstate==="t-done" ? "✓" : tc.n}
-                        </div>
-                        <div className="touch-lbl">{tc.label}</div>
-                        {dateInfo && <div className={`touch-date ${dateInfo.cls}`}>{dateInfo.str}</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Sales note in card */}
-                <div onClick={e=>e.stopPropagation()} style={{marginBottom:8}}>
-                  {editingNote === t.id ? (
-                    <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
-                      <textarea className="note-input" value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Sales notes..." autoFocus/>
-                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                        <button className="act-btn success" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>saveNote(t.id)}>Save</button>
-                        <button className="act-btn" style={{fontSize:10,padding:"3px 6px"}} onClick={()=>setEditingNote(null)}>✕</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{fontSize:11,color:t.sales_notes?"var(--text2)":"var(--border2)",cursor:"pointer",fontStyle:t.sales_notes?"normal":"italic"}} onClick={()=>{setEditingNote(t.id);setNoteText(t.sales_notes||"");}}>
-                      {t.sales_notes || "+ add sales note"}
-                    </div>
+                <div className="kanban-col-body">
+                  {cards.length === 0 && (
+                    <div style={{padding:"20px 8px",textAlign:"center",color:"var(--text3)",fontSize:11,fontStyle:"italic"}}>No prospects</div>
                   )}
-                </div>
-                {!isClosed && (
-                  <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                    {stage !== "demo" && stage !== "won" && (
-                      <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>📅 Demo booked</button>
-                    )}
-                    {stage === "demo" && (
-                      <button className="act-btn success" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"won"},e)}>🏆 Mark Won</button>
-                    )}
-                    <button className="act-btn danger" onClick={(e)=>openRejectModal(t.id,"dead",e)}>✕ Not interested</button>
-                  </div>
-                )}
-                {isClosed && stage === "won" && (
-                  <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                    <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"demo"},e)}>← Back to Demo</button>
-                    <button className="act-btn danger" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
-                  </div>
-                )}
-                {isClosed && stage === "dead" && (
-                  <div className="card-actions" onClick={e=>e.stopPropagation()}>
-                    <button className="act-btn" onClick={(e)=>reopenSequence(t.id,e)}>⟳ Re-open sequence</button>
-                    <button className="act-btn" onClick={(e)=>updatePipeline(t.id,{pipeline_stage:"reopen"},e)}>⏰ Re-engage in 3 months</button>
-                  </div>
-                )}
-                <div className="card-footer">
-                  <span className={`pipeline-status ${status.cls}`}>{status.label}</span>
-                  <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:1,alignItems:"center"}}>
-                    {[1,2,3,4,5].map(v=>(
-                      <button key={v} onClick={()=>updateIntention(t.id,v)} title={`Intention ${v}`}
-                        style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:v<=(t.intention||0)?"#f59e0b":"#d1d5db",padding:0,lineHeight:1}}>★</button>
-                    ))}
-                  </div>
-                  {t.sdr && <span className="sdr-tag">{t.sdr}</span>}
+                  {cards.map(t => <KanbanCard key={t.id} t={t} />)}
                 </div>
               </div>
             );
           })}
         </div>
       )}
-      </>)}
     </>
   );
+}
 }
 export default function App() {
   const [tab, setTab] = useState("hotels");
@@ -1766,7 +1850,8 @@ export default function App() {
                   return <span><EditableField value={String(sel.rating)} onSave={v => updateProspectField(sel.id, 'rating', v)} type="number" /> / {scale} <span style={{fontSize:11,color:"var(--text3)"}}>({sel.review_count ? `${Number(sel.review_count).toLocaleString()} reviews, ` : ""}{src})</span></span>;
                 })()}
               </span></div>
-              <div className="d-row"><span className="d-key">Ownership</span><span className="d-val">{(!sel.hotel_group && !sel.brand) ? "Independent" : (() => { const group = normalizeGroup(sel.hotel_group||sel.brand); const brand = sel.brand; if (!brand && !group) return "Independent"; if (brand && group && brand !== group) return `${brand} · ${group}`; return brand || group || "Independent"; })()}</span></div>
+              <div className="d-row"><span className="d-key">Brand</span><span className="d-val"><EditableField value={sel.brand || ""} placeholder="Add brand" onSave={v => updateProspectField(sel.id, 'brand', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Group</span><span className="d-val"><EditableField value={sel.hotel_group || ""} placeholder="Add group" onSave={v => updateProspectField(sel.id, 'hotel_group', v)} /></span></div>
               <div className="d-row"><span className="d-key">Tech Provider</span><span className="d-val"><EditableField value={getProvider(sel) || ""} placeholder="Add provider" onSave={v => updateProspectField(sel.id, 'current_provider', v)} options={["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Olery","Guestfeedback"]} /></span></div>
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website.startsWith("http")?sel.website:`https://${sel.website}`} target="_blank" rel="noreferrer" title={sel.website}>↗ {sel.website.replace(/^https?:\/\/(www\.)?/,"").slice(0,40)}</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
             </div>
