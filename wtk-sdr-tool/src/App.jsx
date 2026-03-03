@@ -739,7 +739,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     return <div className="empty"><div className="empty-icon">📬</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
   }
 
-  // Pipeline stages
   const STAGES = [
     { key: "active", label: "New", color: "#6b7280", bg: "#f9fafb" },
     { key: "emailed", label: "Emailed", color: "#2563eb", bg: "#eff6ff" },
@@ -749,7 +748,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     { key: "dead", label: "Lost", color: "#dc2626", bg: "#fef2f2" },
   ];
 
-  // Auto-derive stage from touches if stage is still "active"
   function effectiveStage(t) {
     const s = t.pipeline_stage || "active";
     if (s !== "active") return s;
@@ -760,7 +758,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     return "active";
   }
 
-  // Group by stage
   const stageMap = {};
   STAGES.forEach(s => { stageMap[s.key] = []; });
   filteredT.forEach(t => {
@@ -769,7 +766,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     else stageMap["active"].push(t);
   });
 
-  // Intention label helper
   function intentionLabel(val) {
     if (!val || val <= 1) return null;
     if (val >= 4) return { text: "Hot", cls: "int-hot" };
@@ -777,41 +773,37 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     return { text: "Cold", cls: "int-cold" };
   }
 
-  // Last activity text
   function lastActivity(t) {
     const done = t.done || [];
-    if (done.length === 0) return "No contact yet";
+    if (done.length === 0) return "No contact";
     const lastTouch = done[done.length - 1];
-    const dateKey = "d" + lastTouch;
-    const d = t[dateKey];
-    if (!d) return `Touch ${lastTouch} done`;
+    const d = t["d" + lastTouch];
+    if (!d) return "Touch " + lastTouch + " done";
     const days = Math.floor((Date.now() - new Date(d)) / 86400000);
     if (days === 0) return "Today";
     if (days === 1) return "Yesterday";
-    return `${days}d ago`;
+    return days + "d ago";
   }
 
-  // Next action
   function nextAction(t) {
     const stage = effectiveStage(t);
     if (stage === "won" || stage === "dead") return null;
-    if (stage === "demo") return "Prep demo";
+    if (stage === "demo") return { text: "Prep demo" };
     const done = t.done || [];
-    const nextTouch = done.length + 1;
-    if (nextTouch > 4) return "All touches done";
-    const tc = TOUCH_CONFIG.find(c => c.n === nextTouch);
+    const nextN = done.length + 1;
+    if (nextN > 4) return { text: "All touches sent" };
+    const tc = TOUCH_CONFIG.find(c => c.n === nextN);
     if (!tc) return null;
-    if (!t.d1) return tc.label;
+    if (!t.d1) return { text: tc.label };
     const base = new Date(t.d1);
     const due = new Date(base.getTime() + tc.day * 86400000);
     const days = Math.floor((due - Date.now()) / 86400000);
-    if (days < 0) return { text: `${tc.label} (${Math.abs(days)}d overdue)`, overdue: true };
-    if (days === 0) return { text: `${tc.label} today`, soon: true };
-    if (days <= 2) return { text: `${tc.label} in ${days}d`, soon: true };
-    return { text: `${tc.label} in ${days}d` };
+    if (days < 0) return { text: tc.label + " (" + Math.abs(days) + "d overdue)", overdue: true };
+    if (days === 0) return { text: tc.label + " today", soon: true };
+    if (days <= 2) return { text: tc.label + " in " + days + "d", soon: true };
+    return { text: tc.label + " in " + days + "d" };
   }
 
-  // Move to next stage
   function moveNext(t, e) {
     if (e) e.stopPropagation();
     const s = effectiveStage(t);
@@ -822,15 +814,11 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     }
   }
 
-  // Kanban card
   function KanbanCard({ t }) {
     const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
     const int = intentionLabel(t.intention);
     const last = lastActivity(t);
     const next = nextAction(t);
-    const nextText = typeof next === "string" ? next : next?.text;
-    const nextOverdue = typeof next === "object" && next?.overdue;
-    const nextSoon = typeof next === "object" && next?.soon;
     const stage = effectiveStage(t);
     const isClosed = stage === "dead" || stage === "won";
 
@@ -838,16 +826,16 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       <div className="kb-card" onClick={() => setSelected(t.prospect_id)}>
         <div className="kb-card-header">
           <div className="kb-hotel">{t.hotel}</div>
-          {int && <span className={`int-tag ${int.cls}`}>{int.text}</span>}
+          {int && <span className={"int-tag " + int.cls}>{int.text}</span>}
         </div>
         {t.gm && <div className="kb-gm">{t.gm}</div>}
         <div className="kb-meta">
-          <span>{p?.city || "—"}{p?.country ? `, ${p.country}` : ""}</span>
+          <span>{p?.city || "—"}{p?.country ? ", " + p.country : ""}</span>
           <span>{last}</span>
         </div>
-        {nextText && !isClosed && (
-          <div className={`kb-next ${nextOverdue ? "overdue" : nextSoon ? "soon" : ""}`}>
-            → {nextText}
+        {next && !isClosed && (
+          <div className={"kb-next" + (next.overdue ? " overdue" : next.soon ? " soon" : "")}>
+            {"→ " + next.text}
           </div>
         )}
         <div className="kb-footer" onClick={e => e.stopPropagation()}>
@@ -855,16 +843,16 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
             {TOUCH_CONFIG.map(tc => {
               const ts = getTouchState(t, tc);
               const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
-              return <div key={tc.n} className={`touch-dot ${cls}`} title={tc.label}
+              return <div key={tc.n} className={"touch-dot " + cls} title={tc.label}
                 onClick={e => { if (ts !== "t-locked" && !isClosed) touchToggle(t.id, tc.n, e); }}
               >{ts === "t-done" ? "✓" : tc.n}</div>;
             })}
           </div>
           {!isClosed && stage !== "won" && (
-            <button className="kb-advance" onClick={e => moveNext(t, e)} title="Move to next stage">→</button>
+            <button className="kb-advance" onClick={e => moveNext(t, e)} title="Advance stage">→</button>
           )}
           {isClosed && (
-            <button className="kb-reopen" onClick={e => { e.stopPropagation(); reopenSequence(t.id, e); }}>⟳</button>
+            <button className="kb-reopen" onClick={e => { e.stopPropagation(); reopenSequence(t.id, e); }} title="Re-open">⟳</button>
           )}
           {t.sdr && <span className="kb-sdr">{t.sdr}</span>}
         </div>
@@ -874,7 +862,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
 
   return (
     <>
-      {/* Filters */}
       <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:12,flexWrap:"nowrap",overflowX:"auto"}}>
         <input className="cmd-input" style={{minWidth:140,flexShrink:0}} placeholder="🔍 Search..." value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
         <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
@@ -895,15 +882,14 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
         </select>
         {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearOutreachFilters}>✕ Clear</button>}
         <div style={{marginLeft:"auto"}} className="view-toggle">
-          <button className={`view-btn ${outreachView==="card"?"active":""}`} onClick={()=>setOutreachView("card")}>▤ Kanban</button>
-          <button className={`view-btn ${outreachView==="list"?"active":""}`} onClick={()=>setOutreachView("list")}>☰ List</button>
+          <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>▤ Kanban</button>
+          <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>☰ List</button>
         </div>
       </div>
 
       {filteredT.length === 0 ? (
         <div className="empty"><div className="empty-icon">🔍</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearOutreachFilters}>← Clear</button></div>
       ) : outreachView === "list" ? (
-        /* ═══ LIST VIEW ═══ */
         <div className="table-card" style={{overflowX:"auto"}}>
           <table className="outreach-list">
             <thead><tr>
@@ -917,7 +903,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                 const p = prospects ? prospects.find(x => x.id === t.prospect_id) : null;
                 const int = intentionLabel(t.intention);
                 const next = nextAction(t);
-                const nextText = typeof next === "string" ? next : next?.text;
                 return (
                   <tr key={t.id}>
                     <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:200}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
@@ -925,19 +910,19 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
                     <td style={{color:"var(--text3)",fontSize:11,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"—"}</td>
                     <td style={{color:"var(--text2)"}}>{t.gm||"—"}</td>
                     <td><span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:stg.bg,color:stg.color}}>{stg.label}</span></td>
-                    <td>{int ? <span className={`int-tag ${int.cls}`}>{int.text}</span> : <span style={{color:"var(--text3)",fontSize:11}}>—</span>}</td>
+                    <td>{int ? <span className={"int-tag " + int.cls}>{int.text}</span> : <span style={{color:"var(--text3)",fontSize:11}}>—</span>}</td>
                     <td onClick={e=>e.stopPropagation()}>
                       <div className="touch-mini">
                         {TOUCH_CONFIG.map(tc => {
                           const ts = getTouchState(t, tc);
                           const cls = ts === "t-done" ? "done" : ts === "t-overdue" ? "overdue" : ts === "t-upcoming" ? "upcoming" : "";
-                          return <div key={tc.n} className={`touch-dot ${cls}`}
+                          return <div key={tc.n} className={"touch-dot " + cls}
                             onClick={e => { if (ts !== "t-locked" && !isClosed) touchToggle(t.id, tc.n, e); }}
                           >{ts === "t-done" ? "✓" : tc.n}</div>;
                         })}
                       </div>
                     </td>
-                    <td style={{fontSize:11,color:"var(--text3)"}}>{nextText||"—"}</td>
+                    <td style={{fontSize:11,color:next?.overdue?"var(--red)":next?.soon?"var(--amber)":"var(--text3)"}}>{next?.text||"—"}</td>
                     <td onClick={e=>e.stopPropagation()}>
                       {editingNote === t.id ? (
                         <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
@@ -964,7 +949,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
           </table>
         </div>
       ) : (
-        /* ═══ KANBAN VIEW ═══ */
         <div className="kanban-board">
           {STAGES.map(stg => {
             const cards = stageMap[stg.key] || [];
@@ -987,7 +971,6 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       )}
     </>
   );
-}
 }
 export default function App() {
   const [tab, setTab] = useState("hotels");
