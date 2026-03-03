@@ -811,22 +811,22 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     if (stageKey === "lost") { openRejectModal(tid, "lost", e); return; }
     const stageToTouch = { "1st": 1, "2nd": 2, "3rd": 3, "4th": 4 };
     const touchN = stageToTouch[stageKey];
+    const t = filteredT.find(x => x.id === tid);
+    if (!t) { updatePipeline(tid, { pipeline_stage: stageKey }); return; }
+    const now = new Date().toISOString();
+    const updates = { pipeline_stage: stageKey };
+    // Moving forward to 1st-4th: auto-create missing preceding actual dates
     if (touchN) {
-      const now = new Date().toISOString();
-      const t = filteredT.find(x => x.id === tid);
-      const done = [...((t && t.done) || [])];
-      const updates = { pipeline_stage: stageKey };
-      // Fill ALL preceding touch dates (e.g. drag New->3rd fills d1,d2,d3)
+      const done = [...(t.done || [])];
       for (let i = 1; i <= touchN; i++) {
+        if (!t["d" + i]) updates["d" + i] = now;
         if (!done.includes(i)) done.push(i);
-        if (t && !t["d" + i]) updates["d" + i] = now;
       }
       done.sort((a,b) => a - b);
       updates.done = done;
-      updatePipeline(tid, updates);
-    } else {
-      updatePipeline(tid, { pipeline_stage: stageKey });
     }
+    // Moving backward: do NOT delete any contact dates (preserve history)
+    updatePipeline(tid, updates);
   }
 
   function onDragStart(e, tid) { e.dataTransfer.setData("text/plain", tid); e.dataTransfer.effectAllowed = "move"; }
@@ -1361,7 +1361,7 @@ export default function App() {
 
   async function reopenSequence(tid, e) {
     if (e) e.stopPropagation();
-    const upd = { pipeline_stage: "new", done: [], d1: null, d2: null, d3: null, d4: null, rejection_reason: null };
+    const upd = { pipeline_stage: "new", rejection_reason: null };
     setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...upd } : x));
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(upd) }); } catch (e) { console.error(e); }
   }
@@ -1791,27 +1791,39 @@ export default function App() {
 
         // Compute schedule for a tracking record
         function computeSchedule(t) {
-          const actual = [null, t.d1, t.d2, t.d3, t.d4]; // 1-indexed
+          const actual = [null, t.d1, t.d2, t.d3, t.d4];
           const due = [null, null, null, null, null];
-          // Compute due dates: due[n] = actual[n-1] (or due[n-1]) + CAD[n] business days
+          // Due dates: anchor from previous ACTUAL (or previous due as fallback)
           for (let n = 2; n <= 4; n++) {
             const anchor = actual[n-1] || due[n-1];
             if (anchor) due[n] = addBusinessDays(anchor, CAD[n]);
           }
-          // Find next step
-          const isClosed = ["won","lost","demo","trial"].includes(ms(t.pipeline_stage));
+          const stage = ms(t.pipeline_stage);
+          const isClosed = ["won","lost","demo","trial"].includes(stage);
+          // Next step: first step without actual date
           let nextStep = null, nextDue = null;
-          if (!isClosed) {
-            for (let n = 1; n <= 4; n++) {
-              if (!actual[n]) { nextStep = n; nextDue = n === 1 ? null : due[n]; break; }
+          if (!isClosed && stage !== "new") {
+            for (let n = 2; n <= 4; n++) {
+              if (!actual[n]) { nextStep = n; nextDue = due[n]; break; }
             }
           }
-          // Last actual
+          // If stage is NEW and no d1: no nextDue
+          if (stage === "new" && !actual[1]) { nextStep = null; nextDue = null; }
+          // If stage is NEW but has d1: next is 2nd
+          if (stage === "new" && actual[1] && !actual[2]) { nextStep = 2; nextDue = due[2]; }
+          // Last actual contact
           let lastN = 0;
           for (let n = 4; n >= 1; n--) { if (actual[n]) { lastN = n; break; } }
           const lastDate = lastN > 0 ? actual[lastN] : null;
           const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
-          const daysUntilDue = nextDue ? Math.floor((new Date(nextDue) - Date.now()) / 86400000) : null;
+          // Countdown: daysToDue = targetDate - today (positive = future, negative = overdue)
+          let daysUntilDue = null;
+          if (nextDue) {
+            const target = new Date(nextDue); target.setHours(0,0,0,0);
+            const now = new Date(); now.setHours(0,0,0,0);
+            daysUntilDue = Math.round((target - now) / 86400000);
+          }
+          // Status
           let status = "ok";
           if (isClosed || (lastN >= 4 && !nextStep)) status = "done";
           else if (daysUntilDue !== null && daysUntilDue < 0) status = "overdue";
@@ -1820,18 +1832,31 @@ export default function App() {
         }
 
         function updateDate(tid, touchNum, dateVal) {
+          // Guard: no future dates
+          if (dateVal) {
+            const sel = new Date(dateVal + "T12:00:00");
+            const today = new Date(); today.setHours(23,59,59,999);
+            if (sel > today) { alert("Cannot set a future date as actual contact date."); return; }
+          }
+          const t = tracking.find(x => x.id === tid);
+          if (!t) return;
+          // Guard: no step skipping (must have previous step)
+          if (dateVal && touchNum > 1 && !t["d" + (touchNum - 1)]) {
+            const ord = ["","1st","2nd","3rd","4th"];
+            alert("Set " + ord[touchNum-1] + " contact date first."); return;
+          }
           const key = "d" + touchNum;
           const isoVal = dateVal ? new Date(dateVal + "T12:00:00").toISOString() : null;
-          const t = tracking.find(x => x.id === tid);
-          const done = [...((t && t.done) || [])];
+          const done = [...((t.done) || [])];
           if (dateVal && !done.includes(touchNum)) { done.push(touchNum); done.sort((a,b)=>a-b); }
           if (!dateVal) { const idx=done.indexOf(touchNum); if(idx>=0) done.splice(idx,1); }
           const updates = { [key]: isoVal, done };
+          // Auto-derive stage from highest done touch (only if not in demo/trial/won/lost)
           const maxD = done.length > 0 ? Math.max(...done) : 0;
           const stMap = {0:"new",1:"1st",2:"2nd",3:"3rd",4:"4th"};
-          if (t && stMap[maxD]) {
-            const cur = ms(t.pipeline_stage);
-            if (!["demo","trial","won","lost"].includes(cur)) updates.pipeline_stage = stMap[maxD];
+          const cur = ms(t.pipeline_stage);
+          if (stMap[maxD] && !["demo","trial","won","lost"].includes(cur)) {
+            updates.pipeline_stage = stMap[maxD];
           }
           updatePipeline(tid, updates);
         }
