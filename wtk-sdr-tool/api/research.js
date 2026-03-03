@@ -1,14 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Where to know Insights GmbH — SDR Research API Handler v5.0
+// Where to know Insights GmbH — SDR Research API Handler v7.1 (Hybrid)
 // ═══════════════════════════════════════════════════════════════════════════════
-// TWO-STEP ARCHITECTURE:
-//   Step 1 "list"   — Haiku, NO web search. Lists hotel names from training data.
-//                      Cost: ~$0.001. Returns: [{hotel_name, city, country, brand}]
-//   Step 2 "verify" — Haiku, 2 web searches per hotel. Verifies rooms + GM.
-//                      Cost: ~$0.02-0.05 per batch. Returns full hotel objects.
+// HYBRID ARCHITECTURE:
+//   Step 1 "list"   — GPT-4o-mini (OpenAI), NO web search. Cheap & fast.
+//   Step 2 "verify" — Claude Haiku (Anthropic), web search. Accurate GM/rooms.
 //
-// This eliminates the "dice roll" problem where the model wastes searches
-// rediscovering hotels it already knows about.
+// Why hybrid: GPT-4o-mini is cheaper for listing hotels from training data.
+// Claude Haiku has reliable built-in web search for verification (rooms + GM).
+// OpenAI's web_search_options in Chat Completions is unreliable — URLs may be
+// fabricated. Claude's web search actually reads pages and returns real data.
+//
+// Auth: OPENAI_API_KEY (Step 1) + ANTHROPIC_API_KEY (Step 2)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── PROVIDER KNOWLEDGE BASE ────────────────────────────────────────────────
@@ -23,47 +25,38 @@ const PROVIDER_MAP = {
   "ac hotels":"Qualtrics","courtyard":"Qualtrics","four points":"Qualtrics",
   "protea":"Qualtrics","springhill":"Qualtrics","towneplace":"Qualtrics",
   "element":"Qualtrics","residence inn":"Qualtrics","fairfield":"Qualtrics",
-
   "intercontinental":"Medallia","kimpton":"Medallia","six senses":"Medallia",
   "regent":"Medallia","vignette collection":"Medallia","hotel indigo":"Medallia",
   "crowne plaza":"Medallia","voco":"Medallia","holiday inn":"Medallia",
   "hualuxe":"Medallia","even hotels":"Medallia","staybridge":"Medallia",
   "candlewood":"Medallia","avid":"Medallia","ihg":"Medallia",
-
   "park hyatt":"Medallia","andaz":"Medallia","grand hyatt":"Medallia",
   "hyatt regency":"Medallia","hyatt centric":"Medallia","alila":"Medallia",
   "thompson hotels":"Medallia","hyatt":"Medallia","hyatt place":"Medallia",
-
   "waldorf astoria":"Medallia","conrad":"Medallia","lxr":"Medallia",
   "canopy":"Medallia","curio":"Medallia","doubletree":"Medallia",
   "tapestry":"Medallia","hilton":"Medallia","hampton":"Medallia",
   "embassy suites":"Medallia","tru by hilton":"Medallia","homewood":"Medallia",
   "home2":"Medallia","motto":"Medallia","spark":"Medallia","signia":"Medallia",
-
   "wyndham":"Medallia","dolce by wyndham":"Medallia","ramada":"Medallia",
   "tryp":"Medallia","la quinta":"Medallia",
-
   "radisson collection":"ReviewPro","radisson blu":"ReviewPro",
   "radisson red":"ReviewPro","radisson":"ReviewPro","park plaza":"ReviewPro",
   "park inn":"ReviewPro","country inn":"ReviewPro","prizeotel":"ReviewPro",
-
   "anantara":"ReviewPro","avani":"ReviewPro","oaks":"ReviewPro",
   "tivoli":"ReviewPro","nh collection":"ReviewPro","nh hotels":"ReviewPro",
   "nhow":"ReviewPro","minor hotels":"ReviewPro",
-
   "kempinski":"ReviewPro",
   "barceló":"ReviewPro","barcelo":"ReviewPro",
   "meliá":"ReviewPro","melia":"ReviewPro","innside":"ReviewPro","sol hotels":"ReviewPro",
   "pestana":"ReviewPro","iberostar":"ReviewPro",
   "peninsula":"ReviewPro","capella":"ReviewPro","patina":"ReviewPro",
-
   "raffles":"TrustYou","fairmont":"TrustYou","sofitel":"TrustYou",
   "mgallery":"TrustYou","pullman":"TrustYou","swissôtel":"TrustYou",
   "swissotel":"TrustYou","mövenpick":"TrustYou","movenpick":"TrustYou",
   "novotel":"TrustYou","mercure":"TrustYou","ibis":"TrustYou",
   "25hours":"TrustYou","banyan tree":"TrustYou","accor":"TrustYou",
   "mantra":"TrustYou","peppers":"TrustYou","tribe":"TrustYou",
-
   "mandarin oriental":"TrustYou","rosewood":"TrustYou",
   "langham":"Medallia","dorchester":"Medallia",
   "shangri-la":"ReviewPro","shangri la":"ReviewPro",
@@ -89,14 +82,54 @@ function getProviderSource(provider) {
   return PROVIDER_SOURCES[provider] || null;
 }
 
-// ─── ROBUST JSON EXTRACTION ─────────────────────────────────────────────────
+// ─── BRAND/GROUP OVERRIDE SAFETY ────────────────────────────────────────────
+// Only override brand/group when input hotel name closely matches verified name.
+// Prevents data pollution when model returns wrong hotel.
 
-function extractJSON(content, expectArray = true) {
-  const blocks = (content || []).filter(b => b.type === 'text').map(b => b.text || '');
-  const fullText = blocks.join('\n');
+function normalizeName(s) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(hotel|resort|spa|the|a|an|at|by|and|of|in)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function jaccardSimilarity(a, b) {
+  const A = new Set(normalizeName(a).split(" ").filter(Boolean));
+  const B = new Set(normalizeName(b).split(" ").filter(Boolean));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  const union = A.size + B.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+function shouldOverrideBrand(inputName, verifiedName, inputCity, verifiedCity) {
+  const jac = jaccardSimilarity(inputName, verifiedName);
+  const cityMatch = !inputCity || !verifiedCity
+    ? true
+    : normalizeName(inputCity) === normalizeName(verifiedCity);
+  // Require strong match (0.7+) if city differs; medium match (0.6+) if city matches
+  return cityMatch ? jac >= 0.6 : jac >= 0.75;
+}
+
+// ─── JSON EXTRACTION ────────────────────────────────────────────────────────
+
+function extractJSON(input, expectArray = true) {
+  // Handle both string (OpenAI) and array (Anthropic content blocks)
+  let text = '';
+  if (typeof input === 'string') {
+    text = input;
+  } else if (Array.isArray(input)) {
+    text = input.filter(b => b.type === 'text').map(b => b.text || '').join('\n');
+  } else {
+    return null;
+  }
 
   // Strategy 1: Strip markdown code fences
-  const fenceMatch = fullText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
     try {
       const parsed = JSON.parse(fenceMatch[1].trim());
@@ -108,12 +141,12 @@ function extractJSON(content, expectArray = true) {
   const open = expectArray ? '[' : '{';
   const close = expectArray ? ']' : '}';
   let depth = 0, start = -1;
-  for (let i = 0; i < fullText.length; i++) {
-    if (fullText[i] === open) { if (depth === 0) start = i; depth++; }
-    else if (fullText[i] === close) {
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === open) { if (depth === 0) start = i; depth++; }
+    else if (text[i] === close) {
       depth--;
       if (depth === 0 && start >= 0) {
-        const candidate = fullText.slice(start, i + 1);
+        const candidate = text.slice(start, i + 1);
         try { JSON.parse(candidate); return candidate; } catch {}
         start = -1;
       }
@@ -124,13 +157,13 @@ function extractJSON(content, expectArray = true) {
   if (expectArray) {
     const objects = [];
     let objDepth = 0, objStart = -1;
-    for (let i = 0; i < fullText.length; i++) {
-      if (fullText[i] === '{') { if (objDepth === 0) objStart = i; objDepth++; }
-      else if (fullText[i] === '}') {
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '{') { if (objDepth === 0) objStart = i; objDepth++; }
+      else if (text[i] === '}') {
         objDepth--;
         if (objDepth === 0 && objStart >= 0) {
           try {
-            const obj = JSON.parse(fullText.slice(objStart, i + 1));
+            const obj = JSON.parse(text.slice(objStart, i + 1));
             if (obj.hotel_name) objects.push(obj);
           } catch {}
           objStart = -1;
@@ -140,44 +173,70 @@ function extractJSON(content, expectArray = true) {
     if (objects.length > 0) return JSON.stringify(objects);
   }
 
-  // Strategy 4: Individual text blocks
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    try {
-      const p = JSON.parse(blocks[i].trim());
-      if (expectArray ? Array.isArray(p) : typeof p === 'object') return blocks[i].trim();
-    } catch {}
-  }
+  // Strategy 4: Direct parse
+  try {
+    const p = JSON.parse(text.trim());
+    if (expectArray ? Array.isArray(p) : typeof p === 'object') return text.trim();
+  } catch {}
 
   return null;
 }
 
+// ─── RETRY HELPER ───────────────────────────────────────────────────────────
+
+async function fetchWithRetry(url, opts, retries = 2, delay = 5000) {
+  for (let i = 0; i <= retries; i++) {
+    const r = await fetch(url, opts);
+    if ((r.status === 429 || r.status === 529) && i < retries) {
+      console.log(`API rate limited (${r.status}), retry ${i+1}/${retries} in ${delay/1000}s...`);
+      await new Promise(ok => setTimeout(ok, delay));
+      continue;
+    }
+    return r;
+  }
+}
+
 // ─── SYSTEM PROMPTS ─────────────────────────────────────────────────────────
 
-const CURRENT_YEAR = new Date().getFullYear();
-const PREV_YEAR = CURRENT_YEAR - 1;
+const YEAR = new Date().getFullYear();
+const PREV = YEAR - 1;
 
-// Step 1: LIST — no web search, uses training data only
+// Step 1: LIST (OpenAI GPT-4o-mini) — training data only, no web search
 const LIST_SYSTEM = `You are a hotel database. Output ONLY a JSON array. No explanation. Start with [ immediately.
 
-List all hotels you know that match the query. For each hotel output:
+List hotels that match the query. For each hotel output:
 {"hotel_name":"Full Hotel Name","city":"City","country":"Country","brand":"Brand Name","hotel_group":"Parent Group"}
 
 RULES:
-- Include ONLY hotels you are confident actually exist as of ${CURRENT_YEAR}.
-- Do NOT invent hotels. If unsure, omit.
-- Include hotels worldwide unless a specific region is requested.
-- Output as many as you know. 50+ is fine for large chains.
+- Include ONLY hotels you are confident actually exist as of ${YEAR}.
+- Do NOT invent or fabricate hotels. If unsure, omit.
+- Use the property's Booking.com listing name if you know it.
+- When a city is specified, only include hotels in that city or metro area.
+- When no city is specified, include worldwide but cap at 40 results.
 - Start with [ immediately. End with ]. Nothing else.`;
 
-// Step 2: VERIFY — web search to fill in rooms + GM
+// Step 2: VERIFY (Anthropic Claude Haiku) — web search for rooms + GM
 const VERIFY_SYSTEM = `Hotel research API. Output ONLY a JSON array. Start with [ immediately.
 
-For each hotel: search official site (rooms, address, website) and GM name (${CURRENT_YEAR}/${PREV_YEAR} only).
+For each hotel: search the web to verify rooms, address, website, and current GM.
 
-Return: hotel_name (use Booking.com name if different), brand, hotel_group, tier, city (from actual address), country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes
+SEARCH STRATEGY per hotel:
+1. Search official hotel site → rooms count, address, website URL
+2. Search "[Hotel Name] General Manager appointed ${PREV} OR ${YEAR}" → check hospitalitynet.org, hotelnewsresource.com, LinkedIn
+3. If GM not found in step 2, try: "[Hotel Name] General Manager" more broadly
 
-Rules: rooms from official site only. GM must have source+year in research_notes. contact_confidence H/M/L. Set rating fields to null. No bullets in research_notes.
-Partial data OK. Use null for missing fields. NEVER output explanation. Start with [.`;
+REQUIRED OUTPUT per hotel:
+hotel_name (use Booking.com name if different), brand, hotel_group, tier, city (from actual address), country, address, website, rooms, rooms_source (URL where rooms found), gm_name, gm_first_name, gm_title, gm_source (URL confirming GM), gm_source_year (${YEAR} or ${PREV} or null), contact_confidence (H/M/L), research_notes
+
+STRICT RULES:
+- rooms: ONLY from official site or Booking.com. If not found, null.
+- gm_name: ONLY if confirmed from a real, verifiable source. NEVER fabricate names.
+- gm_source: Must be a real URL. If you cannot verify, set gm_name to null.
+- email: Always null. Do not guess or construct email addresses.
+- research_notes: 2-3 sentences. State WHERE rooms and GM were found, WHAT YEAR the GM source is from. No bullets.
+- Partial data is OK. null is always better than guessing.
+- Set rating and review_count to null.
+- Start with [ immediately.`;
 
 
 // ─── API HANDLER ────────────────────────────────────────────────────────────
@@ -193,53 +252,56 @@ export default async function handler(req, res) {
     const { mode, city, brand, group, scope, minAdr, count, exclude, hotels } = req.body;
 
     // ═════════════════════════════════════════════════════════════════════
-    // STEP 1: LIST — no web search, cheap and fast
-    // Returns hotel names from model's training data
+    // STEP 1: LIST — OpenAI GPT-4o-mini, no web search (~$0.001/batch)
     // ═════════════════════════════════════════════════════════════════════
     if (mode === 'list') {
       let listPrompt = "";
 
       if (scope === "chain" && (brand || group)) {
         if (brand && group) {
-          listPrompt = `List ALL known ${brand} hotels (part of ${group} group) worldwide. Include every property you know of.`;
+          listPrompt = `List ALL known ${brand} hotels (part of ${group} group) worldwide.`;
         } else if (brand) {
-          listPrompt = `List ALL known ${brand} hotels worldwide. Include every property you know of.`;
+          listPrompt = `List ALL known ${brand} hotels worldwide.`;
         } else {
-          listPrompt = `List ALL known hotels belonging to ${group} group worldwide. Include every brand within ${group}.`;
+          listPrompt = `List ALL known hotels belonging to ${group} group worldwide. Include every brand.`;
         }
       } else if (scope === "independent") {
         const adr = parseInt(minAdr) || 150;
         const market = city || "worldwide";
-        listPrompt = `List luxury independent hotels (NOT part of major chains) in ${market} with estimated ADR above $${adr}/night. Include members of Relais & Châteaux, Leading Hotels of the World, Small Luxury Hotels.`;
+        listPrompt = `List luxury independent hotels (NOT part of major chains) in ${market} with estimated ADR above $${adr}/night.`;
       } else {
         const market = city || "worldwide";
         listPrompt = `List all luxury and upscale hotels in ${market}.`;
       }
 
-      // Add market filter if specified
       if (city && scope === "chain") {
         listPrompt += `\nFilter to hotels in or near: ${city}.`;
       }
 
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      const r = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'gpt-4o-mini',
           max_tokens: 8000,
-          system: LIST_SYSTEM,
-          messages: [{ role: 'user', content: listPrompt }]
+          temperature: 0.3,
+          messages: [
+            { role: 'system', content: LIST_SYSTEM },
+            { role: 'user', content: listPrompt }
+          ]
         })
       });
 
       const data = await r.json();
-      if (!r.ok) return res.status(500).json({ error: data.error?.message || 'List API error' });
+      if (!r.ok) return res.status(r.status === 429 ? 503 : 500).json({
+        error: r.status === 429 ? 'API rate limited — please wait 30s and retry' : (data.error?.message || 'List API error')
+      });
 
-      const jsonStr = extractJSON(data.content, true);
+      const responseText = data.choices?.[0]?.message?.content || '';
+      const jsonStr = extractJSON(responseText, true);
       if (!jsonStr) {
         return res.status(200).json({ result: '[]', debug: 'No JSON from list step' });
       }
@@ -251,12 +313,11 @@ export default async function handler(req, res) {
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // STEP 2: VERIFY — web search for specific hotels
-    // Takes hotel names, verifies rooms + GM via web search
+    // STEP 2: VERIFY — Anthropic Claude Haiku, web search (~$0.02-0.05)
     // ═════════════════════════════════════════════════════════════════════
     if (mode === 'verify' && hotels && hotels.length > 0) {
-      const batch = hotels.slice(0, 5); // 5×2=10 searches, safe margin under 20
-      const maxUses = Math.min(20, batch.length * 2 + 5); // +5 buffer
+      const batch = hotels.slice(0, 5);
+      const maxUses = Math.min(20, batch.length * 2 + 5);
       const maxTokens = Math.min(8000, batch.length * 800 + 1500);
 
       const hotelList = batch.map((h, i) =>
@@ -267,12 +328,13 @@ export default async function handler(req, res) {
 
 ${hotelList}
 
-For each hotel search: 1) official site for rooms and address, 2) GM name from ${PREV_YEAR}-${CURRENT_YEAR}.
-Use the hotel's Booking.com listing name as hotel_name if different.
-Return JSON array with: hotel_name, brand, hotel_group, tier, city, country, address, website, rooms, gm_name, gm_first_name, gm_title, contact_confidence, research_notes.
-Use null for unfound fields. Start with [ immediately.`;
+For each hotel do 2 web searches:
+1. Official site for rooms and address
+2. GM name from ${PREV}-${YEAR} industry sources
 
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+Return JSON array with all required fields. Use null for anything unverified. Start with [.`;
+
+      const r = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -290,7 +352,9 @@ Use null for unfound fields. Start with [ immediately.`;
       });
 
       const data = await r.json();
-      if (!r.ok) return res.status(500).json({ error: data.error?.message || 'Verify API error' });
+      if (!r.ok) return res.status(r.status === 529 ? 503 : 500).json({
+        error: r.status === 529 ? 'API overloaded — please wait 30s and retry' : (data.error?.message || 'Verify API error')
+      });
 
       const jsonStr = extractJSON(data.content, true);
       if (!jsonStr) {
@@ -301,14 +365,13 @@ Use null for unfound fields. Start with [ immediately.`;
       let arr;
       try { arr = JSON.parse(jsonStr); } catch { return res.status(200).json({ result: '[]', debug: 'Verify parse failed' }); }
 
-      // Enrich with provider data + force group/brand from user's filter selection
+      // Build lookup from input batch for similarity matching
       const inputLookup = {};
       for (const h of batch) {
-        const key = (h.hotel_name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const key = normalizeName(h.hotel_name);
         inputLookup[key] = h;
       }
 
-      // Authoritative brand/group from user selection (e.g. user picked IHG > Kimpton)
       const authBrand = brand || null;
       const authGroup = group || null;
 
@@ -317,15 +380,24 @@ Use null for unfound fields. Start with [ immediately.`;
         const provider = inferProvider(effectiveBrand, p.hotel_name) || p.current_provider || null;
         const providerSrc = provider ? getProviderSource(provider) : null;
 
-        let email = p.email || null;
-        if (email && (email.includes('[email') || email.includes('email protected'))) email = null;
+        // Find matching input hotel for similarity check
+        let inputHotel = null;
+        const pKey = normalizeName(p.hotel_name);
+        for (const [k, v] of Object.entries(inputLookup)) {
+          if (jaccardSimilarity(k, pKey) > 0.5) { inputHotel = v; break; }
+        }
+
+        // Only override brand/group if hotel name closely matches input
+        const canOverride = inputHotel
+          ? shouldOverrideBrand(inputHotel.hotel_name, p.hotel_name, inputHotel.city, p.city)
+          : false;
 
         return {
           ...p,
-          // Force brand/group from user's filter selection (authoritative)
-          brand: authBrand || p.brand,
-          hotel_group: authGroup || p.hotel_group || "Independent",
-          email,
+          brand: canOverride ? (authBrand || p.brand) : p.brand,
+          hotel_group: canOverride ? (authGroup || p.hotel_group || "Independent") : (p.hotel_group || "Independent"),
+          email: null, // Always null — email verification is separate
+          last_verified_at: new Date().toISOString(),
           current_provider: provider,
           provider_source: p.provider_source || (providerSrc ? providerSrc.url : null),
           tier: p.tier || "Luxury",
