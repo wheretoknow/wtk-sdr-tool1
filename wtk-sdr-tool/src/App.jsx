@@ -946,6 +946,7 @@ export default function App() {
   const [tab, setTab] = useState("hotels");
   const [addHotelModal, setAddHotelModal] = useState(false);
   const [addHotelForm, setAddHotelForm] = useState({});
+  const [ctExpanded, setCtExpanded] = useState(null);
   // Geo state
   const [region, setRegion] = useState("Europe");
   const [country, setCountry] = useState("Austria");
@@ -1780,66 +1781,74 @@ export default function App() {
           /></ErrorBoundary>}
       {/* Contact Tracker page */}
       {tab === "contacts" && (() => {
-        const CADENCE = { 1: 3, 2: 7, 3: 7 };
-        const STAGE_MAP = { active: "new", emailed: "1st", followup: "2nd", dead: "lost" };
-        function mapStg(s) { return STAGE_MAP[s] || s || "new"; }
+        const CAD = [0, 0, 3, 7, 7]; // cadence: 1st->2nd=+3bd, 2nd->3rd=+7bd, 3rd->4th=+7bd
+        const SM = { active:"new", emailed:"1st", followup:"2nd", dead:"lost" };
+        const ms = s => SM[s] || s || "new";
         const EM = String.fromCodePoint(0x2014);
-        function toDateStr(d) { if (!d) return ""; const dt = new Date(d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),dd=String(dt.getDate()).padStart(2,"0"); return y+"-"+m+"-"+dd; }
-        function updateContactDate(tid, touchNum, dateVal) {
+        const SC = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+        function toInput(d) { if (!d) return ""; const dt=new Date(d),y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),dd=String(dt.getDate()).padStart(2,"0"); return y+"-"+m+"-"+dd; }
+        function fmtD(d) { if (!d) return null; const dt = new Date(d); const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; return fmtDateShort(d)+" ("+days[dt.getDay()]+")"; }
+
+        // Compute schedule for a tracking record
+        function computeSchedule(t) {
+          const actual = [null, t.d1, t.d2, t.d3, t.d4]; // 1-indexed
+          const due = [null, null, null, null, null];
+          // Compute due dates: due[n] = actual[n-1] (or due[n-1]) + CAD[n] business days
+          for (let n = 2; n <= 4; n++) {
+            const anchor = actual[n-1] || due[n-1];
+            if (anchor) due[n] = addBusinessDays(anchor, CAD[n]);
+          }
+          // Find next step
+          const isClosed = ["won","lost","demo","trial"].includes(ms(t.pipeline_stage));
+          let nextStep = null, nextDue = null;
+          if (!isClosed) {
+            for (let n = 1; n <= 4; n++) {
+              if (!actual[n]) { nextStep = n; nextDue = n === 1 ? null : due[n]; break; }
+            }
+          }
+          // Last actual
+          let lastN = 0;
+          for (let n = 4; n >= 1; n--) { if (actual[n]) { lastN = n; break; } }
+          const lastDate = lastN > 0 ? actual[lastN] : null;
+          const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
+          const daysUntilDue = nextDue ? Math.floor((new Date(nextDue) - Date.now()) / 86400000) : null;
+          let status = "ok";
+          if (isClosed || (lastN >= 4 && !nextStep)) status = "done";
+          else if (daysUntilDue !== null && daysUntilDue < 0) status = "overdue";
+          else if (daysUntilDue !== null && daysUntilDue <= 2) status = "due-soon";
+          return { actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status, isClosed };
+        }
+
+        function updateDate(tid, touchNum, dateVal) {
           const key = "d" + touchNum;
           const isoVal = dateVal ? new Date(dateVal + "T12:00:00").toISOString() : null;
           const t = tracking.find(x => x.id === tid);
           const done = [...((t && t.done) || [])];
           if (dateVal && !done.includes(touchNum)) { done.push(touchNum); done.sort((a,b)=>a-b); }
-          if (!dateVal) { const idx = done.indexOf(touchNum); if (idx >= 0) done.splice(idx,1); }
+          if (!dateVal) { const idx=done.indexOf(touchNum); if(idx>=0) done.splice(idx,1); }
           const updates = { [key]: isoVal, done };
-          // Auto-derive stage from highest done touch
-          const maxDone = done.length > 0 ? Math.max(...done) : 0;
-          const stageFromDone = {0:"new",1:"1st",2:"2nd",3:"3rd",4:"4th"};
-          if (stageFromDone[maxDone] && t) {
-            const cur = mapStg(t.pipeline_stage);
-            if (!["demo","trial","won","lost"].includes(cur)) {
-              updates.pipeline_stage = stageFromDone[maxDone];
-            }
+          const maxD = done.length > 0 ? Math.max(...done) : 0;
+          const stMap = {0:"new",1:"1st",2:"2nd",3:"3rd",4:"4th"};
+          if (t && stMap[maxD]) {
+            const cur = ms(t.pipeline_stage);
+            if (!["demo","trial","won","lost"].includes(cur)) updates.pipeline_stage = stMap[maxD];
           }
           updatePipeline(tid, updates);
         }
-        const rows = tracking.filter(t => t.d1).map(t => {
+
+        const rows = tracking.filter(t => t.d1 || (t.done && t.done.length > 0)).map(t => {
           const p = prospects.find(x => x.id === t.prospect_id);
-          const done = t.done || [];
-          const dates = { 1: t.d1, 2: t.d2, 3: t.d3, 4: t.d4 };
-          const lastN = done.length > 0 ? Math.max(...done) : 0;
-          const lastDate = lastN > 0 ? dates[lastN] : t.d1;
-          const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate)) / 86400000) : null;
-          const stage = mapStg(t.pipeline_stage);
-          const isClosed = ["won","lost"].includes(stage);
-          // Compute all due dates using business days
-          const d2Due = dates[1] ? addBusinessDays(dates[1], CADENCE[1]) : null;
-          const d3Due = (dates[2] || d2Due) ? addBusinessDays(dates[2] || d2Due, CADENCE[2]) : null;
-          const d4Due = (dates[3] || d3Due) ? addBusinessDays(dates[3] || d3Due, CADENCE[3]) : null;
-          const dueDates = { 2: d2Due, 3: d3Due, 4: d4Due };
-          let nextDue = null, nextLabel = null, daysUntilDue = null;
-          if (!isClosed && lastN >= 1 && lastN < 4) {
-            nextDue = dueDates[lastN + 1];
-            const ord = ["","","2nd","3rd","4th"];
-            nextLabel = ord[lastN + 1] + " follow-up";
-            if (nextDue) daysUntilDue = Math.floor((nextDue - Date.now()) / 86400000);
-          }
-          let status = "ok";
-          if (isClosed) status = "closed";
-          else if (lastN >= 4) status = "complete";
-          else if (daysUntilDue !== null) {
-            if (daysUntilDue < 0) status = "overdue";
-            else if (daysUntilDue <= 2) status = "due-soon";
-          }
-          return { t, p, dates, dueDates, lastN, daysSince, nextDue, nextLabel, daysUntilDue, status, stage };
+          const sched = computeSchedule(t);
+          const stage = ms(t.pipeline_stage);
+          return { t, p, stage, ...sched };
         }).sort((a, b) => {
-          const pri = { overdue: 0, "due-soon": 1, ok: 2, complete: 3, closed: 4 };
+          const pri = { overdue: 0, "due-soon": 1, ok: 2, done: 3 };
           return (pri[a.status]||2) - (pri[b.status]||2);
         });
+
         const overdueN = rows.filter(r => r.status === "overdue").length;
         const dueSoonN = rows.filter(r => r.status === "due-soon").length;
-        const SC = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+
         return (<>
           <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDateShort(new Date())}</div>
@@ -1848,39 +1857,42 @@ export default function App() {
             <span style={{fontSize:12,color:"var(--text3)"}}>{rows.length} contacts tracked</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
-            <th>Hotel</th><th>GM</th><th>Stage</th><th>1st Contact</th><th>2nd Due / Actual</th><th>3rd Due / Actual</th><th>4th Due / Actual</th><th>Days Since</th><th>Next Due</th><th>Countdown</th><th>Status</th><th>Owner</th>
+            <th style={{width:"22%"}}>Hotel</th><th>Stage</th><th>Last Contact</th><th>Next Due</th><th>Countdown</th><th>Status</th><th>Owner</th>
           </tr></thead><tbody>
-            {rows.map(({t, p, dates, dueDates, daysSince, nextDue, nextLabel, daysUntilDue, status, stage}) => {
-              function dateCell(n) {
-                const actual = dates[n];
-                const due = dueDates[n];
-                return (<td style={{padding:"2px 4px",position:"relative"}}>
-                  <input type="date" value={toDateStr(actual)} onChange={e => updateContactDate(t.id, n, e.target.value)}
-                    style={{fontSize:11,border:"1px solid transparent",borderRadius:3,padding:"2px 3px",background:"transparent",width:110,cursor:"pointer",color:actual?"var(--text)":"var(--text3)",fontFamily:"inherit"}}
-                    onFocus={e=>{e.target.style.borderColor="var(--accent)";e.target.style.background="white"}}
-                    onBlur={e=>{e.target.style.borderColor="transparent";e.target.style.background="transparent"}} />
-                  {!actual && due && <div style={{fontSize:9,color:"var(--text3)",marginTop:-2}}>due {fmtDateShort(due)}</div>}
-                </td>);
-              }
-              return (<tr key={t.id}>
-                <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:140}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
-                <td style={{fontSize:11,color:"var(--text2)"}}>{t.gm||EM}</td>
-                <td><span style={{fontSize:10,fontWeight:600,color:SC[stage]||"#6b7280"}}>{stage}</span></td>
-                <td style={{padding:"2px 4px"}}>
-                  <input type="date" value={toDateStr(dates[1])} onChange={e => updateContactDate(t.id, 1, e.target.value)}
-                    style={{fontSize:11,border:"1px solid transparent",borderRadius:3,padding:"2px 3px",background:"transparent",width:110,cursor:"pointer",color:dates[1]?"var(--text)":"var(--text3)",fontFamily:"inherit"}}
-                    onFocus={e=>{e.target.style.borderColor="var(--accent)";e.target.style.background="white"}}
-                    onBlur={e=>{e.target.style.borderColor="transparent";e.target.style.background="transparent"}} />
-                </td>
-                {dateCell(2)}
-                {dateCell(3)}
-                {dateCell(4)}
-                <td style={{fontSize:11,fontWeight:daysSince!==null&&daysSince>7?600:400,color:daysSince!==null&&daysSince>7?"var(--red)":"var(--text2)"}}>{daysSince!==null?daysSince+"d":EM}</td>
-                <td style={{fontSize:11}}>{nextDue ? <span>{fmtDateShort(nextDue)}{nextLabel?<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({nextLabel})</span>:null}</span> : <span style={{color:"var(--text3)"}}>{EM}</span>}</td>
-                <td style={{fontSize:11,fontWeight:600,color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text2)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+"d overdue":daysUntilDue===0?"Today!":daysUntilDue+"d left"):EM}</td>
-                <td>{status==="overdue"?<span className="ct-badge" style={{background:"#fef2f2",color:"#dc2626"}}>Overdue</span>:status==="due-soon"?<span className="ct-badge" style={{background:"#fffbeb",color:"#d97706"}}>Due soon</span>:status==="closed"?<span className="ct-badge" style={{background:"#f3f4f6",color:"#6b7280"}}>Closed</span>:status==="complete"?<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>Done</span>:<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>OK</span>}</td>
-                <td><span className="kb-sdr">{t.sdr||EM}</span></td>
-              </tr>);
+            {rows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
+              const isExp = ctExpanded === t.id;
+              const ordLabel = ["","1st","2nd","3rd","4th"];
+              return (<React.Fragment key={t.id}>
+                <tr style={{cursor:"pointer"}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
+                  <td>
+                    <div style={{fontWeight:600,color:"var(--accent)"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
+                    <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" "+String.fromCodePoint(0x00B7)+" "+t.gm:""}</div>
+                  </td>
+                  <td><span style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",textTransform:"uppercase"}}>{stage}</span></td>
+                  <td style={{fontSize:11,whiteSpace:"nowrap"}}>{lastDate ? <span>{fmtD(lastDate)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[lastN]})</span></span> : EM}</td>
+                  <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]} follow-up)</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?"Sequence complete":EM}</span>}</td>
+                  <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+" days overdue":daysUntilDue===0?"due today":"in "+daysUntilDue+" days"):EM}</td>
+                  <td>{status==="overdue"?<span className="ct-badge" style={{background:"#fef2f2",color:"#dc2626"}}>Overdue</span>:status==="due-soon"?<span className="ct-badge" style={{background:"#fffbeb",color:"#d97706"}}>Due soon</span>:status==="done"?<span className="ct-badge" style={{background:"#ecfdf5",color:"#059669"}}>Done</span>:<span className="ct-badge" style={{background:"#f0fdf4",color:"#059669"}}>OK</span>}</td>
+                  <td><span style={{fontSize:11,color:"var(--text3)"}}>{t.sdr||EM}</span></td>
+                </tr>
+                {isExp && <tr><td colSpan={7} style={{background:"#f9fafb",padding:"10px 16px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em"}}>Contact Plan</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                    {[1,2,3,4].map(n => {
+                      const hasActual = !!actual[n];
+                      const dueDate = due[n];
+                      return (<div key={n} style={{background:"white",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px"}}>
+                        <div style={{fontSize:10,fontWeight:700,color:SC[ordLabel[n].replace(/\s/g,"")]||"var(--text3)",textTransform:"uppercase",marginBottom:4}}>{ordLabel[n]} {n===1?"Contact":"Follow-up"}</div>
+                        <div style={{fontSize:10,color:"var(--text3)",marginBottom:3}}>Actual:</div>
+                        <input type="date" value={toInput(actual[n])} onChange={e=>updateDate(t.id,n,e.target.value)} onClick={e=>e.stopPropagation()}
+                          style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"3px 6px",width:"100%",fontFamily:"inherit",cursor:"pointer"}} />
+                        {n >= 2 && <div style={{fontSize:9,color:"var(--text3)",marginTop:4}}>Auto due: {dueDate ? fmtD(dueDate) : "needs "+ordLabel[n-1]}</div>}
+                        {hasActual && <div style={{fontSize:9,color:"var(--green)",marginTop:2}}>{String.fromCodePoint(0x2713)} Done</div>}
+                      </div>);
+                    })}
+                  </div>
+                </td></tr>}
+              </React.Fragment>);
             })}
           </tbody></table></div>
         </>);
