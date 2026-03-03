@@ -1054,8 +1054,8 @@ export default function App() {
         }
         const raw = parseJSON(data.result);
         if (!raw.length) {
-          const preview = (data.result || "").slice(0, 300);
-          setError("Parse failed. Model returned: " + preview);
+          const debugInfo = data.debug || (data.result || "").slice(0, 400);
+          setError("Parse failed. Debug: " + debugInfo);
         }
         for (const p of raw) {
           const key = normKey(p.hotel_name, p.city);
