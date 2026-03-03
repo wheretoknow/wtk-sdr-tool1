@@ -1639,8 +1639,8 @@ export default function App() {
 
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
-            {filteredP.length > 0 && <button className="cmd-btn" style={{background:"var(--accent)",color:"white",fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
-              <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
+            <button className="cmd-btn" style={{background:"var(--accent)",color:"white",fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
+            {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
               <input type="file" accept=".csv" style={{display:"none"}} onChange={importCSV}/>
