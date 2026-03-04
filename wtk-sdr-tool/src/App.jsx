@@ -1087,7 +1087,11 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       done.sort((a,b) => a - b);
       updates.done = done;
     }
-    // Moving backward: do NOT delete any contact dates (preserve history)
+    // Moving backward: if going back to "new", clear contact history
+    if (stageKey === "new") {
+      updates.d1 = null; updates.d2 = null; updates.d3 = null; updates.d4 = null;
+      updates.done = [];
+    }
     updatePipeline(tid, updates);
   }
 
@@ -2311,7 +2315,7 @@ export default function App() {
                   <td>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontSize:11,color:status==="done"?"var(--text3)":"var(--text)"}}>{nextAction}</span>
-                      {status !== "done" && emailAddr && <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();window.open(`mailto:${emailAddr}?subject=${encodeURIComponent("Guest feedback insights for "+t.hotel)}&body=${encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`)}`);}}>✉ Email</button>}
+                      {status !== "done" && emailAddr && <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);window.open(`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`);}}>✉ Email</button>}
                     </div>
                   </td>
                   <td><span style={{fontSize:11,color:"var(--text3)"}}>{t.sdr||EM}</span></td>
@@ -2419,7 +2423,7 @@ export default function App() {
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
                             <div>
-                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>setSelected(h.id)}>{h.hotel_name}</div>
+                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>{setSelected(h.id);setDupGroups([]);}}>{h.hotel_name}</div>
                               <div style={{fontSize:9,color:"var(--text3)",marginTop:1}}>{h.website ? new URL(h.website.startsWith("http")?h.website:"https://"+h.website).hostname.replace("www.","") : "\u2014"}</div>
                             </div>
                             <span>{h.city||"\u2014"}</span>
