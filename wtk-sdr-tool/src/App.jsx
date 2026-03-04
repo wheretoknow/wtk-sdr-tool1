@@ -1345,6 +1345,11 @@ export default function App() {
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(updates) }); } catch (e) { console.error(e); }
   }
 
+  async function updateProspect(pid, updates) {
+    setProspects(prev => prev.map(p => p.id === pid ? { ...p, ...updates } : p));
+    try { await sbFetch(`/prospects?id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(updates) }); } catch (e) { console.error("updateProspect:", e); }
+  }
+
   function openRejectModal(tid, stage, e) {
     if (e) e.stopPropagation();
     setRejectReason("");
@@ -1530,6 +1535,7 @@ export default function App() {
   const sel = selected ? prospects.find(p => p.id === selected) : null;
   const sdrs = ["all", ...new Set(prospects.map(p => p.sdr).filter(Boolean))];
   const filteredP = prospects.filter(p => {
+    if (leadStatusFilter.length > 0 && !leadStatusFilter.includes(p.lead_status || "Active")) return false;
     if (filterSdr !== "all" && p.sdr !== filterSdr) return false;
     if (filterCountry && (p.country||"") !== filterCountry) return false;
     if (filterCity && (p.city||"") !== filterCity) return false;
@@ -1557,6 +1563,7 @@ export default function App() {
   const filteredT = tracking.filter(t => {
     if (filterSdr !== "all" && t.sdr !== filterSdr) return false;
     const p = prospects.find(x => x.id === t.prospect_id);
+    if (leadStatusFilter.length > 0 && !leadStatusFilter.includes(p?.lead_status || "Active")) return false;
     if (outreachSearch) {
       const q = outreachSearch.toLowerCase();
       if (!(t.hotel||"").toLowerCase().includes(q) && !(t.gm||"").toLowerCase().includes(q)) return false;
@@ -1665,6 +1672,7 @@ export default function App() {
 
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
+            {["Active","Dormant","Closed"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
             <button className="cmd-btn" style={{background:"var(--accent)",color:"white",fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
@@ -1729,6 +1737,7 @@ export default function App() {
                   <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th style={{width:"8%"}}>Provider</th>
+                  <th style={{width:"5%"}}>Lead</th>
                   <th style={{width:"3%"}}></th>
                 </tr></thead>
                 <tbody>
@@ -1746,7 +1755,8 @@ export default function App() {
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:11}}>{getProvider(p)||"—"}</span></td>
-                      <td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
+                                            <td onClick={e=>e.stopPropagation()}><select style={{fontSize:10,border:"1px solid var(--border2)",borderRadius:3,padding:"1px 2px",background:"transparent",cursor:"pointer",color:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[p.lead_status||"Active"]}} value={p.lead_status||"Active"} onChange={e=>updateProspect(p.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></td>
+<td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
                     </tr>
                   );})}
                 </tbody>
@@ -2071,6 +2081,13 @@ export default function App() {
                 </div>
               );
             })()}
+            <div className="d-sec">
+              <div className="d-sec-title">Hotel Profile</div>
+              <div className="d-row"><span className="d-key">Lead Status</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.lead_status||"Active"} onChange={e=>updateProspect(sel.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></span></div>
+              <div className="d-row"><span className="d-key">Mgmt Company</span><span className="d-val"><input type="text" style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%"}} defaultValue={sel.management_company||""} placeholder="e.g. IHG Hotels & Resorts" onBlur={e=>{const v=e.target.value.trim();if(v!==(sel.management_company||""))updateProspect(sel.id,{management_company:v||null});}}/></span></div>
+              <div className="d-row"><span className="d-key">Operating Model</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.operating_model||""} onChange={e=>updateProspect(sel.id,{operating_model:e.target.value||null})}><option value="">Select...</option><option value="Owned">Owned</option><option value="Managed">Managed</option><option value="Franchised">Franchised</option><option value="Leased">Leased</option><option value="Other">Other</option></select></span></div>
+              {sel.operating_model==="Other"&&<div className="d-row"><span className="d-key">Model Note</span><span className="d-val"><input type="text" style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%"}} defaultValue={sel.operating_model_note||""} placeholder="Required for Other" onBlur={e=>{const v=e.target.value.trim();if(v.length<3){alert("Note required (min 3 chars)");return;}updateProspect(sel.id,{operating_model_note:v});}}/></span></div>}
+            </div>
             {(() => {
               const trk = tracking.find(x => x.prospect_id === sel.id);
               if (!trk) return null;
