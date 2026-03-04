@@ -1011,20 +1011,21 @@ class ErrorBoundary extends Component {
 
 function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touchToggle, updatePipeline, openRejectModal, reopenSequence, outreachView, setOutreachView, setDeleteConfirm, editingNote, setEditingNote, noteText, setNoteText, saveNote, prospects,
   outreachSearch, setOutreachSearch, outreachCountry, setOutreachCountry, outreachCity, setOutreachCity, outreachGroup, setOutreachGroup, outreachTier, setOutreachTier, outreachProvider, setOutreachProvider,
-  allCountries, allCities, allGroups, allProviders, updateIntention }) {
+  allCountries, allCities, allGroups, allProviders, updateIntention,
+  pipeStageFilter, setPipeStageFilter, pipeHasGM, setPipeHasGM, pipeHasEmail, setPipeHasEmail }) {
 
   const [dragOver, setDragOver] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null);
-  const hasActiveFilters = outreachSearch || outreachCountry || outreachCity || outreachGroup || outreachTier || outreachProvider;
-  function clearFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); }
+  const hasActiveFilters = outreachSearch || outreachCountry || outreachCity || outreachGroup || outreachTier || outreachProvider || pipeStageFilter || pipeHasGM || pipeHasEmail;
+  function clearFilters() { setOutreachSearch(""); setOutreachCountry(""); setOutreachCity(""); setOutreachGroup(""); setOutreachTier(""); setOutreachProvider(""); setPipeStageFilter(""); setPipeHasGM(false); setPipeHasEmail(false); }
   if (filteredT.length === 0 && !hasActiveFilters) return <div className="empty"><div className="empty-icon">{"\u{1F4EC}"}</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
 
   const STAGES = [
     { key: "new", label: "New", color: "#6b7280", bg: "#f9fafb" },
-    { key: "1st", label: "1st", color: "#2563eb", bg: "#eff6ff" },
-    { key: "2nd", label: "2nd", color: "#0891b2", bg: "#ecfeff" },
-    { key: "3rd", label: "3rd", color: "#7c3aed", bg: "#f5f3ff" },
-    { key: "4th", label: "4th", color: "#6d28d9", bg: "#ede9fe" },
+    { key: "1st", label: "Contact 1", color: "#2563eb", bg: "#eff6ff" },
+    { key: "2nd", label: "Contact 2", color: "#0891b2", bg: "#ecfeff" },
+    { key: "3rd", label: "Contact 3", color: "#7c3aed", bg: "#f5f3ff" },
+    { key: "4th", label: "Contact 4", color: "#6d28d9", bg: "#ede9fe" },
     { key: "demo", label: "Demo", color: "#c026d3", bg: "#fdf4ff" },
     { key: "trial", label: "Trial", color: "#ea580c", bg: "#fff7ed" },
     { key: "won", label: "Won", color: "#059669", bg: "#ecfdf5" },
@@ -1119,7 +1120,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
   const conv = (tWon+tLost) > 0 ? Math.round(tWon/(tWon+tLost)*100) : 0;
 
   return (<>
-    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10,flexWrap:"nowrap",overflowX:"auto"}}>
+    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap",padding:"12px 0 8px"}}>
       <input className="cmd-input" style={{minWidth:130,flexShrink:0}} placeholder={"\uD83D\uDD0D Search..."} value={outreachSearch} onChange={e=>setOutreachSearch(e.target.value)}/>
       <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={outreachCountry} onChange={e=>{setOutreachCountry(e.target.value);setOutreachCity("");}}>
         <option value="">All Countries</option>{allCountries.map(c=><option key={c} value={c}>{c}</option>)}
@@ -1127,7 +1128,13 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       <select className="cmd-input" style={{width:130,flexShrink:0}} value={outreachGroup} onChange={e=>setOutreachGroup(e.target.value)}>
         <option value="">All Groups</option>{allGroups.map(g=><option key={g} value={g}>{g.length>20?g.slice(0,18)+"\u2026":g}</option>)}
       </select>
-      {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearFilters}>{"\u2715"}</button>}
+      <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={pipeStageFilter} onChange={e=>setPipeStageFilter(e.target.value)}>
+        <option value="">All Stages</option>
+        {STAGES.map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>
+      <button className="act-btn" style={{fontSize:11,flexShrink:0,background:pipeHasGM?"var(--accent)":"transparent",color:pipeHasGM?"white":"var(--text2)",border:pipeHasGM?"1px solid var(--accent)":"1px solid var(--border)",borderRadius:4,padding:"4px 8px"}} onClick={()=>setPipeHasGM(v=>!v)}>Has GM</button>
+      <button className="act-btn" style={{fontSize:11,flexShrink:0,background:pipeHasEmail?"var(--accent)":"transparent",color:pipeHasEmail?"white":"var(--text2)",border:pipeHasEmail?"1px solid var(--accent)":"1px solid var(--border)",borderRadius:4,padding:"4px 8px"}} onClick={()=>setPipeHasEmail(v=>!v)}>Has Email</button>
+      {hasActiveFilters && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={clearFilters}>{"\u2715"} Clear</button>}
       <div style={{marginLeft:"auto"}} className="view-toggle">
         <button className={"view-btn " + (outreachView==="card"?"active":"")} onClick={()=>setOutreachView("card")}>{"\u25A4"} Kanban</button>
         <button className={"view-btn " + (outreachView==="list"?"active":"")} onClick={()=>setOutreachView("list")}>{"\u2630"} List</button>
@@ -1259,6 +1266,9 @@ export default function App() {
   const [outreachGroup, setOutreachGroup] = useState("");
   const [outreachTier, setOutreachTier] = useState("");
   const [outreachProvider, setOutreachProvider] = useState("");
+  const [pipeStageFilter, setPipeStageFilter] = useState("");
+  const [pipeHasGM, setPipeHasGM] = useState(false);
+  const [pipeHasEmail, setPipeHasEmail] = useState(false);
   const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
 
@@ -1877,6 +1887,13 @@ export default function App() {
       const prov = p ? (getProvider(p) || "Unknown") : "Unknown";
       if (prov !== outreachProvider) return false;
     }
+    if (pipeHasGM && !t.gm) return false;
+    if (pipeHasEmail && !t.email) return false;
+    if (pipeStageFilter) {
+      const s = t.pipeline_stage || "new";
+      const eff = s === "active" ? "new" : s === "emailed" ? "1st" : s === "followup" ? "2nd" : s === "dead" ? "lost" : s;
+      if (eff !== pipeStageFilter) return false;
+    }
     return true;
   });
   const contacted = tracking.filter(t => (t.done || []).length > 0).length;
@@ -2096,6 +2113,9 @@ export default function App() {
             outreachProvider={outreachProvider} setOutreachProvider={setOutreachProvider}
             allCountries={allCountries} allCities={allCities} allGroups={allGroups} allProviders={allProviders}
             updateIntention={updateIntention}
+            pipeStageFilter={pipeStageFilter} setPipeStageFilter={setPipeStageFilter}
+            pipeHasGM={pipeHasGM} setPipeHasGM={setPipeHasGM}
+            pipeHasEmail={pipeHasEmail} setPipeHasEmail={setPipeHasEmail}
           /></ErrorBoundary>}
       {/* Contact Tracker page */}
       {tab === "contacts" && (() => {
