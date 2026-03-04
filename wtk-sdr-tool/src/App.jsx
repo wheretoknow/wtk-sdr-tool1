@@ -181,9 +181,16 @@ function normalizeGroup(g) {
   if (s.includes('barcelo') || s.includes('barceló')) return 'Barceló';
   if (s.includes('pestana')) return 'Pestana';
   if (s.includes('iberostar')) return 'Iberostar';
-  return g.replace(/\s*(Hotels?( & Resorts?)?|International|Group|Collection|Worldwide|Ltd\.?|Inc\.?|plc|S\.?A\.?|GmbH)\s*/gi, '').trim() || g;
+  return g.replace(/\s*\b(Hotels?( & Resorts?)?|International|Worldwide|Ltd\.?|Inc\.?|plc|GmbH)\b\s*/gi, ' ').replace(/\s*\bS\.A\.?\b\s*/g, ' ').replace(/\s*\bGroup\b\s*/gi, ' ').trim() || g;
 }
 
+const BRAND_KEYWORDS = ["Fairmont","InterContinental","Kimpton","Holiday Inn Express","Holiday Inn","Crowne Plaza","Hotel Indigo","Vignette","Six Senses","Regent","Waldorf Astoria","Conrad","Canopy","Curio","DoubleTree","Embassy Suites","Hampton","Hilton Garden Inn","Hilton","Hyatt Regency","Grand Hyatt","Park Hyatt","Andaz","Thompson","Hyatt Centric","Hyatt Place","Alila","JW Marriott","W Hotels","Westin","Sheraton","St. Regis","Ritz-Carlton","Marriott","Courtyard","Residence Inn","Le Méridien","Le Meridien","Sofitel","Raffles","MGallery","Pullman","Novotel","Mercure","Swissôtel","Mövenpick","ibis Styles","ibis","Mandarin Oriental","Four Seasons","Kempinski","Shangri-La","Anantara","Avani","NH Collection","NH Hotels","Radisson Blu","Radisson","Park Plaza","Melia","Gran Melia","Innside","Rosewood","Aman","Peninsula","Langham","Belmond","Banyan Tree","Como","Oetker Collection"];
+function inferBrandFromName(name) {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  for (const b of BRAND_KEYWORDS) { if (n.includes(b.toLowerCase())) return b; }
+  return null;
+}
 function normalizeBrand(b) {
   if (!b) return null;
   const s = b.toLowerCase().replace(/\(.*?\)/g, '').trim();
@@ -567,7 +574,7 @@ const css = `
   tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #f9fafb; }
-  td { padding: 9px 10px; vertical-align: middle; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td { padding: 7px 8px; vertical-align: middle; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hotel-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hotel-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
   .gm-name { font-size: 13px; font-weight: 500; }
@@ -2057,18 +2064,18 @@ export default function App() {
               <div style={{overflowX:"auto"}}>
               <table>
                 <thead><tr>
-                  <th style={{width:"18%"}}>Hotel</th>
-                  <th style={{width:"7%"}}>City</th>
+                  <th style={{width:"17%"}}>Hotel</th>
+                  <th style={{width:"6%"}}>City</th>
                   <th style={{width:"7%"}}>Country</th>
-                  <th style={{width:"8%"}}>Group</th>
+                  <th style={{width:"7%"}}>Group</th>
                   <th style={{width:"9%"}}>Brand</th>
-                  <th style={{width:"11%"}}>GM</th>
+                  <th style={{width:"10%"}}>GM</th>
                   <th style={{width:"13%"}}>Email</th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
-                  <th style={{width:"8%"}}>Provider</th>
-                  <th style={{width:"5%"}}>Lead</th>
-                  <th style={{width:"3%"}}></th>
+                  <th style={{width:"7%"}}>Provider</th>
+                  <th style={{width:"7%"}}>Lead</th>
+                  <th style={{width:"4%"}}></th>
                 </tr></thead>
                 <tbody>
                   {pagedP.map(p=>{
@@ -2079,14 +2086,14 @@ export default function App() {
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.city||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
-                      <td><span className="cell-muted" style={{fontSize:12}}>{p.brand||"—"}</span></td>
+                      <td><span className="cell-muted" style={{fontSize:12}}>{normalizeBrand(p.brand) || inferBrandFromName(p.hotel_name) || "—"}</span></td>
                       <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title&&p.gm_title!=="General Manager"?p.gm_title:""}</div></td>
                       <td>{(()=>{const em=p.email; if(!em||em.includes('[email')||em.includes('email protected'))return<span className="cell-muted">—</span>; return<a className="email-link" href={`mailto:${em}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={em}>{em}</a>;})()}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:11}}>{getProvider(p)||"—"}</span></td>
-                                            <td onClick={e=>e.stopPropagation()}><select style={{fontSize:10,border:"1px solid var(--border2)",borderRadius:3,padding:"1px 2px",background:"transparent",cursor:"pointer",color:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[p.lead_status||"Active"]}} value={p.lead_status||"Active"} onChange={e=>updateProspect(p.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></td>
-<td onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
+                                            <td style={{overflow:"visible"}} onClick={e=>e.stopPropagation()}><select style={{fontSize:10,border:"1px solid var(--border2)",borderRadius:3,padding:"2px 4px",background:"transparent",cursor:"pointer",color:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[p.lead_status||"Active"]}} value={p.lead_status||"Active"} onChange={e=>updateProspect(p.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></td>
+<td style={{overflow:"visible",textOverflow:"clip"}} onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
                     </tr>
                   );})}
                 </tbody>
