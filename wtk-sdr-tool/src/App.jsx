@@ -283,6 +283,178 @@ const CHAIN_BRANDS = {
   "Relais & Châteaux": ["Relais & Châteaux"],
 };
 
+// ─── DUPLICATE FINDER UTILITIES ─────────────────────────────────────────────
+
+const CORPORATE_DOMAINS = new Set([
+  "marriott.com","hilton.com","hyatt.com","ihg.com","accor.com","all.accor.com",
+  "radissonhotels.com","wyndhamhotels.com","fourseasons.com","mandarinoriental.com",
+  "rosewoodhotels.com","aman.com","kempinski.com","shangri-la.com","jumeirah.com",
+  "peninsula.com","langhamhotels.com","dorchestercollection.com","belmond.com",
+  "minorhotels.com","anantara.com","centarahotelsresorts.com","dusit.com",
+  "bfrands.com","booking.com","expedia.com","tripadvisor.com","hotels.com",
+]);
+
+function canonicalizeUrl(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url.startsWith("http") ? url : "https://" + url);
+    return (u.hostname.replace(/^www\./, "") + u.pathname.replace(/\/+$/, "")).toLowerCase();
+  } catch { return null; }
+}
+
+function getUrlDomain(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url.startsWith("http") ? url : "https://" + url);
+    const h = u.hostname.replace(/^www\./, "").toLowerCase();
+    // Extract registrable domain (last two parts)
+    const parts = h.split(".");
+    return parts.length >= 2 ? parts.slice(-2).join(".") : h;
+  } catch { return null; }
+}
+
+function isHotelLevelUrl(url) {
+  if (!url) return false;
+  const domain = getUrlDomain(url);
+  if (!domain) return false;
+  if (!CORPORATE_DOMAINS.has(domain)) return true; // independent domain = hotel level
+  // Corporate domain: check if path is specific enough
+  try {
+    const u = new URL(url.startsWith("http") ? url : "https://" + url);
+    const path = u.pathname.replace(/\/+$/, "");
+    // Needs at least 2 path segments to be property-specific
+    const segments = path.split("/").filter(Boolean);
+    return segments.length >= 2;
+  } catch { return false; }
+}
+
+function normalizeAddr(addr) {
+  if (!addr) return "";
+  return addr.toLowerCase()
+    .replace(/\bstreet\b/g, "st").replace(/\broad\b/g, "rd").replace(/\bavenue\b/g, "ave")
+    .replace(/\bboulevard\b/g, "blvd").replace(/\bdrive\b/g, "dr").replace(/\blane\b/g, "ln")
+    .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function dedupNormName(s) {
+  return (s || "").toLowerCase()
+    .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(hotel|resort|spa|the|a|an|at|by|and|of|in|suites?)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+function dedupJaccard(a, b) {
+  const A = new Set(dedupNormName(a).split(" ").filter(Boolean));
+  const B = new Set(dedupNormName(b).split(" ").filter(Boolean));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+
+function findDuplicates(prospects) {
+  const groups = [];
+  const assigned = new Set();
+
+  // Index by city for blocking
+  const byCity = {};
+  for (const p of prospects) {
+    const city = (p.city || "unknown").toLowerCase().trim();
+    if (!byCity[city]) byCity[city] = [];
+    byCity[city].push(p);
+  }
+
+  // Pass 1: Hotel-level website match (High)
+  const byUrl = {};
+  for (const p of prospects) {
+    if (!isHotelLevelUrl(p.website)) continue;
+    const key = canonicalizeUrl(p.website);
+    if (!key) continue;
+    if (!byUrl[key]) byUrl[key] = [];
+    byUrl[key].push(p);
+  }
+  for (const [url, ps] of Object.entries(byUrl)) {
+    if (ps.length < 2) continue;
+    const ids = ps.map(p => p.id);
+    if (ids.some(id => assigned.has(id))) continue;
+    groups.push({ confidence: "High", reason: "Same hotel-level website", hotels: ps, key: url });
+    ids.forEach(id => assigned.add(id));
+  }
+
+  // Pass 2: Address match (High)
+  for (const [city, cityPs] of Object.entries(byCity)) {
+    const byAddr = {};
+    for (const p of cityPs) {
+      if (assigned.has(p.id)) continue;
+      const addr = normalizeAddr(p.address);
+      if (!addr || addr.length < 10) continue;
+      if (!byAddr[addr]) byAddr[addr] = [];
+      byAddr[addr].push(p);
+    }
+    for (const [addr, ps] of Object.entries(byAddr)) {
+      if (ps.length < 2) continue;
+      const ids = ps.map(p => p.id);
+      groups.push({ confidence: "High", reason: "Same normalized address", hotels: ps, key: addr });
+      ids.forEach(id => assigned.add(id));
+    }
+  }
+
+  // Pass 3: Name similarity within city (Medium)
+  for (const [city, cityPs] of Object.entries(byCity)) {
+    for (let i = 0; i < cityPs.length; i++) {
+      if (assigned.has(cityPs[i].id)) continue;
+      const cluster = [cityPs[i]];
+      for (let j = i + 1; j < cityPs.length; j++) {
+        if (assigned.has(cityPs[j].id)) continue;
+        const jac = dedupJaccard(cityPs[i].hotel_name, cityPs[j].hotel_name);
+        if (jac >= 0.70) {
+          cluster.push(cityPs[j]);
+        }
+      }
+      if (cluster.length >= 2) {
+        // Boost to High if rooms match too
+        const roomsMatch = cluster.every(p => p.rooms) &&
+          Math.abs((cluster[0].rooms || 0) - (cluster[1].rooms || 0)) <= 5;
+        groups.push({
+          confidence: roomsMatch ? "High" : "Medium",
+          reason: roomsMatch ? "Similar name + matching rooms" : "Similar hotel name (same city)",
+          hotels: cluster,
+          key: dedupNormName(cityPs[i].hotel_name),
+        });
+        cluster.forEach(p => assigned.add(p.id));
+      }
+    }
+  }
+
+  // Pass 4: Cross-city name similarity (Low, only very high threshold)
+  const allCities = Object.keys(byCity);
+  for (let ci = 0; ci < allCities.length; ci++) {
+    for (let cj = ci + 1; cj < allCities.length; cj++) {
+      for (const a of byCity[allCities[ci]]) {
+        if (assigned.has(a.id)) continue;
+        for (const b of byCity[allCities[cj]]) {
+          if (assigned.has(b.id)) continue;
+          if (dedupJaccard(a.hotel_name, b.hotel_name) >= 0.85) {
+            groups.push({
+              confidence: "Low",
+              reason: `Similar name across cities (${a.city} / ${b.city})`,
+              hotels: [a, b],
+              key: dedupNormName(a.hotel_name),
+            });
+            assigned.add(a.id);
+            assigned.add(b.id);
+          }
+        }
+      }
+    }
+  }
+
+  return groups.sort((a, b) => {
+    const order = { High: 0, Medium: 1, Low: 2 };
+    return (order[a.confidence] || 3) - (order[b.confidence] || 3);
+  });
+}
+
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -420,6 +592,17 @@ const css = `
   .del-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 2px 5px; border-radius: 3px; line-height: 1; }
   .del-btn:hover { color: var(--red); background: #fee2e2; }
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .dup-modal { background: var(--bg); border-radius: 12px; width: 90vw; max-width: 900px; max-height: 80vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .dup-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .dup-group-hdr { padding: 10px 14px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .dup-group-hdr:hover { background: var(--bg2); }
+  .dup-badge-high { background: #fee2e2; color: #dc2626; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .dup-badge-med { background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .dup-badge-low { background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .dup-hotels { padding: 8px 14px; border-top: 1px solid var(--border); }
+  .dup-hotel-row { display: grid; grid-template-columns: 1fr 80px 80px 60px 80px; gap: 8px; padding: 6px 0; font-size: 11px; border-bottom: 1px solid var(--border2); align-items: center; }
+  .dup-hotel-row:last-child { border-bottom: none; }
+  .dup-actions { display: flex; gap: 6px; padding: 8px 14px; border-top: 1px solid var(--border); background: var(--bg2); }
   .confirm-box { background: white; border-radius: 10px; padding: 24px 28px; max-width: 380px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }
   .confirm-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
   .confirm-sub { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; }
@@ -1036,6 +1219,8 @@ export default function App() {
   const [rejectOtherText, setRejectOtherText] = useState("");
   const [outreachView, setOutreachView] = useState("card");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [dupGroups, setDupGroups] = useState(null);
+  const [dupExpanded, setDupExpanded] = useState(new Set());
   const [cooldown, setCooldown] = useState(0); // seconds until next search allowed
   const lastBatchTime = useRef(0); // timestamp of last API batch completion
   const cooldownTimer = useRef(null);
@@ -1593,8 +1778,29 @@ export default function App() {
       for (let i = 0; i < imported.length; i += CHUNK) {
         await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(imported.slice(i, i+CHUNK)) });
       }
+      // Create tracking records so Pipeline + Contact Tracker show these hotels
+      // Skip hotels that already have tracking records (e.g. re-import)
+      const existingPids = new Set(tracking.map(t => t.prospect_id));
+      const needTracking = imported.filter(p => !existingPids.has(p.id));
+      const newTracking = needTracking.map(p => ({
+        id: uid(),
+        prospect_id: p.id,
+        hotel: p.hotel_name,
+        gm: p.gm_name || null,
+        email: p.email || null,
+        sdr: p.sdr || sdrName || "Unknown",
+        pipeline_stage: "lead",
+        done: [],
+        created_at: p.created_at || new Date().toISOString(),
+      }));
+      if (newTracking.length > 0) {
+        for (let i = 0; i < newTracking.length; i += CHUNK) {
+          await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newTracking.slice(i, i+CHUNK)) });
+        }
+      }
       setProspects(prev => [...prev, ...imported]);
-      alert(`✓ ${imported.length} hotels imported.`);
+      setTracking(prev => [...prev, ...newTracking]);
+      alert(`✓ ${imported.length} hotels imported with pipeline tracking.`);
     } catch(err) {
       alert("Import failed: " + err.message);
     }
@@ -1744,6 +1950,7 @@ export default function App() {
             {["Active","Dormant","Closed"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
             <button className="cmd-btn" style={{background:"var(--accent)",color:"white",fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
+            {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP);setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
               <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
@@ -2020,6 +2227,76 @@ export default function App() {
         </div>
       )}
 
+      {/* Duplicate Finder Modal */}
+      {dupGroups !== null && (
+        <div className="confirm-overlay" onClick={()=>setDupGroups(null)}>
+          <div className="dup-modal" onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700}}>Duplicate Finder</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
+                  {dupGroups.length === 0 ? "No duplicates found." : `${dupGroups.length} suspected duplicate group${dupGroups.length>1?"s":""} found`}
+                </div>
+              </div>
+              <button className="act-btn" onClick={()=>setDupGroups(null)} style={{fontSize:16,padding:"4px 10px"}}>✕</button>
+            </div>
+            {dupGroups.map((g, gi) => {
+              const isExp = dupExpanded.has(gi);
+              const badge = g.confidence === "High" ? "dup-badge-high" : g.confidence === "Medium" ? "dup-badge-med" : "dup-badge-low";
+              return (
+                <div key={gi} className="dup-group">
+                  <div className="dup-group-hdr" onClick={()=>setDupExpanded(prev=>{const n=new Set(prev);n.has(gi)?n.delete(gi):n.add(gi);return n;})}>
+                    <span>{isExp ? "▾" : "▸"}</span>
+                    <span className={badge}>{g.confidence}</span>
+                    <span style={{flex:1}}>{g.hotels.map(h=>h.hotel_name).join(" / ")}</span>
+                    <span style={{fontSize:10,color:"var(--text3)"}}>{g.hotels.length} hotels</span>
+                  </div>
+                  {isExp && (
+                    <>
+                      <div style={{padding:"4px 14px",fontSize:10,color:"var(--text3)",background:"var(--bg2)"}}>{g.reason}</div>
+                      <div className="dup-hotels">
+                        <div className="dup-hotel-row" style={{fontWeight:600,fontSize:10,color:"var(--text3)"}}>
+                          <span>Hotel</span><span>City</span><span>Brand</span><span>Rooms</span><span>Verified</span>
+                        </div>
+                        {g.hotels.map(h => (
+                          <div key={h.id} className="dup-hotel-row">
+                            <span style={{fontWeight:500}}>{h.hotel_name}</span>
+                            <span>{h.city||"\u2014"}</span>
+                            <span>{normalizeBrand(h.brand)||"\u2014"}</span>
+                            <span>{h.rooms||"\u2014"}</span>
+                            <span>{h.last_verified_at ? new Date(h.last_verified_at).toLocaleDateString() : "\u2014"}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="dup-actions">
+                        <button className="act-btn" style={{fontSize:11,background:"var(--green)",color:"white",border:"none",borderRadius:4,padding:"4px 10px",cursor:"pointer"}} onClick={()=>{
+                          // Keep the one with most data, delete others
+                          const scored = g.hotels.map(h => ({h, s: (h.website?2:0)+(h.rooms?2:0)+(h.gm_name?2:0)+(h.email?2:0)+(h.address?1:0)+((h.hotel_name||"").length>25?1:0)}));
+                          scored.sort((a,b)=>b.s-a.s);
+                          const keep = scored[0].h;
+                          const deleteIds = scored.slice(1).map(x=>x.h.id);
+                          if(!confirm(`Keep "${keep.hotel_name}" and delete ${deleteIds.length} duplicate(s)?`)) return;
+                          Promise.all(deleteIds.map(id=>sbFetch(`/prospects?id=eq.${id}`,{method:"DELETE"}).catch(()=>{}))).then(()=>{
+                            setProspects(prev=>prev.filter(p=>!deleteIds.includes(p.id)));
+                            setTracking(prev=>prev.filter(t=>!deleteIds.includes(t.prospect_id)));
+                            setDupGroups(prev=>prev.filter((_,i)=>i!==gi));
+                          });
+                        }}>Merge (keep best)</button>
+                        <button className="act-btn" style={{fontSize:11}} onClick={()=>setDupGroups(prev=>prev.filter((_,i)=>i!==gi))}>Not duplicate</button>
+                        <button className="act-btn" style={{fontSize:11,color:"var(--text3)"}} onClick={()=>{
+                          const keep = g.hotels[0];
+                          setSelected(keep);
+                          setDupGroups(null);
+                        }}>View details</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {/* Add Hotel Modal */}
       {addHotelModal && (
         <div className="modal-overlay" onClick={()=>setAddHotelModal(false)}>
