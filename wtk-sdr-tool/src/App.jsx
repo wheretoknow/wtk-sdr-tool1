@@ -567,8 +567,8 @@ const css = `
   tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #f9fafb; }
-  td { padding: 9px 10px; vertical-align: middle; color: var(--text); }
-  .hotel-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  td { padding: 9px 10px; vertical-align: middle; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hotel-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hotel-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
   .gm-name { font-size: 13px; font-weight: 500; }
   .gm-title-sm { font-size: 11px; color: var(--text3); margin-top: 1px; }
@@ -1993,8 +1993,8 @@ export default function App() {
 
           {tab==="hotels" && (
             <div className="table-card">
-              <div style={{display:"flex",gap:6,alignItems:"center",padding:"10px 0 6px",flexWrap:"nowrap",overflowX:"auto"}}>
-                <input className="cmd-input" style={{minWidth:160,flexShrink:0}} placeholder="🔍 Hotel or person..." value={filterSearch} onChange={e=>{setFilterSearch(e.target.value);setHotelsPage(1);}}/>
+              <div style={{display:"flex",gap:8,alignItems:"center",padding:"12px 0 8px",flexWrap:"wrap",overflowX:"auto"}}>
+                <input className="cmd-input" style={{minWidth:150,flexShrink:0}} placeholder="🔍 Hotel or person..." value={filterSearch} onChange={e=>{setFilterSearch(e.target.value);setHotelsPage(1);}}/>
                 <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setFilterCity("");setHotelsPage(1);}}>
                   <option value="">All Countries</option>
                   {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
@@ -2032,15 +2032,15 @@ export default function App() {
               <div style={{overflowX:"auto"}}>
               <table>
                 <thead><tr>
-                  <th style={{width:"20%"}}>Hotel</th>
-                  <th style={{width:"8%"}}>City</th>
-                  <th style={{width:"8%"}}>Country</th>
-                  <th style={{width:"10%"}}>Group</th>
-                  <th style={{width:"7%"}}>Brand</th>
-                  <th style={{width:"12%"}}>GM</th>
-                  <th style={{width:"15%"}}>Email</th>
-                  <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
-                  <th className="sortable" style={{width:"6%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
+                  <th style={{width:"18%"}}>Hotel</th>
+                  <th style={{width:"7%"}}>City</th>
+                  <th style={{width:"7%"}}>Country</th>
+                  <th style={{width:"8%"}}>Group</th>
+                  <th style={{width:"9%"}}>Brand</th>
+                  <th style={{width:"11%"}}>GM</th>
+                  <th style={{width:"13%"}}>Email</th>
+                  <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
+                  <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th style={{width:"8%"}}>Provider</th>
                   <th style={{width:"5%"}}>Lead</th>
                   <th style={{width:"3%"}}></th>
@@ -2283,8 +2283,8 @@ export default function App() {
                     for(let i=0;i<allDeleteIds.length;i+=CHUNK){
                       const batch=allDeleteIds.slice(i,i+CHUNK);
                       const ids=batch.map(id=>`"${id}"`).join(",");
+                      await sbFetch(`/tracking?prospect_id=in.(${ids})`,{method:"DELETE",prefer:"return=minimal"}).catch(()=>{});
                       await sbFetch(`/prospects?id=in.(${ids})`,{method:"DELETE",prefer:"return=minimal"});
-                      await sbFetch(`/tracking?prospect_id=in.(${ids})`,{method:"DELETE",prefer:"return=minimal"});
                     }
                     setProspects(prev=>prev.filter(p=>!allDeleteIds.includes(p.id)));
                     setTracking(prev=>prev.filter(t=>!allDeleteIds.includes(t.prospect_id)));
@@ -2316,7 +2316,7 @@ export default function App() {
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
                             <div>
-                              <div style={{fontWeight:500}}>{h.hotel_name}</div>
+                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>setSelected(h)}>{h.hotel_name}</div>
                               <div style={{fontSize:9,color:"var(--text3)",marginTop:1}}>{h.website ? new URL(h.website.startsWith("http")?h.website:"https://"+h.website).hostname.replace("www.","") : "\u2014"}</div>
                             </div>
                             <span>{h.city||"\u2014"}</span>
@@ -2327,21 +2327,24 @@ export default function App() {
                               <div style={{fontSize:10}}>{h.gm_name||"\u2014"}</div>
                               <div style={{fontSize:9,color:"var(--text3)"}}>{h.email||""}</div>
                             </div>
-                            <button className="dup-keep-btn" onClick={()=>{
+                            <button className="dup-keep-btn" onClick={async()=>{
                               const deleteIds = g.hotels.filter(x=>x.id!==h.id).map(x=>x.id);
                               if(!confirm(`Keep "${h.hotel_name}" and delete ${deleteIds.length} other(s)?`)) return;
-                              Promise.all(deleteIds.map(id=>sbFetch(`/prospects?id=eq.${id}`,{method:"DELETE"}).catch(()=>{}))).then(()=>{
+                              try{
+                                for(const id of deleteIds){
+                                  await sbFetch(`/tracking?prospect_id=eq.${id}`,{method:"DELETE",prefer:"return=minimal"}).catch(()=>{});
+                                  await sbFetch(`/prospects?id=eq.${id}`,{method:"DELETE",prefer:"return=minimal"});
+                                }
                                 setProspects(prev=>prev.filter(p=>!deleteIds.includes(p.id)));
                                 setTracking(prev=>prev.filter(t=>!deleteIds.includes(t.prospect_id)));
                                 setDupGroups(prev=>prev.filter((_,i)=>i!==gi));
-                              });
+                              }catch(e){alert("Delete error: "+e.message);}
                             }}>Keep</button>
                           </div>
                         ))}
                       </div>
                       <div className="dup-actions">
                         <button className="act-btn" style={{fontSize:11}} onClick={()=>setDupGroups(prev=>prev.filter((_,i)=>i!==gi))}>Not duplicate</button>
-                        <button className="act-btn" style={{fontSize:11,color:"var(--text3)"}} onClick={()=>{setSelected(g.hotels[0]);setDupGroups(null);}}>View details</button>
                       </div>
                     </>
                   )}
