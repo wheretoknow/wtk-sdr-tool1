@@ -2210,13 +2210,17 @@ export default function App() {
 
         const overdueN = rows.filter(r => r.status === "overdue").length;
         const dueSoonN = rows.filter(r => r.status === "due-soon").length;
+        const doneN = rows.filter(r => r.status === "done").length;
+        const activeN = rows.filter(r => r.status === "ok" || r.status === "due-soon").length;
 
         return (<>
-          <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",padding:"12px 0 8px",flexWrap:"wrap"}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDateShort(new Date())}</div>
-            {overdueN > 0 && <span className="ct-badge" style={{background:"#fef2f2",color:"#dc2626"}}>{overdueN} Overdue</span>}
-            {dueSoonN > 0 && <span className="ct-badge" style={{background:"#fffbeb",color:"#d97706"}}>{dueSoonN} Due soon</span>}
-            <span style={{fontSize:12,color:"var(--text3)"}}>{rows.length} contacts tracked</span>
+            <span style={{fontSize:12,color:"var(--text3)",padding:"4px 10px",background:"var(--bg)",borderRadius:5,border:"1px solid var(--border)"}}>{rows.length} tracked</span>
+            {overdueN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fef2f2",color:"#dc2626",borderRadius:5,border:"1px solid #fecaca"}}>{overdueN} Overdue</span>}
+            {dueSoonN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fffbeb",color:"#d97706",borderRadius:5,border:"1px solid #fde68a"}}>{dueSoonN} Due soon</span>}
+            <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{activeN} Active</span>
+            <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
             <th style={{width:"22%"}}>Hotel</th><th>Stage</th><th>Last Contact</th><th>Next Due</th><th>Countdown</th><th>Status</th><th>Owner</th>
@@ -2227,7 +2231,7 @@ export default function App() {
               return (<Fragment key={t.id}>
                 <tr style={{cursor:"pointer"}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
                   <td>
-                    <div style={{fontWeight:600,color:"var(--accent)"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
+                    <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
                     <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" "+String.fromCodePoint(0x00B7)+" "+t.gm:""}</div>
                   </td>
                   <td><span style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",textTransform:"uppercase"}}>{stage}</span></td>
