@@ -1727,7 +1727,7 @@ export default function App() {
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
-              <input type="file" accept=".csv" style={{display:"none"}} onChange={importCSV}/>
+              <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
             </label>
             <span className="record-count">{loading?"Loading...":`${filteredP.length} prospects in shared database`}</span>
           </div>
