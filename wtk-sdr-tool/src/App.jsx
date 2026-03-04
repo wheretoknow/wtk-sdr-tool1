@@ -497,7 +497,7 @@ const css = `
 
   .topnav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 10; }
   .nav-left { display: flex; align-items: center; gap: 10px; }
-  .wtk-icon { width: 40px; height: 28px; flex-shrink: 0; background: url("data:image/png;base64,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") center/contain no-repeat; }
+  .wtk-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; font-weight: 800; background: linear-gradient(135deg, #6db3c4, #8b5fbf, #e8a444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
   .nav-brand { font-size: 13px; font-weight: 600; color: var(--text); }
   .nav-sep { width: 1px; height: 20px; background: var(--border); }
   .nav-page { font-size: 13px; color: var(--text3); }
@@ -621,7 +621,7 @@ const css = `
   .dup-badge-med { background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
   .dup-badge-low { background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
   .dup-hotels { padding: 8px 14px; border-top: 1px solid var(--border); }
-  .dup-hotel-row { display: grid; grid-template-columns: 1fr 80px 80px 70px 70px 140px 60px; gap: 6px; padding: 6px 0; font-size: 11px; border-bottom: 1px solid var(--border2); align-items: center; }
+  .dup-hotel-row { display: grid; grid-template-columns: 1.5fr 80px 80px 60px 60px 1fr 70px; gap: 6px; padding: 6px 0; font-size: 11px; border-bottom: 1px solid var(--border2); align-items: center; }
   .dup-hotel-row:last-child { border-bottom: none; }
   .dup-keep-btn { background: var(--green); color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 600; cursor: pointer; }
   .dup-keep-btn:hover { opacity: 0.85; }
@@ -1273,6 +1273,9 @@ export default function App() {
   const [pipeStageFilter, setPipeStageFilter] = useState("");
   const [pipeHasGM, setPipeHasGM] = useState(false);
   const [pipeHasEmail, setPipeHasEmail] = useState(false);
+  const [ctOwnerFilter, setCtOwnerFilter] = useState("");
+  const [ctDueFilter, setCtDueFilter] = useState("");
+  const [ctPriFilter, setCtPriFilter] = useState("");
   const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
 
@@ -1914,7 +1917,7 @@ export default function App() {
       <div className="app">
         <nav className="topnav">
           <div className="nav-left">
-            <div className="wtk-icon"></div>
+            <div className="wtk-icon">W</div>
             <span className="nav-brand">Where to know</span>
             <div className="nav-sep"/>
             <span className="nav-page">SDR Intelligence</span>
@@ -2213,6 +2216,26 @@ export default function App() {
         const doneN = rows.filter(r => r.status === "done").length;
         const activeN = rows.filter(r => r.status === "ok" || r.status === "due-soon").length;
 
+        // Apply CT filters
+        const ctSdrs = [...new Set(rows.map(r => r.t.sdr).filter(Boolean))].sort();
+        const filteredRows = rows.filter(r => {
+          if (ctOwnerFilter && (r.t.sdr || "Unknown") !== ctOwnerFilter) return false;
+          if (ctDueFilter) {
+            const d = r.daysUntilDue;
+            if (ctDueFilter === "overdue" && !(d !== null && d < 0)) return false;
+            if (ctDueFilter === "today" && d !== 0) return false;
+            if (ctDueFilter === "3days" && !(d !== null && d >= 0 && d <= 3)) return false;
+            if (ctDueFilter === "7days" && !(d !== null && d >= 0 && d <= 7)) return false;
+            if (ctDueFilter === "none" && d !== null) return false;
+          }
+          if (ctPriFilter) {
+            const pri = r.status === "done" ? "done" : r.status === "overdue" ? "high" : (r.daysUntilDue !== null && r.daysUntilDue <= 2) ? "high" : (r.daysUntilDue !== null && r.daysUntilDue <= 5) ? "medium" : "low";
+            if (pri !== ctPriFilter) return false;
+          }
+          return true;
+        });
+        const ctHasFilters = ctOwnerFilter || ctDueFilter || ctPriFilter;
+
         return (<>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"12px 0 8px",flexWrap:"wrap"}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDateShort(new Date())}</div>
@@ -2222,10 +2245,32 @@ export default function App() {
             <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{activeN} Active</span>
             <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>
           </div>
+          <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0",flexWrap:"wrap"}}>
+            <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctOwnerFilter} onChange={e=>setCtOwnerFilter(e.target.value)}>
+              <option value="">All Owners</option>{ctSdrs.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={ctDueFilter} onChange={e=>setCtDueFilter(e.target.value)}>
+              <option value="">All Due Dates</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due today</option>
+              <option value="3days">Next 3 days</option>
+              <option value="7days">Next 7 days</option>
+              <option value="none">No due date</option>
+            </select>
+            <select className="cmd-input" style={{minWidth:80,flexShrink:0}} value={ctPriFilter} onChange={e=>setCtPriFilter(e.target.value)}>
+              <option value="">All Priority</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="done">Done</option>
+            </select>
+            {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");}}>✕ Clear</button>}
+            <span style={{marginLeft:"auto",fontSize:12,color:"var(--text3)",fontWeight:600}}>{filteredRows.length} / {rows.length}</span>
+          </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
             <th style={{width:"22%"}}>Hotel</th><th>Stage</th><th>Last Contact</th><th>Next Due</th><th>Countdown</th><th>Priority</th><th>Next Action</th><th>Owner</th>
           </tr></thead><tbody>
-            {rows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
+            {filteredRows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
               const isExp = ctExpanded === t.id;
               const ordLabel = ["","1st","2nd","3rd","4th"];
               // Priority logic
