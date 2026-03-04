@@ -109,6 +109,44 @@ function shouldOverrideBrand(inputName, verifiedName, inputCity, verifiedCity) {
   return cityMatch ? jac >= 0.6 : jac >= 0.75;
 }
 
+// ─── FUZZY DEDUP (within verify batch) ───────────────────────────────────────
+
+function pickBetter(a, b) {
+  const score = (x) => {
+    let s = 0;
+    if (x.website) s += 2;
+    if (Number.isFinite(x.rooms)) s += 2;
+    if (x.rooms_source) s += 1;
+    if (x.gm_name) s += 2;
+    if (x.gm_source) s += 1;
+    if (x.address) s += 1;
+    if ((x.hotel_name || "").length > 25) s += 1;
+    return s;
+  };
+  return score(b) > score(a) ? b : a;
+}
+
+function dedupeHotelsFuzzy(list) {
+  const out = [];
+  for (const h of (list || [])) {
+    let merged = false;
+    for (let i = 0; i < out.length; i++) {
+      const e = out[i];
+      const nameSim = jaccardSimilarity(h.hotel_name, e.hotel_name);
+      const cityKnown = !!h.city && !!e.city;
+      const sameCity = cityKnown ? normalizeName(h.city) === normalizeName(e.city) : false;
+      const isSame = (sameCity && nameSim >= 0.65) || (!sameCity && nameSim >= 0.80);
+      if (isSame) {
+        out[i] = pickBetter(e, h);
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) out.push(h);
+  }
+  return out;
+}
+
 // ─── JSON EXTRACTION (handles Anthropic content blocks) ─────────────────────
 
 function extractJSON(content, expectArray = true) {
@@ -201,6 +239,8 @@ RULES:
 - Use the property's Booking.com listing name if you know it.
 - When a city is specified, only include hotels in that city or metro area.
 - When no city is specified, include worldwide but cap at 40 results.
+- Do NOT output name variants for the same property. If two names look like the same hotel, output ONLY ONE (prefer the official brand full name).
+- Avoid generic short names (e.g. "Phoenix Hotel") unless it is the confirmed official listing name.
 - Start with [ immediately. End with ]. Nothing else.`;
 
 const VERIFY_SYSTEM = `Hotel research API. Output ONLY a JSON array. Start with [ immediately.
@@ -348,6 +388,9 @@ Return JSON array with all required fields. Use null for anything unverified. St
 
       let arr;
       try { arr = JSON.parse(jsonStr); } catch { return res.status(200).json({ result: '[]', debug: 'Verify parse failed' }); }
+
+      // Fuzzy dedup within batch
+      arr = dedupeHotelsFuzzy(arr);
 
       // Build input lookup for similarity matching
       const inputLookup = {};
