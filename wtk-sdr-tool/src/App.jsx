@@ -748,8 +748,8 @@ const css = `
 
 
   /* Drawer */
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 40; }
-  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 560px; background: var(--surface); border-left: 1px solid var(--border); z-index: 50; overflow-y: auto; padding: 28px 28px 40px; box-shadow: -8px 0 24px rgba(0,0,0,0.08); animation: slideIn 0.2s ease; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 70; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 560px; background: var(--surface); border-left: 1px solid var(--border); z-index: 80; overflow-y: auto; padding: 28px 28px 40px; box-shadow: -8px 0 24px rgba(0,0,0,0.08); animation: slideIn 0.2s ease; }
   @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
   .drawer-close { position: absolute; top: 16px; right: 16px; width: 28px; height: 28px; border: none; background: var(--border); border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--text2); display: flex; align-items: center; justify-content: center; }
   .drawer-hotel { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px; padding-right: 40px; }
@@ -2289,7 +2289,7 @@ export default function App() {
             <span style={{marginLeft:"auto",fontSize:12,color:"var(--text3)",fontWeight:600}}>{filteredRows.length} / {rows.length}</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
-            <th style={{width:"22%"}}>Hotel</th><th>Stage</th><th>Last Contact</th><th>Next Due</th><th>Countdown</th><th>Priority</th><th>Next Action</th><th>Owner</th>
+            <th style={{width:"20%"}}>Hotel</th><th style={{width:"9%"}}>Stage</th><th style={{width:"14%"}}>Last Contact</th><th style={{width:"16%"}}>Next Due</th><th style={{width:"9%"}}>Countdown</th><th style={{width:"7%"}}>Priority</th><th style={{width:"17%"}}>Next Action</th><th style={{width:"8%"}}>Owner</th>
           </tr></thead><tbody>
             {filteredRows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
               const isExp = ctExpanded === t.id;
@@ -2315,7 +2315,7 @@ export default function App() {
                   <td>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontSize:11,color:status==="done"?"var(--text3)":"var(--text)"}}>{nextAction}</span>
-                      {status !== "done" && emailAddr && <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);const webUrl=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;const t0=Date.now();window.location.href=`ms-outlook://compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;setTimeout(()=>{if(Date.now()-t0<1500)window.open(webUrl);},1200);}}>✉ Email</button>}
+                      {emailAddr && <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);const webUrl=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;const t0=Date.now();window.location.href=`ms-outlook://compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;setTimeout(()=>{if(Date.now()-t0<1500)window.open(webUrl);},1200);}}>✉ Email</button>}
                     </div>
                   </td>
                   <td><span style={{fontSize:11,color:"var(--text3)"}}>{t.sdr||EM}</span></td>
@@ -2423,7 +2423,7 @@ export default function App() {
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
                             <div>
-                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>{setDupGroups(null);setSelected(h.id);}}>{h.hotel_name}</div>
+                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>setSelected(h.id)}>{h.hotel_name}</div>
                               <div style={{fontSize:9,color:"var(--text3)",marginTop:1}}>{h.website ? new URL(h.website.startsWith("http")?h.website:"https://"+h.website).hostname.replace("www.","") : "\u2014"}</div>
                             </div>
                             <span>{h.city||"\u2014"}</span>
