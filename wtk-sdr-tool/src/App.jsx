@@ -950,6 +950,7 @@ export default function App() {
   const [addHotelModal, setAddHotelModal] = useState(false);
   const [addHotelForm, setAddHotelForm] = useState({});
   const [ctExpanded, setCtExpanded] = useState(null);
+  const [leadStatusFilter, setLeadStatusFilter] = useState(["Active"]);
   // Geo state
   const [region, setRegion] = useState("Europe");
   const [country, setCountry] = useState("Austria");
