@@ -566,7 +566,7 @@ const css = `
 
   .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  thead th { background: var(--bg); padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  thead th { background: var(--bg); padding: 8px 8px; text-align: left; font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap; }
   thead th.sortable { cursor: pointer; user-select: none; }
   thead th.sortable:hover { color: var(--accent); }
   .sort-arrow { font-size: 10px; margin-left: 2px; opacity: 0.4; }
@@ -2006,14 +2006,17 @@ export default function App() {
 
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
+            <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
             {["Active","Dormant","Closed"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
+            <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
             <button className="export-btn" style={{fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
-            {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP);setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
               <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
             </label>
+            <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
+            {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP);setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
             <span className="record-count">{loading?"Loading...":`${filteredP.length} prospects in shared database`}</span>
           </div>
 
@@ -2261,8 +2264,8 @@ export default function App() {
             {overdueN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fef2f2",color:"#dc2626",borderRadius:5,border:"1px solid #fecaca"}}>{overdueN} Overdue</span>}
             {dueTodayN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fff7ed",color:"#ea580c",borderRadius:5,border:"1px solid #fed7aa"}}>{dueTodayN} Due today</span>}
             {dueSoonN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fffbeb",color:"#d97706",borderRadius:5,border:"1px solid #fde68a"}}>{dueSoonN} Due soon</span>}
-            <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{upcomingN} Upcoming</span>
-            <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>
+            {upcomingN > 0 && <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{upcomingN} Upcoming</span>}
+            {doneN > 0 && <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0",flexWrap:"wrap"}}>
             <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctOwnerFilter} onChange={e=>setCtOwnerFilter(e.target.value)}>
