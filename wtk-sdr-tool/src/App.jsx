@@ -364,9 +364,27 @@ function findDuplicates(prospects) {
     byCity[city].push(p);
   }
 
-  // Pass 1: Hotel-level website match (High)
+  // Pass 0: Identical — exact normalized name + same city (safe to auto-merge)
+  for (const [city, cityPs] of Object.entries(byCity)) {
+    const byName = {};
+    for (const p of cityPs) {
+      if (assigned.has(p.id)) continue;
+      const key = dedupNormName(p.hotel_name);
+      if (!key) continue;
+      if (!byName[key]) byName[key] = [];
+      byName[key].push(p);
+    }
+    for (const [name, ps] of Object.entries(byName)) {
+      if (ps.length < 2) continue;
+      groups.push({ confidence: "Identical", reason: "Exact same name (same city)", hotels: ps, key: name });
+      ps.forEach(p => assigned.add(p.id));
+    }
+  }
+
+  // Pass 1: Identical — same hotel-level website
   const byUrl = {};
   for (const p of prospects) {
+    if (assigned.has(p.id)) continue;
     if (!isHotelLevelUrl(p.website)) continue;
     const key = canonicalizeUrl(p.website);
     if (!key) continue;
@@ -377,11 +395,11 @@ function findDuplicates(prospects) {
     if (ps.length < 2) continue;
     const ids = ps.map(p => p.id);
     if (ids.some(id => assigned.has(id))) continue;
-    groups.push({ confidence: "High", reason: "Same hotel-level website", hotels: ps, key: url });
+    groups.push({ confidence: "Identical", reason: "Same hotel-level website", hotels: ps, key: url });
     ids.forEach(id => assigned.add(id));
   }
 
-  // Pass 2: Address match (High)
+  // Pass 2: High — same normalized address (same city)
   for (const [city, cityPs] of Object.entries(byCity)) {
     const byAddr = {};
     for (const p of cityPs) {
@@ -399,7 +417,8 @@ function findDuplicates(prospects) {
     }
   }
 
-  // Pass 3: Name similarity within city (Medium)
+  // Pass 3: High — very similar name (>=0.80) + same city + rooms match
+  // Medium — similar name (>=0.70) + same city
   for (const [city, cityPs] of Object.entries(byCity)) {
     for (let i = 0; i < cityPs.length; i++) {
       if (assigned.has(cityPs[i].id)) continue;
@@ -412,12 +431,13 @@ function findDuplicates(prospects) {
         }
       }
       if (cluster.length >= 2) {
-        // Boost to High if rooms match too
+        const jac = dedupJaccard(cluster[0].hotel_name, cluster[1].hotel_name);
         const roomsMatch = cluster.every(p => p.rooms) &&
           Math.abs((cluster[0].rooms || 0) - (cluster[1].rooms || 0)) <= 5;
+        const isHigh = jac >= 0.80 && roomsMatch;
         groups.push({
-          confidence: roomsMatch ? "High" : "Medium",
-          reason: roomsMatch ? "Similar name + matching rooms" : "Similar hotel name (same city)",
+          confidence: isHigh ? "High" : "Medium",
+          reason: isHigh ? "Very similar name + matching rooms" : "Similar hotel name (same city)",
           hotels: cluster,
           key: dedupNormName(cityPs[i].hotel_name),
         });
@@ -426,7 +446,7 @@ function findDuplicates(prospects) {
     }
   }
 
-  // Pass 4: Cross-city name similarity (Low, only very high threshold)
+  // Pass 4: Low — cross-city name similarity
   const allCities = Object.keys(byCity);
   for (let ci = 0; ci < allCities.length; ci++) {
     for (let cj = ci + 1; cj < allCities.length; cj++) {
@@ -450,8 +470,8 @@ function findDuplicates(prospects) {
   }
 
   return groups.sort((a, b) => {
-    const order = { High: 0, Medium: 1, Low: 2 };
-    return (order[a.confidence] || 3) - (order[b.confidence] || 3);
+    const order = { Identical: 0, High: 1, Medium: 2, Low: 3 };
+    return (order[a.confidence] || 4) - (order[b.confidence] || 4);
   });
 }
 
@@ -596,12 +616,15 @@ const css = `
   .dup-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
   .dup-group-hdr { padding: 10px 14px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .dup-group-hdr:hover { background: var(--bg2); }
-  .dup-badge-high { background: #fee2e2; color: #dc2626; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .dup-badge-identical { background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .dup-badge-high { background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
   .dup-badge-med { background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
   .dup-badge-low { background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
   .dup-hotels { padding: 8px 14px; border-top: 1px solid var(--border); }
-  .dup-hotel-row { display: grid; grid-template-columns: 1fr 80px 80px 60px 80px; gap: 8px; padding: 6px 0; font-size: 11px; border-bottom: 1px solid var(--border2); align-items: center; }
+  .dup-hotel-row { display: grid; grid-template-columns: 1fr 80px 80px 70px 70px 140px 60px; gap: 6px; padding: 6px 0; font-size: 11px; border-bottom: 1px solid var(--border2); align-items: center; }
   .dup-hotel-row:last-child { border-bottom: none; }
+  .dup-keep-btn { background: var(--green); color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 600; cursor: pointer; }
+  .dup-keep-btn:hover { opacity: 0.85; }
   .dup-actions { display: flex; gap: 6px; padding: 8px 14px; border-top: 1px solid var(--border); background: var(--bg2); }
   .confirm-box { background: white; border-radius: 10px; padding: 24px 28px; max-width: 380px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }
   .confirm-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
@@ -1227,6 +1250,8 @@ export default function App() {
   const [editingNote, setEditingNote] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [filterProvider, setFilterProvider] = useState("");
+  const [filterHasEmail, setFilterHasEmail] = useState(false);
+  const [filterHasGM, setFilterHasGM] = useState(false);
   // Outreach tracker filters
   const [outreachSearch, setOutreachSearch] = useState("");
   const [outreachCountry, setOutreachCountry] = useState("");
@@ -1819,6 +1844,8 @@ export default function App() {
       const prov = getProvider(p) || "Unknown";
       if (prov !== filterProvider) return false;
     }
+    if (filterHasEmail && !p.email) return false;
+    if (filterHasGM && !p.gm_name) return false;
     if (filterSearch) {
       const q = filterSearch.toLowerCase();
       if (!(p.hotel_name||"").toLowerCase().includes(q) && !(p.gm_name||"").toLowerCase().includes(q) && !(p.city||"").toLowerCase().includes(q)) return false;
@@ -1948,7 +1975,7 @@ export default function App() {
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
             {["Active","Dormant","Closed"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
-            <button className="cmd-btn" style={{background:"var(--accent)",color:"white",fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
+            <button className="export-btn" style={{fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP);setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
@@ -1988,8 +2015,10 @@ export default function App() {
                   <option value="">All Providers</option>
                   {allProviders.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
-                {(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterBrand("");setFilterSearch("");setFilterProvider("");setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
-                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider)?" (filtered)":""}</span>
+                <button className="act-btn" style={{fontSize:11,flexShrink:0,background:filterHasGM?"var(--accent)":"transparent",color:filterHasGM?"white":"var(--text2)",border:filterHasGM?"1px solid var(--accent)":"1px solid var(--border)",borderRadius:4,padding:"4px 8px"}} onClick={()=>{setFilterHasGM(v=>!v);setHotelsPage(1);}}>Has GM</button>
+                <button className="act-btn" style={{fontSize:11,flexShrink:0,background:filterHasEmail?"var(--accent)":"transparent",color:filterHasEmail?"white":"var(--text2)",border:filterHasEmail?"1px solid var(--accent)":"1px solid var(--border)",borderRadius:4,padding:"4px 8px"}} onClick={()=>{setFilterHasEmail(v=>!v);setHotelsPage(1);}}>Has Email</button>
+                {(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider||filterHasEmail||filterHasGM) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterBrand("");setFilterSearch("");setFilterProvider("");setFilterHasEmail(false);setFilterHasGM(false);setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
+                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider||filterHasEmail||filterHasGM)?" (filtered)":""}</span>
               </div>
               {filteredP.length === 0 ? (
                 <div className="empty">
@@ -2238,11 +2267,37 @@ export default function App() {
                   {dupGroups.length === 0 ? "No duplicates found." : `${dupGroups.length} suspected duplicate group${dupGroups.length>1?"s":""} found`}
                 </div>
               </div>
-              <button className="act-btn" onClick={()=>setDupGroups(null)} style={{fontSize:16,padding:"4px 10px"}}>✕</button>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                {dupGroups.length > 0 && <button className="act-btn" style={{fontSize:11,background:"#991b1b",color:"white",border:"none",borderRadius:4,padding:"6px 12px",cursor:"pointer",fontWeight:600}} onClick={async()=>{
+                  const identicalGroups = dupGroups.filter(g=>g.confidence==="Identical");
+                  if(!identicalGroups.length) return alert("No Identical groups found.");
+                  if(!confirm(`Auto-merge ${identicalGroups.length} Identical groups? These are exact same-name duplicates. The entry with the most data will be kept for each.`)) return;
+                  const allDeleteIds = [];
+                  for(const g of identicalGroups){
+                    const scored = g.hotels.map(h=>({h,s:(h.website?2:0)+(h.rooms?2:0)+(h.gm_name?2:0)+(h.email?2:0)+(h.address?1:0)+((h.hotel_name||"").length>25?1:0)}));
+                    scored.sort((a,b)=>b.s-a.s);
+                    scored.slice(1).forEach(x=>allDeleteIds.push(x.h.id));
+                  }
+                  try{
+                    const CHUNK=100;
+                    for(let i=0;i<allDeleteIds.length;i+=CHUNK){
+                      const batch=allDeleteIds.slice(i,i+CHUNK);
+                      const ids=batch.map(id=>`"${id}"`).join(",");
+                      await sbFetch(`/prospects?id=in.(${ids})`,{method:"DELETE",prefer:"return=minimal"});
+                      await sbFetch(`/tracking?prospect_id=in.(${ids})`,{method:"DELETE",prefer:"return=minimal"});
+                    }
+                    setProspects(prev=>prev.filter(p=>!allDeleteIds.includes(p.id)));
+                    setTracking(prev=>prev.filter(t=>!allDeleteIds.includes(t.prospect_id)));
+                    setDupGroups(prev=>prev.filter(g=>g.confidence!=="Identical"));
+                    alert(`✓ Merged ${identicalGroups.length} groups, deleted ${allDeleteIds.length} duplicates.`);
+                  }catch(e){alert("Error: "+e.message);}
+                }}>Merge All Identical ({dupGroups.filter(g=>g.confidence==="Identical").length})</button>}
+                <button className="act-btn" onClick={()=>setDupGroups(null)} style={{fontSize:16,padding:"4px 10px"}}>✕</button>
+              </div>
             </div>
             {dupGroups.map((g, gi) => {
               const isExp = dupExpanded.has(gi);
-              const badge = g.confidence === "High" ? "dup-badge-high" : g.confidence === "Medium" ? "dup-badge-med" : "dup-badge-low";
+              const badge = g.confidence === "Identical" ? "dup-badge-identical" : g.confidence === "High" ? "dup-badge-high" : g.confidence === "Medium" ? "dup-badge-med" : "dup-badge-low";
               return (
                 <div key={gi} className="dup-group">
                   <div className="dup-group-hdr" onClick={()=>setDupExpanded(prev=>{const n=new Set(prev);n.has(gi)?n.delete(gi):n.add(gi);return n;})}>
@@ -2256,38 +2311,37 @@ export default function App() {
                       <div style={{padding:"4px 14px",fontSize:10,color:"var(--text3)",background:"var(--bg2)"}}>{g.reason}</div>
                       <div className="dup-hotels">
                         <div className="dup-hotel-row" style={{fontWeight:600,fontSize:10,color:"var(--text3)"}}>
-                          <span>Hotel</span><span>City</span><span>Brand</span><span>Rooms</span><span>Verified</span>
+                          <span>Hotel</span><span>City</span><span>Brand</span><span>Rooms</span><span>ADR</span><span>GM / Email</span><span></span>
                         </div>
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
-                            <span style={{fontWeight:500}}>{h.hotel_name}</span>
+                            <div>
+                              <div style={{fontWeight:500}}>{h.hotel_name}</div>
+                              <div style={{fontSize:9,color:"var(--text3)",marginTop:1}}>{h.website ? new URL(h.website.startsWith("http")?h.website:"https://"+h.website).hostname.replace("www.","") : "\u2014"}</div>
+                            </div>
                             <span>{h.city||"\u2014"}</span>
                             <span>{normalizeBrand(h.brand)||"\u2014"}</span>
                             <span>{h.rooms||"\u2014"}</span>
-                            <span>{h.last_verified_at ? new Date(h.last_verified_at).toLocaleDateString() : "\u2014"}</span>
+                            <span>{h.adr_usd ? "$"+h.adr_usd : "\u2014"}</span>
+                            <div>
+                              <div style={{fontSize:10}}>{h.gm_name||"\u2014"}</div>
+                              <div style={{fontSize:9,color:"var(--text3)"}}>{h.email||""}</div>
+                            </div>
+                            <button className="dup-keep-btn" onClick={()=>{
+                              const deleteIds = g.hotels.filter(x=>x.id!==h.id).map(x=>x.id);
+                              if(!confirm(`Keep "${h.hotel_name}" and delete ${deleteIds.length} other(s)?`)) return;
+                              Promise.all(deleteIds.map(id=>sbFetch(`/prospects?id=eq.${id}`,{method:"DELETE"}).catch(()=>{}))).then(()=>{
+                                setProspects(prev=>prev.filter(p=>!deleteIds.includes(p.id)));
+                                setTracking(prev=>prev.filter(t=>!deleteIds.includes(t.prospect_id)));
+                                setDupGroups(prev=>prev.filter((_,i)=>i!==gi));
+                              });
+                            }}>Keep</button>
                           </div>
                         ))}
                       </div>
                       <div className="dup-actions">
-                        <button className="act-btn" style={{fontSize:11,background:"var(--green)",color:"white",border:"none",borderRadius:4,padding:"4px 10px",cursor:"pointer"}} onClick={()=>{
-                          // Keep the one with most data, delete others
-                          const scored = g.hotels.map(h => ({h, s: (h.website?2:0)+(h.rooms?2:0)+(h.gm_name?2:0)+(h.email?2:0)+(h.address?1:0)+((h.hotel_name||"").length>25?1:0)}));
-                          scored.sort((a,b)=>b.s-a.s);
-                          const keep = scored[0].h;
-                          const deleteIds = scored.slice(1).map(x=>x.h.id);
-                          if(!confirm(`Keep "${keep.hotel_name}" and delete ${deleteIds.length} duplicate(s)?`)) return;
-                          Promise.all(deleteIds.map(id=>sbFetch(`/prospects?id=eq.${id}`,{method:"DELETE"}).catch(()=>{}))).then(()=>{
-                            setProspects(prev=>prev.filter(p=>!deleteIds.includes(p.id)));
-                            setTracking(prev=>prev.filter(t=>!deleteIds.includes(t.prospect_id)));
-                            setDupGroups(prev=>prev.filter((_,i)=>i!==gi));
-                          });
-                        }}>Merge (keep best)</button>
                         <button className="act-btn" style={{fontSize:11}} onClick={()=>setDupGroups(prev=>prev.filter((_,i)=>i!==gi))}>Not duplicate</button>
-                        <button className="act-btn" style={{fontSize:11,color:"var(--text3)"}} onClick={()=>{
-                          const keep = g.hotels[0];
-                          setSelected(keep);
-                          setDupGroups(null);
-                        }}>View details</button>
+                        <button className="act-btn" style={{fontSize:11,color:"var(--text3)"}} onClick={()=>{setSelected(g.hotels[0]);setDupGroups(null);}}>View details</button>
                       </div>
                     </>
                   )}
