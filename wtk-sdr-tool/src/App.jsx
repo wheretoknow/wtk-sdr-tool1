@@ -1167,7 +1167,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       <div className="empty"><div className="empty-icon">{"\uD83D\uDD0D"}</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearFilters}>{"\u2190"} Clear</button></div>
     ) : outreachView === "list" ? (
       <div className="table-card" style={{overflowX:"auto"}}><table className="outreach-list"><thead><tr>
-        <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>Owner</th><th></th>
+        <th style={{width:"16%"}}>Hotel</th><th style={{width:"7%"}}>City</th><th style={{width:"8%"}}>Group</th><th style={{width:"12%"}}>GM</th><th style={{width:"9%"}}>Stage</th><th style={{width:"9%"}}>Intent</th><th style={{width:"10%"}}>Last</th><th style={{width:"17%"}}>Notes</th><th style={{width:"8%"}}>Owner</th><th style={{width:"4%"}}></th>
       </tr></thead><tbody>
         {displayT.map(t => {
           const stage = effectiveStage(t), stg = STAGES.find(s=>s.key===stage)||STAGES[0];
