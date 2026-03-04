@@ -1215,6 +1215,8 @@ export default function App() {
   const [addHotelModal, setAddHotelModal] = useState(false);
   const [addHotelForm, setAddHotelForm] = useState({});
   const [ctExpanded, setCtExpanded] = useState(null);
+  const [ctStageFilter, setCtStageFilter] = useState("");
+  const [ctPriorityFilter, setCtPriorityFilter] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState(["Active"]);
   // Geo state
   const [region, setRegion] = useState("Europe");
@@ -2212,9 +2214,10 @@ export default function App() {
         });
 
         const overdueN = rows.filter(r => r.status === "overdue").length;
-        const dueSoonN = rows.filter(r => r.status === "due-soon").length;
+        const dueTodayN = rows.filter(r => r.daysUntilDue === 0).length;
+        const dueSoonN = rows.filter(r => r.status === "due-soon" && r.daysUntilDue !== 0).length;
         const doneN = rows.filter(r => r.status === "done").length;
-        const activeN = rows.filter(r => r.status === "ok" || r.status === "due-soon").length;
+        const upcomingN = rows.filter(r => r.status === "ok").length;
 
         // Apply CT filters
         const ctSdrs = [...new Set(rows.map(r => r.t.sdr).filter(Boolean))].sort();
@@ -2232,17 +2235,22 @@ export default function App() {
             const pri = r.status === "done" ? "done" : r.status === "overdue" ? "high" : (r.daysUntilDue !== null && r.daysUntilDue <= 2) ? "high" : (r.daysUntilDue !== null && r.daysUntilDue <= 5) ? "medium" : "low";
             if (pri !== ctPriFilter) return false;
           }
+          if (ctStageFilter) {
+            if (ctStageFilter === "done" && r.status !== "done") return false;
+            else if (ctStageFilter !== "done" && r.stage !== ctStageFilter) return false;
+          }
           return true;
         });
-        const ctHasFilters = ctOwnerFilter || ctDueFilter || ctPriFilter;
+        const ctHasFilters = ctOwnerFilter || ctDueFilter || ctPriFilter || ctStageFilter;
 
         return (<>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"12px 0 8px",flexWrap:"wrap"}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDateShort(new Date())}</div>
             <span style={{fontSize:12,color:"var(--text3)",padding:"4px 10px",background:"var(--bg)",borderRadius:5,border:"1px solid var(--border)"}}>{rows.length} tracked</span>
             {overdueN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fef2f2",color:"#dc2626",borderRadius:5,border:"1px solid #fecaca"}}>{overdueN} Overdue</span>}
+            {dueTodayN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fff7ed",color:"#ea580c",borderRadius:5,border:"1px solid #fed7aa"}}>{dueTodayN} Due today</span>}
             {dueSoonN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fffbeb",color:"#d97706",borderRadius:5,border:"1px solid #fde68a"}}>{dueSoonN} Due soon</span>}
-            <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{activeN} Active</span>
+            <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{upcomingN} Upcoming</span>
             <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0",flexWrap:"wrap"}}>
@@ -2264,7 +2272,16 @@ export default function App() {
               <option value="low">Low</option>
               <option value="done">Done</option>
             </select>
-            {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");}}>✕ Clear</button>}
+            <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctStageFilter} onChange={e=>setCtStageFilter(e.target.value)}>
+              <option value="">All Stages</option>
+              <option value="new">New</option>
+              <option value="1st">Contact 1</option>
+              <option value="2nd">Contact 2</option>
+              <option value="3rd">Contact 3</option>
+              <option value="4th">Contact 4</option>
+              <option value="done">Completed</option>
+            </select>
+            {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");setCtStageFilter("");}}>✕ Clear</button>}
             <span style={{marginLeft:"auto",fontSize:12,color:"var(--text3)",fontWeight:600}}>{filteredRows.length} / {rows.length}</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
@@ -2277,9 +2294,11 @@ export default function App() {
               const priority = status === "done" ? "done" : status === "overdue" ? "high" : (daysUntilDue !== null && daysUntilDue <= 2) ? "high" : (daysUntilDue !== null && daysUntilDue <= 5) ? "medium" : "low";
               const priStyle = { high: {bg:"#fef2f2",color:"#dc2626",label:"High"}, medium: {bg:"#fffbeb",color:"#d97706",label:"Medium"}, low: {bg:"#f3f4f6",color:"#6b7280",label:"Low"}, done: {bg:"#ecfdf5",color:"#059669",label:"Done"} }[priority];
               // Next Action logic
-              const nextAction = status === "done" ? "Sequence finished" : !actual[1] ? "Send first email" : nextStep ? `Follow-up #${nextStep-1}` : "Waiting reply";
+              const nextAction = status === "done" ? "\u2713 Sequence finished" : !actual[1] ? "\u2709 Send first email" : nextStep ? `\u21BA Follow-up #${nextStep-1}` : "\u23F3 Waiting reply";
+              const emailAddr = t.email || p?.email;
+              const gmFirst = (t.gm || p?.gm_name || "").split(" ")[0] || "there";
               return (<Fragment key={t.id}>
-                <tr style={{cursor:"pointer",borderLeft:priority==="high"?"3px solid #dc2626":priority==="medium"?"3px solid #d97706":"3px solid transparent"}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
+                <tr style={{cursor:"pointer",borderLeft:priority==="high"?"3px solid #dc2626":priority==="medium"?"3px solid #d97706":"3px solid transparent",opacity:priority==="done"?0.55:1}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
                   <td>
                     <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
                     <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · GM: "+t.gm:""}</div>
@@ -2289,7 +2308,12 @@ export default function App() {
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]} follow-up)</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?"Sequence complete":EM}</span>}</td>
                   <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+" days overdue":daysUntilDue===0?"due today":"in "+daysUntilDue+" days"):EM}</td>
                   <td><span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:10,background:priStyle.bg,color:priStyle.color}}>{priStyle.label}</span></td>
-                  <td><span style={{fontSize:11,color:"var(--text)"}}>{nextAction}</span></td>
+                  <td>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:11,color:status==="done"?"var(--text3)":"var(--text)"}}>{nextAction}</span>
+                      {status !== "done" && emailAddr && <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();window.open(`mailto:${emailAddr}?subject=${encodeURIComponent("Guest feedback insights for "+t.hotel)}&body=${encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`)}`);}}>✉ Email</button>}
+                    </div>
+                  </td>
                   <td><span style={{fontSize:11,color:"var(--text3)"}}>{t.sdr||EM}</span></td>
                 </tr>
                 {isExp && <tr><td colSpan={8} style={{background:"#f9fafb",padding:"10px 16px"}}>
@@ -2395,7 +2419,7 @@ export default function App() {
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
                             <div>
-                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>setSelected(h)}>{h.hotel_name}</div>
+                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>setSelected(h.id)}>{h.hotel_name}</div>
                               <div style={{fontSize:9,color:"var(--text3)",marginTop:1}}>{h.website ? new URL(h.website.startsWith("http")?h.website:"https://"+h.website).hostname.replace("www.","") : "\u2014"}</div>
                             </div>
                             <span>{h.city||"\u2014"}</span>
