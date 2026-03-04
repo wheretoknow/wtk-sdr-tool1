@@ -177,8 +177,56 @@ function normalizeGroup(g) {
   if (s.includes('belmond')) return 'Belmond';
   if (s.includes('oetker')) return 'Oetker';
   if (s.includes('jumeirah')) return 'Jumeirah';
-  // Strip common suffixes for unknown groups
+  if (s.includes('melia') || s.includes('meliá')) return 'Meliá';
+  if (s.includes('barcelo') || s.includes('barceló')) return 'Barceló';
+  if (s.includes('pestana')) return 'Pestana';
+  if (s.includes('iberostar')) return 'Iberostar';
   return g.replace(/\s*(Hotels?( & Resorts?)?|International|Group|Collection|Worldwide|Ltd\.?|Inc\.?|plc|S\.?A\.?|GmbH)\s*/gi, '').trim() || g;
+}
+
+function normalizeBrand(b) {
+  if (!b) return null;
+  const s = b.toLowerCase().replace(/\(.*?\)/g, '').trim();
+  const BRAND_CANON = {
+    "kimpton hotels":"Kimpton","kimpton hotels and restaurants":"Kimpton","kimpton hotels & restaurants":"Kimpton",
+    "intercontinental hotels & resorts":"InterContinental","intercontinental hotels":"InterContinental","intercontinental hotels and resorts":"InterContinental",
+    "the luxury collection":"Luxury Collection","luxury collection":"Luxury Collection",
+    "holiday inn hotels":"Holiday Inn","holiday inn hotels & resorts":"Holiday Inn",
+    "holiday inn express hotels":"Holiday Inn Express",
+    "crowne plaza hotels":"Crowne Plaza","crowne plaza hotels & resorts":"Crowne Plaza",
+    "hotel indigo hotels":"Hotel Indigo",
+    "waldorf astoria hotels":"Waldorf Astoria","waldorf astoria hotels & resorts":"Waldorf Astoria",
+    "conrad hotels":"Conrad","conrad hotels & resorts":"Conrad",
+    "doubletree by hilton":"DoubleTree","double tree":"DoubleTree",
+    "embassy suites by hilton":"Embassy Suites",
+    "hampton by hilton":"Hampton","hampton inn":"Hampton","hampton inn & suites":"Hampton",
+    "homewood suites":"Homewood","homewood suites by hilton":"Homewood",
+    "tru by hilton":"Tru",
+    "park hyatt hotels":"Park Hyatt",
+    "grand hyatt hotels":"Grand Hyatt",
+    "hyatt regency hotels":"Hyatt Regency",
+    "fairmont hotels":"Fairmont","fairmont hotels & resorts":"Fairmont",
+    "raffles hotels":"Raffles","raffles hotels & resorts":"Raffles",
+    "sofitel hotels":"Sofitel","sofitel hotels & resorts":"Sofitel",
+    "pullman hotels":"Pullman","pullman hotels & resorts":"Pullman",
+    "mgallery hotel collection":"MGallery","mgallery":"MGallery",
+    "swissotel":"Swissôtel","swissotel hotels":"Swissôtel",
+    "movenpick":"Mövenpick","movenpick hotels":"Mövenpick","mövenpick hotels":"Mövenpick",
+    "mandarin oriental hotel group":"Mandarin Oriental",
+    "shangri-la hotels":"Shangri-La","shangri-la hotels & resorts":"Shangri-La","shangri la":"Shangri-La",
+    "four seasons hotels":"Four Seasons","four seasons hotels and resorts":"Four Seasons",
+    "aman resorts":"Aman",
+    "design hotels":"Design Hotels",
+    "sacher hotels":"Sacher","sacher":"Sacher",
+    "corinthia hotels":"Corinthia","corinthia":"Corinthia",
+    "ax hotels":"AX Hotels",
+    "independ":"Independent","independent":"Independent",
+    "jdv":"JdV by Hyatt","jdv by hyatt":"JdV by Hyatt",
+  };
+  const key = s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (BRAND_CANON[key]) return BRAND_CANON[key];
+  // Strip common suffixes
+  return b.replace(/\(.*?\)/g, '').replace(/\s*(Hotels?( & Resorts?)?|International|Worldwide)\s*$/gi, '').trim() || b;
 }
 const CHAIN_BRANDS = {
   "Marriott": ["Ritz-Carlton","Ritz-Carlton Reserve","St. Regis","W Hotels","JW Marriott","Luxury Collection","EDITION","Autograph Collection","Tribute Portfolio","Design Hotels","Marriott Hotels","Sheraton","Delta Hotels","Le Méridien","Westin","Renaissance","Gaylord Hotels","Courtyard","Four Points","SpringHill Suites","AC Hotels","Moxy","Protea Hotels","Fairfield","Residence Inn","TownePlace Suites","Element","Aloft","City Express"],
@@ -1541,7 +1589,7 @@ export default function App() {
     if (filterCountry && (p.country||"") !== filterCountry) return false;
     if (filterCity && (p.city||"") !== filterCity) return false;
     if (filterGroup && normalizeGroup(p.hotel_group||p.brand||"") !== filterGroup) return false;
-    if (filterBrand && p.brand !== filterBrand) return false;
+    if (filterBrand && normalizeBrand(p.brand) !== filterBrand) return false;
     if (filterProvider) {
       const prov = getProvider(p) || "Unknown";
       if (prov !== filterProvider) return false;
@@ -1585,6 +1633,7 @@ export default function App() {
   const allCountries = [...new Set(prospects.map(p=>p.country).filter(Boolean))].sort();
   const allCities = filterCountry ? [...new Set(prospects.filter(p=>p.country===filterCountry).map(p=>p.city).filter(Boolean))].sort() : [...new Set(prospects.map(p=>p.city).filter(Boolean))].sort();
   const allGroups = [...new Set(prospects.map(p=>normalizeGroup(p.hotel_group||p.brand)).filter(Boolean))].sort();
+  const allBrands = [...new Set(prospects.map(p=>normalizeBrand(p.brand)).filter(Boolean))].sort();
   const allProviders = [...new Set(prospects.map(p=>getProvider(p)||"Unknown"))].sort();
   const countries = region ? Object.keys(GEO[region] || {}) : [];
   const cities = region && country ? (GEO[region] || {})[country] || [] : [];
@@ -1707,7 +1756,7 @@ export default function App() {
                 </select>
                 <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterBrand} onChange={e=>{setFilterBrand(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Brands</option>
-                  {[...new Set(prospects.map(p=>p.brand).filter(Boolean))].sort().map(b=><option key={b} value={b}>{b}</option>)}
+                  {allBrands.map(b=><option key={b} value={b}>{b}</option>)}
                 </select>
                 <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterProvider} onChange={e=>{setFilterProvider(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Providers</option>
