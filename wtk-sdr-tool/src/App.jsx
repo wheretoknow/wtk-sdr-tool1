@@ -1479,7 +1479,9 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = "";
-    const text = await file.text();
+    let text = await file.text();
+    // Strip BOM if present
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     const lines = text.split(/\r?\n/).filter(Boolean);
     if (lines.length < 2) return alert("CSV appears empty.");
 
@@ -1494,7 +1496,7 @@ export default function App() {
       cols.push(cur); return cols.map(s => s.trim());
     }
 
-    const DB_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
+    const DB_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at","lead_status","management_company","operating_model","operating_model_note"];
     const headers = parseRow(lines[0]).map(h => h.toLowerCase().trim());
     const isDirectMode = DB_FIELDS.filter(f => headers.includes(f)).length >= 5;
 
