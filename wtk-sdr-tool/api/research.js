@@ -79,6 +79,137 @@ function getProviderSource(provider) {
   return PROVIDER_SOURCES[provider] || null;
 }
 
+// ─── CANONICAL BRAND/GROUP NORMALIZATION ─────────────────────────────────────
+
+const CANONICAL_BRANDS = [
+  "Kimpton","InterContinental","Holiday Inn","Holiday Inn Express","Hotel Indigo",
+  "Crowne Plaza","voco","Six Senses","Regent","Vignette Collection","Staybridge","Candlewood","Even Hotels","Hualuxe","Avid",
+  "Marriott","Ritz-Carlton","St. Regis","JW Marriott","W Hotels","Luxury Collection",
+  "EDITION","Sheraton","Westin","Le Méridien","Renaissance","Autograph Collection",
+  "Tribute Portfolio","Design Hotels","Moxy","AC Hotels","Courtyard","Four Points",
+  "Delta Hotels","Aloft","Residence Inn","Fairfield","TownePlace","SpringHill","Element","Protea",
+  "Hilton","Waldorf Astoria","Conrad","LXR","Curio","Canopy","DoubleTree","Tapestry",
+  "Embassy Suites","Hampton","Homewood","Home2","Tru","Motto","Signia","Spark",
+  "Hyatt","Park Hyatt","Grand Hyatt","Hyatt Regency","Andaz","Hyatt Centric","Alila","Thompson","Hyatt Place",
+  "Accor","Fairmont","Raffles","Sofitel","Pullman","MGallery","Swissôtel","Mövenpick",
+  "Novotel","Mercure","ibis","25hours","TRIBE","Banyan Tree",
+  "Radisson Collection","Radisson Blu","Radisson RED","Radisson","Park Plaza","Park Inn","Prizeotel",
+  "Anantara","Avani","Oaks","Tivoli","NH Collection","NH Hotels","nhow",
+  "Kempinski","Barceló","Meliá","Innside","Sol","Pestana","Iberostar",
+  "Peninsula","Capella","Patina","Mandarin Oriental","Rosewood","Langham","Dorchester Collection",
+  "Shangri-La","Pan Pacific","PARKROYAL","Jumeirah","Four Seasons","Aman",
+  "Wyndham","La Quinta","Ramada","TRYP",
+  "Relais & Châteaux","Leading Hotels of the World","Small Luxury Hotels","Preferred Hotels",
+];
+
+const CANONICAL_GROUPS = [
+  "IHG","Marriott","Hilton","Hyatt","Accor","Radisson Hotel Group","Minor Hotels",
+  "Wyndham","Kempinski","Barceló","Meliá","Pestana","Iberostar",
+  "Mandarin Oriental","Rosewood","Langham","Dorchester Collection",
+  "Shangri-La","Pan Pacific","Jumeirah","Four Seasons","Aman",
+  "Relais & Châteaux","Leading Hotels of the World","Independent",
+];
+
+const BRAND_ALIASES = {
+  "kimpton hotels":"Kimpton","kimpton hotels and restaurants":"Kimpton","kimpton hotel":"Kimpton",
+  "intercontinental hotels and resorts":"InterContinental","intercontinental hotels":"InterContinental",
+  "holiday inn hotels":"Holiday Inn","holiday inn resorts":"Holiday Inn",
+  "crowne plaza hotels":"Crowne Plaza","crowne plaza hotels and resorts":"Crowne Plaza",
+  "hotel indigo hotels":"Hotel Indigo",
+  "the luxury collection":"Luxury Collection","luxury collection marriott international":"Luxury Collection","luxury collection marriott":"Luxury Collection",
+  "the ritz carlton":"Ritz-Carlton","ritz carlton":"Ritz-Carlton",
+  "st regis":"St. Regis","the st regis":"St. Regis",
+  "jw marriott hotels":"JW Marriott","jw marriott hotels and resorts":"JW Marriott",
+  "w hotel":"W Hotels","w hotels and resorts":"W Hotels",
+  "autograph collection hotels":"Autograph Collection",
+  "tribute portfolio hotels":"Tribute Portfolio",
+  "waldorf astoria hotels":"Waldorf Astoria","waldorf astoria hotels and resorts":"Waldorf Astoria",
+  "conrad hotels":"Conrad","conrad hotels and resorts":"Conrad",
+  "doubletree by hilton":"DoubleTree","double tree":"DoubleTree",
+  "embassy suites by hilton":"Embassy Suites",
+  "hampton by hilton":"Hampton","hampton inn":"Hampton",
+  "homewood suites":"Homewood","homewood suites by hilton":"Homewood",
+  "tru by hilton":"Tru",
+  "park hyatt hotels":"Park Hyatt",
+  "grand hyatt hotels":"Grand Hyatt",
+  "hyatt regency hotels":"Hyatt Regency",
+  "andaz hotels":"Andaz",
+  "fairmont hotels":"Fairmont","fairmont hotels and resorts":"Fairmont",
+  "raffles hotels":"Raffles","raffles hotels and resorts":"Raffles",
+  "sofitel hotels":"Sofitel","sofitel hotels and resorts":"Sofitel",
+  "pullman hotels":"Pullman","pullman hotels and resorts":"Pullman",
+  "mgallery hotel collection":"MGallery","mgallery":"MGallery",
+  "swissotel":"Swissôtel","swissotel hotels":"Swissôtel",
+  "movenpick":"Mövenpick","movenpick hotels":"Mövenpick","moevenpick":"Mövenpick",
+  "radisson blu hotels":"Radisson Blu",
+  "anantara hotels":"Anantara","anantara hotels and resorts":"Anantara",
+  "mandarin oriental hotel group":"Mandarin Oriental",
+  "shangri la":"Shangri-La","shangri la hotels":"Shangri-La","shangri la hotels and resorts":"Shangri-La",
+  "four seasons hotels":"Four Seasons","four seasons hotels and resorts":"Four Seasons",
+  "aman resorts":"Aman",
+  "sacher hotels":"Sacher","sacher":"Sacher",
+  "corinthia hotels":"Corinthia","corinthia":"Corinthia",
+  "ax hotels":"AX Hotels","ax":"AX Hotels",
+};
+
+const GROUP_ALIASES = {
+  "intercontinental hotels group":"IHG","ihg hotels and resorts":"IHG","ihg hotels":"IHG",
+  "marriott international":"Marriott","marriott international inc":"Marriott",
+  "hilton worldwide":"Hilton","hilton hotels":"Hilton","hilton hotels corporation":"Hilton",
+  "hyatt hotels":"Hyatt","hyatt hotels corporation":"Hyatt",
+  "accor hotels":"Accor","accor sa":"Accor","accor group":"Accor",
+  "radisson hotel group":"Radisson Hotel Group","radisson hospitality":"Radisson Hotel Group",
+  "minor international":"Minor Hotels","minor hotel group":"Minor Hotels",
+  "wyndham hotels and resorts":"Wyndham","wyndham hotel group":"Wyndham","wyndham worldwide":"Wyndham",
+  "kempinski hotels":"Kempinski",
+  "melia hotels international":"Meliá","melia hotels":"Meliá",
+  "barcelo hotel group":"Barceló","barcelo hotels":"Barceló",
+  "mandarin oriental hotel group":"Mandarin Oriental",
+  "shangri la hotels and resorts":"Shangri-La","shangri la group":"Shangri-La",
+  "four seasons hotels and resorts":"Four Seasons",
+  "jumeirah group":"Jumeirah","jumeirah international":"Jumeirah",
+  "independent":"Independent","independ":"Independent",
+  "jdv":"JdV by Hyatt","jdv by hyatt":"JdV by Hyatt",
+};
+
+function cleanLabel(s) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/\b(international|intl|hotels|hotel|group|worldwide|company|co|inc|ltd|plc|resorts|resort|collection|the)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toCanonicalBrand(input) {
+  if (!input) return null;
+  const key = cleanLabel(input);
+  if (!key) return null;
+  if (BRAND_ALIASES[key]) return BRAND_ALIASES[key];
+  for (const b of CANONICAL_BRANDS) { if (cleanLabel(b) === key) return b; }
+  // Partial match: if canonical is contained in key
+  for (const b of CANONICAL_BRANDS) {
+    const cb = cleanLabel(b);
+    if (cb.length > 3 && key.includes(cb)) return b;
+  }
+  return null;
+}
+
+function toCanonicalGroup(input) {
+  if (!input) return null;
+  const key = cleanLabel(input);
+  if (!key) return null;
+  if (GROUP_ALIASES[key]) return GROUP_ALIASES[key];
+  for (const g of CANONICAL_GROUPS) { if (cleanLabel(g) === key) return g; }
+  for (const g of CANONICAL_GROUPS) {
+    const cg = cleanLabel(g);
+    if (cg.length > 3 && key.includes(cg)) return g;
+  }
+  return null;
+}
+
 // ─── BRAND/GROUP OVERRIDE SAFETY ────────────────────────────────────────────
 
 function normalizeName(s) {
@@ -418,10 +549,15 @@ Return JSON array with all required fields. Use null for anything unverified. St
           ? shouldOverrideBrand(inputHotel.hotel_name, p.hotel_name, inputHotel.city, p.city)
           : false;
 
+        const rawBrand = canOverride ? (authBrand || p.brand) : p.brand;
+        const rawGroup = canOverride ? (authGroup || p.hotel_group) : p.hotel_group;
+        const canonBrand = toCanonicalBrand(rawBrand) || rawBrand || null;
+        const canonGroup = toCanonicalGroup(rawGroup) || rawGroup || "Independent";
+
         return {
           ...p,
-          brand: canOverride ? (authBrand || p.brand) : p.brand,
-          hotel_group: canOverride ? (authGroup || p.hotel_group || "Independent") : (p.hotel_group || "Independent"),
+          brand: canonBrand,
+          hotel_group: canonGroup,
           email: null,
           last_verified_at: new Date().toISOString(),
           current_provider: provider,
