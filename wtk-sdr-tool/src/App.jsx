@@ -497,7 +497,7 @@ const css = `
 
   .topnav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 10; }
   .nav-left { display: flex; align-items: center; gap: 10px; }
-  .wtk-icon { width: 28px; height: 28px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .wtk-icon { width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0; background: url("data:image/png;base64,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") center/contain no-repeat; }
   .nav-brand { font-size: 13px; font-weight: 600; color: var(--text); }
   .nav-sep { width: 1px; height: 20px; background: var(--border); }
   .nav-page { font-size: 13px; color: var(--text3); }
@@ -1043,9 +1043,13 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     return SK.includes(s) ? s : "new";
   }
 
+  // Summary counts should exclude stage filter (so you see total breakdown while filtering)
   const stageMap = {};
   STAGES.forEach(s => { stageMap[s.key] = []; });
   filteredT.forEach(t => { const s = effectiveStage(t); (stageMap[s] || stageMap["new"]).push(t); });
+
+  // Apply stage filter for display only
+  const displayT = pipeStageFilter ? filteredT.filter(t => effectiveStage(t) === pipeStageFilter) : filteredT;
 
   const IL = { 1: "Cold", 2: "Low", 3: "Medium", 4: "Warm", 5: "Hot" };
   const IC = { 1: "#9ca3af", 2: "#6b7280", 3: "#eab308", 4: "#f59e0b", 5: "#ef4444" };
@@ -1148,17 +1152,17 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       <span style={{color:"var(--red)"}}>Lost <strong>{tLost}</strong></span><span className="ps-sep">{"\u00B7"}</span>
       <span>Conv <strong>{conv}%</strong></span>
     </div>
-    {filteredT.length === 0 ? (
+    {displayT.length === 0 ? (
       <div className="empty"><div className="empty-icon">{"\uD83D\uDD0D"}</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearFilters}>{"\u2190"} Clear</button></div>
     ) : outreachView === "list" ? (
       <div className="table-card" style={{overflowX:"auto"}}><table className="outreach-list"><thead><tr>
         <th>Hotel</th><th>City</th><th>Group</th><th>GM</th><th>Stage</th><th>Intent</th><th>Last</th><th>Notes</th><th>Owner</th><th></th>
       </tr></thead><tbody>
-        {filteredT.map(t => {
+        {displayT.map(t => {
           const stage = effectiveStage(t), stg = STAGES.find(s=>s.key===stage)||STAGES[0];
           const p = prospects?prospects.find(x=>x.id===t.prospect_id):null, last = lastAct(t);
           return (<tr key={t.id}>
-            <td style={{fontWeight:600,cursor:"pointer",color:"var(--accent)",maxWidth:180}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
+            <td style={{fontWeight:600,cursor:"pointer",color:"var(--text)",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</td>
             <td style={{color:"var(--text3)",fontSize:11}}>{p?.city||"\u2014"}</td>
             <td style={{color:"var(--text3)",fontSize:11,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.hotel_group||"\u2014"}</td>
             <td style={{color:"var(--text2)",fontSize:12}}>{t.gm||"\u2014"}</td>
@@ -1889,11 +1893,6 @@ export default function App() {
     }
     if (pipeHasGM && !t.gm) return false;
     if (pipeHasEmail && !t.email) return false;
-    if (pipeStageFilter) {
-      const s = t.pipeline_stage || "new";
-      const eff = s === "active" ? "new" : s === "emailed" ? "1st" : s === "followup" ? "2nd" : s === "dead" ? "lost" : s;
-      if (eff !== pipeStageFilter) return false;
-    }
     return true;
   });
   const contacted = tracking.filter(t => (t.done || []).length > 0).length;
@@ -1915,7 +1914,7 @@ export default function App() {
       <div className="app">
         <nav className="topnav">
           <div className="nav-left">
-            <div className="wtk-icon">W</div>
+            <div className="wtk-icon"></div>
             <span className="nav-brand">Where to know</span>
             <div className="nav-sep"/>
             <span className="nav-page">SDR Intelligence</span>
