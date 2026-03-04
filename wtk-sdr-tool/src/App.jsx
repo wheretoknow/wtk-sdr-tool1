@@ -1479,10 +1479,27 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = "";
-    let text = await file.text();
-    // Strip BOM if present
-    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-    const lines = text.split(/\r?\n/).filter(Boolean);
+
+    let lines;
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+      // Parse Excel using SheetJS (available as global XLSX from CDN)
+      try {
+        const ab = await file.arrayBuffer();
+        const mod = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
+        const wb = mod.read(ab, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const csv = mod.utils.sheet_to_csv(ws);
+        lines = csv.split(/\r?\n/).filter(Boolean);
+      } catch (err) {
+        return alert("Failed to parse Excel file: " + err.message);
+      }
+    } else {
+      let text = await file.text();
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      lines = text.split(/\r?\n/).filter(Boolean);
+    }
     if (lines.length < 2) return alert("CSV appears empty.");
 
     function parseRow(line) {
@@ -1729,7 +1746,7 @@ export default function App() {
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
             <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
-              <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
+              <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
             </label>
             <span className="record-count">{loading?"Loading...":`${filteredP.length} prospects in shared database`}</span>
           </div>
