@@ -2315,7 +2315,8 @@ export default function App() {
                   <td>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontSize:11,color:status==="done"?"var(--text3)":"var(--text)"}}>{nextAction}</span>
-                      {emailAddr && <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);const webUrl=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;const t0=Date.now();window.location.href=`ms-outlook://compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;setTimeout(()=>{if(Date.now()-t0<1500)window.open(webUrl);},1200);}}>✉ Email</button>}
+                      {emailAddr ? <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);const webUrl=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;const t0=Date.now();window.location.href=`ms-outlook://compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;setTimeout(()=>{if(Date.now()-t0<1500)window.open(webUrl);},1200);}}>✉ Email</button>
+                      : <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"transparent",color:"var(--text3)",border:"1px solid var(--border)",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>+ Add email</button>}
                     </div>
                   </td>
                   <td><span style={{fontSize:11,color:"var(--text3)"}}>{t.sdr||EM}</span></td>
@@ -2365,7 +2366,7 @@ export default function App() {
 
       {/* Duplicate Finder Modal */}
       {dupGroups !== null && (
-        <div className="confirm-overlay" onClick={()=>setDupGroups(null)}>
+        <div className="confirm-overlay" style={{zIndex:65}} onClick={()=>setDupGroups(null)}>
           <div className="dup-modal" onClick={e=>e.stopPropagation()}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div>
