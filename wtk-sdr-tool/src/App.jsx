@@ -2307,7 +2307,7 @@ export default function App() {
                     <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
                     <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · GM: "+t.gm:""}</div>
                   </td>
-                  <td><span style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",textTransform:"uppercase"}}>{stage}</span></td>
+                  <td><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase"}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{lastDate ? <span>{fmtD(lastDate)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[lastN]})</span></span> : EM}</td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]} follow-up)</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?"Sequence complete":EM}</span>}</td>
                   <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+" days overdue":daysUntilDue===0?"due today":"in "+daysUntilDue+" days"):EM}</td>
@@ -2423,7 +2423,7 @@ export default function App() {
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
                             <div>
-                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>{setSelected(h.id);setDupGroups([]);}}>{h.hotel_name}</div>
+                              <div style={{fontWeight:500,cursor:"pointer",color:"var(--accent)",textDecoration:"underline"}} onClick={()=>{setDupGroups(null);setSelected(h.id);}}>{h.hotel_name}</div>
                               <div style={{fontSize:9,color:"var(--text3)",marginTop:1}}>{h.website ? new URL(h.website.startsWith("http")?h.website:"https://"+h.website).hostname.replace("www.","") : "\u2014"}</div>
                             </div>
                             <span>{h.city||"\u2014"}</span>
