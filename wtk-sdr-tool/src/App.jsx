@@ -2291,6 +2291,13 @@ export default function App() {
           updatePipeline(tid, updates);
         }
 
+        const [ctSortCol, setCtSortCol] = useState(null); // "lastDate"|"nextDue"|"countdown"
+        const [ctSortDir, setCtSortDir] = useState("asc");
+        function ctToggleSort(col) {
+          if (ctSortCol === col) setCtSortDir(d => d === "asc" ? "desc" : "asc");
+          else { setCtSortCol(col); setCtSortDir("asc"); }
+        }
+
         const rows = tracking.filter(t => t.d1 || (t.done && t.done.length > 0)).map(t => {
           const p = prospects.find(x => x.id === t.prospect_id);
           const sched = computeSchedule(t);
@@ -2330,6 +2337,22 @@ export default function App() {
           return true;
         });
         const ctHasFilters = ctOwnerFilter || ctDueFilter || ctPriFilter || ctStageFilter;
+
+        // Apply user sort on top of priority sort
+        const sortedRows = ctSortCol ? [...filteredRows].sort((a, b) => {
+          let va, vb;
+          if (ctSortCol === "lastDate") { va = a.lastDate ? new Date(a.lastDate).getTime() : -Infinity; vb = b.lastDate ? new Date(b.lastDate).getTime() : -Infinity; }
+          if (ctSortCol === "nextDue") { va = a.nextDue ? new Date(a.nextDue).getTime() : Infinity; vb = b.nextDue ? new Date(b.nextDue).getTime() : Infinity; }
+          if (ctSortCol === "countdown") { va = a.daysUntilDue ?? Infinity; vb = b.daysUntilDue ?? Infinity; }
+          return ctSortDir === "asc" ? va - vb : vb - va;
+        }) : filteredRows;
+
+        function SortTh({ col, label, width }) {
+          const active = ctSortCol === col;
+          return <th style={{width, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap"}} onClick={() => ctToggleSort(col)}>
+            {label} <span style={{fontSize:10, opacity: active ? 1 : 0.35, color: active ? "var(--accent)" : "inherit"}}>{active ? (ctSortDir === "asc" ? "▲" : "▼") : "⇅"}</span>
+          </th>;
+        }
 
         return (<>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"12px 0 8px",flexWrap:"wrap"}}>
@@ -2375,9 +2398,13 @@ export default function App() {
             <span style={{marginLeft:"auto",fontSize:12,color:"var(--text3)",fontWeight:600}}>{filteredRows.length} / {rows.length}</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
-            <th style={{width:"20%"}}>Hotel</th><th style={{width:"9%"}}>Stage</th><th style={{width:"14%"}}>Last Contact</th><th style={{width:"16%"}}>Next Due</th><th style={{width:"9%"}}>Countdown</th><th style={{width:"7%"}}>Priority</th><th style={{width:"17%"}}>Next Action</th><th style={{width:"8%"}}>Owner</th>
+            <th style={{width:"20%"}}>Hotel</th><th style={{width:"9%"}}>Stage</th>
+            <SortTh col="lastDate" label="Last Contact" width="14%" />
+            <SortTh col="nextDue" label="Next Due" width="16%" />
+            <SortTh col="countdown" label="Countdown" width="9%" />
+            <th style={{width:"7%"}}>Priority</th><th style={{width:"17%"}}>Next Action</th><th style={{width:"8%"}}>Owner</th>
           </tr></thead><tbody>
-            {filteredRows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
+            {sortedRows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
               const isExp = ctExpanded === t.id;
               const ordLabel = ["","1st","2nd","3rd","4th"];
               // Priority logic
@@ -2626,7 +2653,7 @@ export default function App() {
       {sel && (
         <>
           <div className="overlay" onClick={()=>{ if (!rejectModal) setSelected(null); }}/>
-          <div className="drawer">
+          <div className="drawer" onClick={e => e.stopPropagation()}>
             <button className="drawer-close" onClick={()=>setSelected(null)}>✕</button>
             <div className="drawer-hotel">{sel.hotel_name}</div>
             <div className="drawer-meta">{sel.brand}{sel.hotel_group && sel.hotel_group !== sel.brand ? ` · ${sel.hotel_group}` : ""} · {sel.city}, {sel.country} · Added by {sel.sdr} · {fmtDateShort(sel.created_at)}</div>
