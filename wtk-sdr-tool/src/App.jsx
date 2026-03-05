@@ -789,6 +789,14 @@ const css = `
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
+// Normalize string for accent-insensitive, case-insensitive search
+function normalizeSearch(s) {
+  if (!s) return "";
+  return s.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // strip diacritics: ö→o, é→e, etc.
+    .replace(/ø/g, "o").replace(/ß/g, "ss").replace(/æ/g, "ae").replace(/þ/g, "th");
+}
+
 function addBusinessDays(date, days) {
   const d = new Date(date);
   let added = 0;
@@ -1033,6 +1041,8 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     { key: "2nd", label: "Contact 2", color: "#0891b2", bg: "#ecfeff" },
     { key: "3rd", label: "Contact 3", color: "#7c3aed", bg: "#f5f3ff" },
     { key: "4th", label: "Contact 4", color: "#6d28d9", bg: "#ede9fe" },
+    { key: "replied", label: "Replied", color: "#0d9488", bg: "#f0fdfa" },
+    { key: "bounced", label: "Bounced/Undeliverable", color: "#b45309", bg: "#fef3c7" },
     { key: "demo", label: "Demo", color: "#c026d3", bg: "#fdf4ff" },
     { key: "trial", label: "Trial", color: "#ea580c", bg: "#fff7ed" },
     { key: "won", label: "Won", color: "#059669", bg: "#ecfdf5" },
@@ -1084,6 +1094,11 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     if (!t) { updatePipeline(tid, { pipeline_stage: stageKey }); return; }
     const now = new Date().toISOString();
     const updates = { pipeline_stage: stageKey };
+    // Clear rejection reason when moving out of lost
+    const currentStage = effectiveStage(t);
+    if (currentStage === "lost" && stageKey !== "lost") {
+      updates.rejection_reason = null;
+    }
     // Moving forward to 1st-4th: auto-create missing preceding actual dates
     if (touchN) {
       const done = [...(t.done || [])];
@@ -1291,6 +1306,10 @@ export default function App() {
   const [ctPriFilter, setCtPriFilter] = useState("");
   const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
+  const [addContactDraft, setAddContactDraft] = useState({name:"",title:"",email:"",linkedin:"",phone:"",is_primary:false});
+  // Multi-contact state: { [prospect_id]: [{id, name, title, email, linkedin, phone, is_primary}] }
+  const [contacts, setContacts] = useState({});
+  const [addContactForm, setAddContactForm] = useState(null); // prospect_id or null
 
   function toggleSort(col) {
     if (sortCol === col) { setSortDir(d => d === "asc" ? "desc" : "asc"); }
@@ -1348,6 +1367,50 @@ export default function App() {
     }
     setProspects(prev => prev.map(p => p.id === pid ? { ...p, ...patch } : p));
     try { await sbFetch(`/prospects?id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(patch) }); } catch(e) { console.error(e); }
+  }
+
+  // ── Multi-contact helpers ────────────────────────────────────────────────────
+  // Contacts stored in prospects.research_notes as JSON block at top, prefixed with <!--contacts:
+  function parseContacts(pid) {
+    if (contacts[pid]) return contacts[pid];
+    const p = prospects.find(x => x.id === pid);
+    if (!p) return [];
+    const match = (p.research_notes || "").match(/<!--contacts:(.*?)-->/s);
+    if (match) { try { return JSON.parse(match[1]); } catch { return []; } }
+    // Bootstrap from existing primary contact fields
+    if (p.gm_name || p.email) {
+      return [{ id: uid(), name: p.gm_name || "", title: p.gm_title || "General Manager", email: p.email || "", linkedin: p.linkedin || "", phone: "", is_primary: true }];
+    }
+    return [];
+  }
+
+  function serializeContacts(list) {
+    return `<!--contacts:${JSON.stringify(list)}-->`;
+  }
+
+  async function saveContacts(pid, list) {
+    setContacts(prev => ({ ...prev, [pid]: list }));
+    const p = prospects.find(x => x.id === pid);
+    const existingNotes = (p?.research_notes || "").replace(/<!--contacts:.*?-->/s, "").trim();
+    const newNotes = serializeContacts(list) + (existingNotes ? "\n" + existingNotes : "");
+    // Sync primary contact back to main fields
+    const primary = list.find(c => c.is_primary) || list[0];
+    const patch = { research_notes: newNotes };
+    if (primary) {
+      patch.gm_name = primary.name || null;
+      patch.gm_first_name = primary.name ? primary.name.split(" ")[0] : null;
+      patch.gm_title = primary.title || null;
+      patch.email = primary.email || null;
+      patch.linkedin = primary.linkedin || null;
+    }
+    setProspects(prev => prev.map(x => x.id === pid ? { ...x, ...patch } : x));
+    try { await sbFetch(`/prospects?id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(patch) }); } catch(e) { console.error(e); }
+    // Sync tracking primary
+    if (primary) {
+      const tPatch = { gm: primary.name || null, email: primary.email || null };
+      setTracking(prev => prev.map(x => x.prospect_id === pid ? { ...x, ...tPatch } : x));
+      try { await sbFetch(`/tracking?prospect_id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(tPatch) }); } catch(e) { console.error(e); }
+    }
   }
 
   useEffect(() => {
@@ -1683,7 +1746,15 @@ export default function App() {
       hotel_group: f.hotel_group?.trim() || null, brand: f.brand?.trim() || null,
       address: f.address?.trim() || null, website: f.website?.trim() || null,
       adr_usd: f.adr_usd ? Number(f.adr_usd) : null, rooms: f.rooms ? Number(f.rooms) : null,
-      current_provider: f.current_provider || null, research_notes: f.notes?.trim() || "Manually added",
+      current_provider: f.current_provider || null,
+      gm_name: f.gm_name?.trim() || null,
+      gm_first_name: f.gm_name?.trim() ? f.gm_name.trim().split(" ")[0] : null,
+      gm_title: f.gm_title?.trim() || null,
+      email: f.email?.trim() || null,
+      linkedin: f.linkedin?.trim() || null,
+      management_company: f.management_company?.trim() || null,
+      operating_model: f.operating_model || null,
+      research_notes: f.notes?.trim() || "Manually added",
       sdr: sdrName || "Unknown", batch: "manual-" + new Date().toISOString().slice(0,10),
     };
     try {
@@ -1842,9 +1913,9 @@ export default function App() {
         prospect_id: p.id,
         hotel: p.hotel_name,
         gm: p.gm_name || null,
-        email: p.email || null,
+        email: p.email || null,   // stored independently — email valid even if no GM name
         sdr: p.sdr || sdrName || "Unknown",
-        pipeline_stage: "lead",
+        pipeline_stage: "new",
         done: [],
         created_at: p.created_at || new Date().toISOString(),
       }));
@@ -1877,8 +1948,8 @@ export default function App() {
     if (filterHasEmail && !p.email) return false;
     if (filterHasGM && !p.gm_name) return false;
     if (filterSearch) {
-      const q = filterSearch.toLowerCase();
-      if (!(p.hotel_name||"").toLowerCase().includes(q) && !(p.gm_name||"").toLowerCase().includes(q) && !(p.city||"").toLowerCase().includes(q)) return false;
+      const q = normalizeSearch(filterSearch);
+      if (!normalizeSearch(p.hotel_name).includes(q) && !normalizeSearch(p.gm_name).includes(q) && !normalizeSearch(p.city).includes(q)) return false;
     }
     return true;
   });
@@ -1896,8 +1967,8 @@ export default function App() {
     const p = prospects.find(x => x.id === t.prospect_id);
     if (leadStatusFilter.length > 0 && !leadStatusFilter.includes(p?.lead_status || "Active")) return false;
     if (outreachSearch) {
-      const q = outreachSearch.toLowerCase();
-      if (!(t.hotel||"").toLowerCase().includes(q) && !(t.gm||"").toLowerCase().includes(q)) return false;
+      const q = normalizeSearch(outreachSearch);
+      if (!normalizeSearch(t.hotel).includes(q) && !normalizeSearch(t.gm).includes(q)) return false;
     }
     if (outreachCountry && (p?.country||"") !== outreachCountry) return false;
     if (outreachCity && (p?.city||"") !== outreachCity) return false;
@@ -2141,7 +2212,7 @@ export default function App() {
         const SM = { active:"new", emailed:"1st", followup:"2nd", dead:"lost" };
         const ms = s => SM[s] || s || "new";
         const EM = String.fromCodePoint(0x2014);
-        const SC = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+        const SC = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
         function toInput(d) { if (!d) return ""; const dt=new Date(d),y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),dd=String(dt.getDate()).padStart(2,"0"); return y+"-"+m+"-"+dd; }
         function fmtD(d) { if (!d) return null; const dt = new Date(d); const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; return fmtDateShort(d)+" ("+days[dt.getDay()]+")"; }
 
@@ -2293,6 +2364,8 @@ export default function App() {
               <option value="2nd">Contact 2</option>
               <option value="3rd">Contact 3</option>
               <option value="4th">Contact 4</option>
+              <option value="replied">Replied</option>
+              <option value="bounced">Bounced/Undeliverable</option>
               <option value="done">Completed</option>
             </select>
             {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");setCtStageFilter("");}}>✕ Clear</button>}
@@ -2317,7 +2390,7 @@ export default function App() {
                     <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
                     <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · GM: "+t.gm:""}</div>
                   </td>
-                  <td><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase"}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
+                  <td><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase"}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}if(newStage!=="lost"&&(t.rejection_reason)){updates.rejection_reason=null;}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s==="bounced"?"Bounced/Undeliverable":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{lastDate ? <span>{fmtD(lastDate)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[lastN]})</span></span> : EM}</td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]} follow-up)</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?"Sequence complete":EM}</span>}</td>
                   <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+" days overdue":daysUntilDue===0?"due today":"in "+daysUntilDue+" days"):EM}</td>
@@ -2475,7 +2548,7 @@ export default function App() {
       {/* Add Hotel Modal */}
       {addHotelModal && (
         <div className="modal-overlay" onClick={()=>setAddHotelModal(false)}>
-          <div className="modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
+          <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
             <div className="modal-title">Add Hotel</div>
             <div className="add-hotel-grid">
               <label className="full-width">Hotel Name *<input value={addHotelForm.hotel_name||""} onChange={e=>setAddHotelForm(p=>({...p,hotel_name:e.target.value}))} placeholder="e.g. Kimpton Hotel Monaco DC"/></label>
@@ -2491,6 +2564,25 @@ export default function App() {
                 <option value="">Select...</option>
                 {["Medallia","Qualtrics","ReviewPro","TrustYou","Revinate","Reputation.com","Unknown","Other"].map(p=><option key={p} value={p}>{p}</option>)}
               </select></label>
+              <div style={{gridColumn:"1/-1",borderTop:"1px solid var(--border)",marginTop:4,paddingTop:8}}>
+                <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Decision Maker</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <label>GM Name<input value={addHotelForm.gm_name||""} onChange={e=>setAddHotelForm(p=>({...p,gm_name:e.target.value}))} placeholder="e.g. John Smith"/></label>
+                  <label>Title<input value={addHotelForm.gm_title||""} onChange={e=>setAddHotelForm(p=>({...p,gm_title:e.target.value}))} placeholder="General Manager"/></label>
+                  <label>Email<input value={addHotelForm.email||""} onChange={e=>setAddHotelForm(p=>({...p,email:e.target.value}))} placeholder="gm@hotel.com" type="email"/></label>
+                  <label>LinkedIn<input value={addHotelForm.linkedin||""} onChange={e=>setAddHotelForm(p=>({...p,linkedin:e.target.value}))} placeholder="linkedin.com/in/..."/></label>
+                </div>
+              </div>
+              <div style={{gridColumn:"1/-1",borderTop:"1px solid var(--border)",marginTop:4,paddingTop:8}}>
+                <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Operations</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <label>Mgmt Company<input value={addHotelForm.management_company||""} onChange={e=>setAddHotelForm(p=>({...p,management_company:e.target.value}))} placeholder="e.g. IHG Hotels & Resorts"/></label>
+                  <label>Operating Model<select value={addHotelForm.operating_model||""} onChange={e=>setAddHotelForm(p=>({...p,operating_model:e.target.value}))}>
+                    <option value="">Select...</option>
+                    {["Owned","Managed","Franchised","Leased","Other"].map(o=><option key={o} value={o}>{o}</option>)}
+                  </select></label>
+                </div>
+              </div>
               <label className="full-width">Notes<input value={addHotelForm.notes||""} onChange={e=>setAddHotelForm(p=>({...p,notes:e.target.value}))} placeholder="Any context..."/></label>
             </div>
             <div className="modal-footer">
@@ -2568,11 +2660,70 @@ export default function App() {
               <div className="d-row"><span className="d-key">Website</span><span className="d-val">{sel.website?<a className="email-link" href={sel.website.startsWith("http")?sel.website:`https://${sel.website}`} target="_blank" rel="noreferrer" title={sel.website}>↗ {sel.website.replace(/^https?:\/\/(www\.)?/,"").slice(0,40)}</a>:<EditableField value="" placeholder="Add URL" onSave={v => updateProspectField(sel.id, 'website', v)} />}</span></div>
             </div>
             <div className="d-sec">
-              <div className="d-sec-title">Decision Maker</div>
-              <div className="d-row"><span className="d-key">Name</span><span className="d-val" style={{fontWeight:700}}><EditableField value={sel.gm_name} placeholder="Add GM name" onSave={v => updateProspectField(sel.id, 'gm_name', v)} /></span></div>
-              <div className="d-row"><span className="d-key">Title</span><span className="d-val"><EditableField value={sel.gm_title} placeholder="Add title" onSave={v => updateProspectField(sel.id, 'gm_title', v)} /></span></div>
-              <div className="d-row"><span className="d-key">Email</span><span className="d-val"><EditableField value={sel.email} placeholder="Add email" onSave={v => updateProspectField(sel.id, 'email', v)} /></span></div>
-              <div className="d-row"><span className="d-key">LinkedIn</span><span className="d-val"><EditableField value={sel.linkedin} placeholder="Add LinkedIn URL" onSave={v => updateProspectField(sel.id, 'linkedin', v)} /></span></div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <span className="d-sec-title" style={{margin:0}}>Contacts</span>
+                <button className="act-btn" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>setAddContactForm(sel.id)}>+ Add</button>
+              </div>
+              {(() => {
+                const ctList = parseContacts(sel.id);
+                if (ctList.length === 0) return (
+                  <div style={{fontSize:12,color:"var(--text3)",fontStyle:"italic",padding:"8px 0"}}>
+                    No contacts yet. <span style={{cursor:"pointer",color:"var(--accent)"}} onClick={()=>setAddContactForm(sel.id)}>Add one →</span>
+                  </div>
+                );
+                return ctList.map((c, ci) => (
+                  <div key={c.id||ci} style={{border:"1px solid var(--border)",borderRadius:6,padding:"10px 12px",marginBottom:8,background:c.is_primary?"var(--accent-light)":"var(--bg)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{c.name||"(No name)"}</span>
+                        {c.is_primary && <span style={{fontSize:9,fontWeight:700,background:"var(--accent)",color:"white",padding:"1px 6px",borderRadius:10,marginLeft:6}}>PRIMARY</span>}
+                      </div>
+                      <div style={{display:"flex",gap:4}}>
+                        {!c.is_primary && <button className="act-btn" style={{fontSize:9,padding:"2px 6px"}} onClick={()=>{const updated=ctList.map((x,xi)=>({...x,is_primary:xi===ci}));saveContacts(sel.id,updated);}}>Set Primary</button>}
+                        <button className="del-btn" style={{fontSize:11}} onClick={()=>{if(ctList.length===1&&c.is_primary){alert("Cannot remove the only primary contact.");return;}const updated=ctList.filter((_,xi)=>xi!==ci);if(c.is_primary&&updated.length>0)updated[0].is_primary=true;saveContacts(sel.id,updated);}}>🗑</button>
+                      </div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"80px 1fr",gap:"4px 8px",fontSize:12}}>
+                      <span style={{color:"var(--text3)"}}>Title</span><EditableField value={c.title} placeholder="General Manager" onSave={v=>{const u=[...ctList];u[ci]={...u[ci],title:v};saveContacts(sel.id,u);}} />
+                      <span style={{color:"var(--text3)"}}>Email</span><EditableField value={c.email} placeholder="Add email" onSave={v=>{const u=[...ctList];u[ci]={...u[ci],email:v};saveContacts(sel.id,u);}} />
+                      <span style={{color:"var(--text3)"}}>LinkedIn</span><EditableField value={c.linkedin} placeholder="Add LinkedIn" onSave={v=>{const u=[...ctList];u[ci]={...u[ci],linkedin:v};saveContacts(sel.id,u);}} />
+                      <span style={{color:"var(--text3)"}}>Phone</span><EditableField value={c.phone} placeholder="Add phone" onSave={v=>{const u=[...ctList];u[ci]={...u[ci],phone:v};saveContacts(sel.id,u);}} />
+                    </div>
+                  </div>
+                ));
+              })()}
+              {addContactForm === sel.id && (
+                  <div style={{border:"1px dashed var(--accent)",borderRadius:6,padding:"10px 12px",background:"#f8faff"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"var(--accent)",marginBottom:8}}>New Contact</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12}}>
+                      <label style={{display:"flex",flexDirection:"column",gap:2}}>Name<input style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"4px 6px"}} value={addContactDraft.name} onChange={e=>setAddContactDraft(d=>({...d,name:e.target.value}))} placeholder="Full name"/></label>
+                      <label style={{display:"flex",flexDirection:"column",gap:2}}>Title<input style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"4px 6px"}} value={addContactDraft.title} onChange={e=>setAddContactDraft(d=>({...d,title:e.target.value}))} placeholder="General Manager"/></label>
+                      <label style={{display:"flex",flexDirection:"column",gap:2}}>Email<input style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"4px 6px"}} value={addContactDraft.email} onChange={e=>setAddContactDraft(d=>({...d,email:e.target.value}))} placeholder="email@hotel.com"/></label>
+                      <label style={{display:"flex",flexDirection:"column",gap:2}}>LinkedIn<input style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"4px 6px"}} value={addContactDraft.linkedin} onChange={e=>setAddContactDraft(d=>({...d,linkedin:e.target.value}))} placeholder="linkedin.com/in/..."/></label>
+                      <label style={{display:"flex",flexDirection:"column",gap:2}}>Phone<input style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"4px 6px"}} value={addContactDraft.phone} onChange={e=>setAddContactDraft(d=>({...d,phone:e.target.value}))} placeholder="+1 ..."/></label>
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:8,alignItems:"center"}}>
+                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="checkbox" checked={addContactDraft.is_primary} onChange={e=>setAddContactDraft(d=>({...d,is_primary:e.target.checked}))}/> Set as primary</label>
+                      <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                        <button className="modal-cancel" style={{padding:"4px 10px",fontSize:12}} onClick={()=>{setAddContactForm(null);setAddContactDraft({name:"",title:"",email:"",linkedin:"",phone:"",is_primary:false});}}>Cancel</button>
+                        <button className="modal-confirm" style={{padding:"4px 10px",fontSize:12}} onClick={()=>{
+                          if (!addContactDraft.name.trim()) { alert("Name required"); return; }
+                          const existing = parseContacts(sel.id);
+                          const newC = {...addContactDraft, id: uid()};
+                          let updated;
+                          if (newC.is_primary || existing.length===0) {
+                            updated = [...existing.map(c=>({...c,is_primary:false})), {...newC,is_primary:true}];
+                          } else {
+                            updated = [...existing, newC];
+                          }
+                          saveContacts(sel.id, updated);
+                          setAddContactForm(null);
+                          setAddContactDraft({name:"",title:"",email:"",linkedin:"",phone:"",is_primary:false});
+                        }}>Save</button>
+                      </div>
+                    </div>
+                  </div>
+              )}
             </div>
             {(() => {
               const trk = tracking.find(x => x.prospect_id === sel.id);
