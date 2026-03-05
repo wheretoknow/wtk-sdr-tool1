@@ -910,8 +910,11 @@ function EmailBody({ text }) {
 
 function ResearchNotes({ text }) {
   if (!text) return null;
+  // Strip the contacts JSON block — it's machine data, not for display
+  const clean = text.replace(/<!--contacts:.*?-->\n?/s, "").trim();
+  if (!clean) return null;
   // Split on bullet markers (• or - at line start) or newlines
-  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const lines = clean.split(/\n/).map(l => l.trim()).filter(Boolean);
   const bullets = [];
   let current = "";
   for (const line of lines) {
@@ -929,7 +932,7 @@ function ResearchNotes({ text }) {
 
   // If no bullets found (pure paragraph), split into logical chunks
   if (bullets.length <= 1) {
-    const para = text.trim();
+    const para = clean.trim();
     const parts = para.split(/\.\s+/).filter(Boolean).map(s => s.endsWith(".") ? s : s + ".");
     return (
       <div className="research-notes">
@@ -1042,7 +1045,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
     { key: "3rd", label: "Contact 3", color: "#7c3aed", bg: "#f5f3ff" },
     { key: "4th", label: "Contact 4", color: "#6d28d9", bg: "#ede9fe" },
     { key: "replied", label: "Replied", color: "#0d9488", bg: "#f0fdfa" },
-    { key: "bounced", label: "Bounced/Undeliverable", color: "#b45309", bg: "#fef3c7" },
+    { key: "bounced", label: "Bounced", color: "#b45309", bg: "#fef3c7" },
     { key: "demo", label: "Demo", color: "#c026d3", bg: "#fdf4ff" },
     { key: "trial", label: "Trial", color: "#ea580c", bg: "#fff7ed" },
     { key: "won", label: "Won", color: "#059669", bg: "#ecfdf5" },
@@ -2674,8 +2677,8 @@ export default function App() {
                 return ctList.map((c, ci) => (
                   <div key={c.id||ci} style={{border:"1px solid var(--border)",borderRadius:6,padding:"10px 12px",marginBottom:8,background:c.is_primary?"var(--accent-light)":"var(--bg)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                      <div>
-                        <span style={{fontWeight:700,fontSize:13,color:"var(--text)"}}>{c.name||"(No name)"}</span>
+                      <div style={{flex:1,marginRight:8}}>
+                        <EditableField value={c.name} placeholder="(No name)" onSave={v=>{const u=[...ctList];u[ci]={...u[ci],name:v};saveContacts(sel.id,u);}} />
                         {c.is_primary && <span style={{fontSize:9,fontWeight:700,background:"var(--accent)",color:"white",padding:"1px 6px",borderRadius:10,marginLeft:6}}>PRIMARY</span>}
                       </div>
                       <div style={{display:"flex",gap:4}}>
@@ -2737,7 +2740,7 @@ export default function App() {
                   <div className="d-sec-title">Pipeline Status</div>
                   <div className="d-row"><span className="d-key">Stage</span><span className="d-val"><span style={{fontWeight:700,color:so.color}}>{so.label}</span></span></div>
                   {trk.intention > 0 && <div className="d-row"><span className="d-key">Intent</span><span className="d-val">{trk.intention}/5 {String.fromCodePoint(0x2014)} {({1:"Cold",2:"Low",3:"Medium",4:"Warm",5:"Hot"})[trk.intention]||""}</span></div>}
-                  {trk.rejection_reason && <div className="d-row"><span className="d-key">Lost Reason</span><span className="d-val" style={{color:"var(--red)"}}>{trk.rejection_reason}</span></div>}
+                  {trk.rejection_reason && <div className="d-row"><span className="d-key">Lost Reason</span><span className="d-val" style={{color:"var(--red)"}}><EditableField value={trk.rejection_reason} placeholder="Add reason" onSave={async v=>{await updatePipeline(trk.id,{rejection_reason:v||null});}} /></span></div>}
                   <div style={{marginTop:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Activity Timeline</div>
                     {(trk.done||[]).map(n => {
