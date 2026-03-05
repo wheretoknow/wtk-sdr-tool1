@@ -2731,14 +2731,39 @@ export default function App() {
             {(() => {
               const trk = tracking.find(x => x.prospect_id === sel.id);
               if (!trk) return null;
-              const DS = [{key:"new",label:"New",color:"#6b7280"},{key:"1st",label:"1st",color:"#2563eb"},{key:"2nd",label:"2nd",color:"#0891b2"},{key:"3rd",label:"3rd",color:"#7c3aed"},{key:"4th",label:"4th",color:"#6d28d9"},{key:"demo",label:"Demo",color:"#c026d3"},{key:"trial",label:"Trial",color:"#ea580c"},{key:"won",label:"Won",color:"#059669"},{key:"lost",label:"Lost",color:"#dc2626"}];
+              const DS = [
+                {key:"new",label:"New",color:"#6b7280"},{key:"1st",label:"Contact 1",color:"#2563eb"},
+                {key:"2nd",label:"Contact 2",color:"#0891b2"},{key:"3rd",label:"Contact 3",color:"#7c3aed"},
+                {key:"4th",label:"Contact 4",color:"#6d28d9"},{key:"replied",label:"Replied",color:"#0d9488"},
+                {key:"bounced",label:"Bounced",color:"#b45309"},{key:"demo",label:"Demo",color:"#c026d3"},
+                {key:"trial",label:"Trial",color:"#ea580c"},{key:"won",label:"Won",color:"#059669"},
+                {key:"lost",label:"Lost",color:"#dc2626"}
+              ];
               const ms = s => { if (s==="active") return "new"; if (s==="emailed") return "1st"; if (s==="followup") return "2nd"; if (s==="dead") return "lost"; return s; };
               const stage = ms(trk.pipeline_stage || "new");
               const so = DS.find(s=>s.key===stage) || DS[0];
               return (
                 <div className="d-sec">
                   <div className="d-sec-title">Pipeline Status</div>
-                  <div className="d-row"><span className="d-key">Stage</span><span className="d-val"><span style={{fontWeight:700,color:so.color}}>{so.label}</span></span></div>
+                  <div className="d-row">
+                    <span className="d-key">Stage</span>
+                    <span className="d-val">
+                      <select
+                        value={stage}
+                        onChange={async e => {
+                          const newStage = e.target.value;
+                          if (newStage === "lost") { openRejectModal(trk.id, "lost"); return; }
+                          const updates = { pipeline_stage: newStage };
+                          if (newStage !== "lost" && trk.rejection_reason) updates.rejection_reason = null;
+                          if (newStage === "new") { updates.d1=null; updates.d2=null; updates.d3=null; updates.d4=null; updates.done=[]; }
+                          await updatePipeline(trk.id, updates);
+                        }}
+                        style={{fontSize:13,fontWeight:700,color:so.color,background:"transparent",border:"1px solid var(--border2)",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}
+                      >
+                        {DS.map(s => <option key={s.key} value={s.key} style={{color:s.color}}>{s.label}</option>)}
+                      </select>
+                    </span>
+                  </div>
                   {trk.intention > 0 && <div className="d-row"><span className="d-key">Intent</span><span className="d-val">{trk.intention}/5 {String.fromCodePoint(0x2014)} {({1:"Cold",2:"Low",3:"Medium",4:"Warm",5:"Hot"})[trk.intention]||""}</span></div>}
                   {trk.rejection_reason && <div className="d-row"><span className="d-key">Lost Reason</span><span className="d-val" style={{color:"var(--red)"}}><EditableField value={trk.rejection_reason} placeholder="Add reason" onSave={async v=>{await updatePipeline(trk.id,{rejection_reason:v||null});}} /></span></div>}
                   <div style={{marginTop:10}}>
