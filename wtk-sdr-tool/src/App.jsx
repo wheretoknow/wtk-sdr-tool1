@@ -1340,6 +1340,8 @@ export default function App() {
   const [ctPriFilter, setCtPriFilter] = useState("");
   const [ctSortCol, setCtSortCol] = useState(null);
   const [ctSortDir, setCtSortDir] = useState("asc");
+  const [ctPage, setCtPage] = useState(1);
+  const CT_PER_PAGE = 20;
   const [selectedIds, setSelectedIds] = useState(new Set()); // batch select
   const [ctFocusMode, setCtFocusMode] = useState(true); // focus mode default on
   const [focusDoneIds, setFocusDoneIds] = useState(new Set()); // temporarily dismissed in focus
@@ -1551,10 +1553,19 @@ export default function App() {
         body: JSON.stringify(body)
       });
       const data = await r.json();
-      if (data?.error && data.error.toLowerCase().includes("rate limit")) {
+      // Backend now returns rateLimited/overloaded as explicit flags
+      const isRateLimit = data?.rateLimited || (data?.error && data.error.toLowerCase().includes("rate limit"));
+      const isOverloaded = data?.overloaded || (data?.error && data.error.toLowerCase().includes("overloaded"));
+      if (isRateLimit) {
         if (attempt >= 1) return { ...data, rateLimited: true };
         startCooldown();
         await rateLimitWait(62);
+        return apiFetch(body, attempt + 1);
+      }
+      if (isOverloaded) {
+        if (attempt >= 1) return { ...data, overloaded: true, error: data.error || "API overloaded" };
+        setLog("API overloaded — waiting 30s before retry...");
+        await rateLimitWait(30);
         return apiFetch(body, attempt + 1);
       }
       return data;
@@ -1568,33 +1579,53 @@ export default function App() {
       setLog("Step 1: Building hotel list from knowledge base...");
 
       const listData = await apiFetch({
-        mode: "list", city: market, brand, group, scope, minAdr
+        mode: "list", city: market, brand, group, scope, minAdr,
+        region: region || "", country: country || ""
       });
 
       if (listData?.error) {
+        if (listData.rateLimited) { setError("Rate limit hit — wait and try again."); return; }
+        if (listData.overloaded) { setError("API overloaded — wait 30s and try again."); return; }
         setError("List step failed: " + listData.error);
         return;
       }
+      if (listData?.debug) setLog(`Backend: ${listData.debug}`);
 
       const allKnown = parseJSON(listData.result).filter(h => h.hotel_name && h.hotel_name.trim());
-      if (!allKnown.length) {
+
+      // ── Geographic safety filter: remove results outside selected region/country ──
+      const regionCountries = region ? new Set(Object.keys(GEO[region] || {}).map(c => c.toLowerCase())) : null;
+      const selectedCountryLower = country ? country.toLowerCase() : null;
+      const geoFiltered = allKnown.filter(h => {
+        if (!h.country) return false; // no country = discard (backend v9.1 already strips these, this is safety net)
+        const hCountry = (h.country || "").toLowerCase();
+        // If a specific country was selected, enforce it
+        if (selectedCountryLower && hCountry !== selectedCountryLower) return false;
+        // If only region selected, enforce region membership
+        if (!selectedCountryLower && regionCountries && !regionCountries.has(hCountry)) return false;
+        return true;
+      });
+      const geoDropped = allKnown.length - geoFiltered.length;
+      if (geoDropped > 0) setLog(`Filtered out ${geoDropped} hotels outside ${country || region || "target region"}`);
+
+      if (!geoFiltered.length) {
         setError("No hotels found in knowledge base. Try a different brand or market.");
         setProgress(100);
         return;
       }
 
       // Filter out hotels already in DB
-      const newHotels = allKnown.filter(h => !existingKeys.has(normKey(h.hotel_name, h.city)));
+      const newHotels = geoFiltered.filter(h => !existingKeys.has(normKey(h.hotel_name, h.city)));
       const dupeCount = allKnown.length - newHotels.length;
 
       // Take only up to requested count
       const toVerify = newHotels.slice(0, n);
 
-      setLog(`Found ${allKnown.length} known hotels · ${dupeCount} already in DB · ${toVerify.length} to verify`);
+      setLog(`Found ${geoFiltered.length} hotels in ${country || region || "target"} · ${dupeCount} already in DB · ${toVerify.length} to verify${geoDropped > 0 ? ` · ${geoDropped} outside region removed` : ""}`);
       setProgress(20);
 
       if (toVerify.length === 0) {
-        setLog(`All ${allKnown.length} known hotels already in database. ${allKnown.length < 50 ? "This may not be the complete list — the model only knows hotels from its training data." : ""}`);
+        setLog(`All ${geoFiltered.length} known hotels already in database. ${geoFiltered.length < 50 ? "This may not be the complete list — the model only knows hotels from its training data." : ""}`);
         setProgress(100);
         setTab("hotels");
         return;
@@ -1626,10 +1657,10 @@ export default function App() {
 
         const data = await apiFetch({ mode: "verify", hotels: batchHotels, brand, group });
 
-        if (data?.rateLimited) {
+        if (data?.rateLimited || data?.overloaded) {
           rateLimitHit = true;
           startCooldown();
-          setError(`Rate limit after batch ${i + 1}. ${allFresh.length} hotels saved. Wait and run again — remaining hotels are queued.`);
+          setError(`${data.rateLimited ? "Rate limit" : "API overloaded"} after batch ${i + 1}. ${allFresh.length} hotels saved. Wait and run again.`);
           break;
         }
 
@@ -1642,25 +1673,15 @@ export default function App() {
 
         const raw = parseJSON(data.result);
         
-        // FALLBACK: if verify parse failed, use Step 1 data directly (hotel_name + city + country + brand)
-        const hotelsToSave = raw.length > 0 ? raw : batchHotels.map(h => ({
-          hotel_name: h.hotel_name,
-          brand: brand || h.brand,
-          hotel_group: group || h.hotel_group || h.brand,
-          city: h.city,
-          country: h.country,
-          tier: null,
-          rooms: null,
-          gm_name: null,
-          gm_title: null,
-          contact_confidence: null,
-          research_notes: "Verify failed — basic info from knowledge base only. Rooms and GM need manual lookup."
-        }));
-        
+        // If verify returned no usable data, skip this batch entirely — don't save garbage
         if (!raw.length) {
           const debugInfo = data.debug || (data.result || "").slice(0, 300);
-          setLog(`⚠ Verify failed for batch ${i + 1} — saving basic info. ${debugInfo ? "Debug: " + debugInfo.slice(0,100) : ""}`);
+          setLog(`⚠ Verify failed for batch ${i + 1} — skipping (won't save unverified data). ${debugInfo ? "Debug: " + debugInfo.slice(0,100) : ""}`);
+          totalErrors++;
+          continue;
         }
+
+        const hotelsToSave = raw;
 
         // Save this batch immediately — skip entries without hotel_name
         const batchFresh = [];
@@ -2618,10 +2639,10 @@ export default function App() {
             </div>);
           })() : (<>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0",flexWrap:"wrap"}}>
-            <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctOwnerFilter} onChange={e=>setCtOwnerFilter(e.target.value)}>
+            <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctOwnerFilter} onChange={e=>{setCtOwnerFilter(e.target.value);setCtPage(1);}}>
               <option value="">All Owners</option>{ctSdrs.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={ctDueFilter} onChange={e=>setCtDueFilter(e.target.value)}>
+            <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={ctDueFilter} onChange={e=>{setCtDueFilter(e.target.value);setCtPage(1);}}>
               <option value="">All Due Dates</option>
               <option value="overdue">Overdue</option>
               <option value="today">Due today</option>
@@ -2629,14 +2650,14 @@ export default function App() {
               <option value="7days">Next 7 days</option>
               <option value="none">No due date</option>
             </select>
-            <select className="cmd-input" style={{minWidth:80,flexShrink:0}} value={ctPriFilter} onChange={e=>setCtPriFilter(e.target.value)}>
+            <select className="cmd-input" style={{minWidth:80,flexShrink:0}} value={ctPriFilter} onChange={e=>{setCtPriFilter(e.target.value);setCtPage(1);}}>
               <option value="">All Priority</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
               <option value="done">Done</option>
             </select>
-            <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctStageFilter} onChange={e=>setCtStageFilter(e.target.value)}>
+            <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctStageFilter} onChange={e=>{setCtStageFilter(e.target.value);setCtPage(1);}}>
               <option value="">All Stages</option>
               <option value="new">New</option>
               <option value="1st">Email #1</option>
@@ -2647,9 +2668,13 @@ export default function App() {
               <option value="bounced">Bounced</option>
               <option value="done">Completed</option>
             </select>
-            {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");setCtStageFilter("");}}>✕ Clear</button>}
+            {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");setCtStageFilter("");setCtPage(1);}}>✕ Clear</button>}
             <span style={{marginLeft:"auto",fontSize:12,color:"var(--text3)",fontWeight:600}}>{filteredRows.length} / {rows.length}</span>
           </div>
+          {(() => {
+            const totalCtPages = Math.ceil(sortedRows.length / CT_PER_PAGE);
+            const pagedCtRows = sortedRows.slice((ctPage - 1) * CT_PER_PAGE, ctPage * CT_PER_PAGE);
+            return (<>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
             <th style={{width:"20%"}}>Hotel</th><th style={{width:"12%"}}>Stage</th>
             <SortTh col="lastDate" label="Last Contact" width="14%" />
@@ -2657,7 +2682,7 @@ export default function App() {
             <SortTh col="countdown" label="Countdown" width="9%" />
             <th style={{width:"7%"}}>Priority</th><th style={{width:"17%"}}>Next Action</th><th style={{width:"8%"}}>Owner</th>
           </tr></thead><tbody>
-            {sortedRows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
+            {pagedCtRows.map(({t, p, stage, actual, due, nextStep, nextDue, lastN, lastDate, daysSince, daysUntilDue, status}) => {
               const isExp = ctExpanded === t.id;
               const ordLabel = ["","1st","2nd","3rd","4th"];
               // Priority logic
@@ -2714,6 +2739,22 @@ export default function App() {
               </Fragment>);
             })}
           </tbody></table></div>
+          {totalCtPages > 1 && (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px",borderTop:"1px solid var(--border)"}}>
+              <button className="act-btn" disabled={ctPage===1} onClick={()=>setCtPage(p=>p-1)}>← Prev</button>
+              {Array.from({length:Math.min(totalCtPages,7)}, (_,i) => {
+                let page;
+                if (totalCtPages <= 7) page = i+1;
+                else if (ctPage <= 4) page = i+1;
+                else if (ctPage >= totalCtPages-3) page = totalCtPages-6+i;
+                else page = ctPage-3+i;
+                return <button key={page} className={`act-btn ${ctPage===page?"success":""}`} style={{minWidth:32}} onClick={()=>setCtPage(page)}>{page}</button>;
+              })}
+              <button className="act-btn" disabled={ctPage===totalCtPages} onClick={()=>setCtPage(p=>p+1)}>Next →</button>
+              <span style={{fontSize:11,color:"var(--text3)",marginLeft:4}}>{(ctPage-1)*CT_PER_PAGE+1}–{Math.min(ctPage*CT_PER_PAGE,sortedRows.length)} of {sortedRows.length}</span>
+            </div>
+          )}
+          </>); })()}
         </>)}
         </>);
       })()}
