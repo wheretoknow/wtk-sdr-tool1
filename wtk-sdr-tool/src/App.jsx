@@ -861,6 +861,9 @@ const REJECTION_REASONS = [
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function fmtDate(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
 function fmtDateShort(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }); }
+function pluralDays(n) { const a = Math.abs(n); return a === 1 ? "1 day" : a + " days"; }
+const STAGE_LABELS = {new:"New","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
+function stageLabel(s) { return STAGE_LABELS[s] || s?.charAt(0).toUpperCase() + s?.slice(1) || "New"; }
 const TODAY = new Date();
 function isOverdue(d) { return d && new Date(d) < TODAY; }
 
@@ -1068,10 +1071,10 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
 
   const STAGES = [
     { key: "new", label: "New", color: "#6b7280", bg: "#f9fafb" },
-    { key: "1st", label: "Contact 1", color: "#2563eb", bg: "#eff6ff" },
-    { key: "2nd", label: "Contact 2", color: "#0891b2", bg: "#ecfeff" },
-    { key: "3rd", label: "Contact 3", color: "#7c3aed", bg: "#f5f3ff" },
-    { key: "4th", label: "Contact 4", color: "#6d28d9", bg: "#ede9fe" },
+    { key: "1st", label: "Email #1", color: "#2563eb", bg: "#eff6ff" },
+    { key: "2nd", label: "Follow-up #1", color: "#0891b2", bg: "#ecfeff" },
+    { key: "3rd", label: "Follow-up #2", color: "#7c3aed", bg: "#f5f3ff" },
+    { key: "4th", label: "Follow-up #3", color: "#6d28d9", bg: "#ede9fe" },
     { key: "replied", label: "Replied", color: "#0d9488", bg: "#f0fdfa" },
     { key: "bounced", label: "Bounced", color: "#b45309", bg: "#fef3c7" },
     { key: "demo", label: "Demo", color: "#c026d3", bg: "#fdf4ff" },
@@ -2147,7 +2150,7 @@ export default function App() {
             ST_ALL.forEach(s => stCounts[s] = 0);
             tracking.forEach(t => { const s = SM2(t.pipeline_stage); stCounts[s] = (stCounts[s]||0) + 1; });
             const stColors = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
-            const stLabels = {new:"New","1st":"Contact 1","2nd":"Contact 2","3rd":"Contact 3","4th":"Contact 4",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
+            const stLabels = {new:"New","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
             // Conversion metrics
             const repliedCount = stCounts["replied"] + stCounts["demo"] + stCounts["trial"] + stCounts["won"];
             const replyRate = contacted1 > 0 ? Math.round(repliedCount / contacted1 * 100) : 0;
@@ -2296,7 +2299,7 @@ export default function App() {
                     setSelectedIds(new Set());
                   }}>
                     <option value="">Set Stage</option>
-                    {["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s => <option key={s} value={s}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                    {["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s => <option key={s} value={s}>{s==="1st"?"Email #1":s==="2nd"?"Follow-up #1":s==="3rd"?"Follow-up #2":s==="4th"?"Follow-up #3":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
                   </select>
                   <select className="cmd-input" style={{minWidth:100}} defaultValue="" onChange={async e => {
                     const val = e.target.value; if (!val) return; e.target.value = "";
@@ -2586,7 +2589,7 @@ export default function App() {
                 const gmFirst = (t.gm || p?.gm_name || "").split(" ")[0] || "there";
                 const isOverdue = status === "overdue";
                 const isDueToday = daysUntilDue === 0;
-                const nextAction = !actual[1] ? "Send first email" : nextStep ? `Follow-up #${nextStep-1}` : "Waiting reply";
+                const nextAction = !actual[1] ? "Send Email #1" : nextStep ? `Send Follow-up #${nextStep-1}` : "Waiting reply";
                 return (
                   <div key={t.id} className={`focus-card ${isOverdue?"overdue":isDueToday?"due-today":"due-soon"}`}>
                     <button className={`focus-done-btn ${focusDoneIds.has(t.id)?"checked":""}`} onClick={() => {
@@ -2599,7 +2602,7 @@ export default function App() {
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginTop:4,fontSize:12}}>
                         <span style={{fontWeight:600,color:isOverdue?"var(--red)":isDueToday?"var(--orange)":"var(--amber)"}}>
-                          {isOverdue ? Math.abs(daysUntilDue)+" days overdue" : isDueToday ? "Due today" : "Due in "+daysUntilDue+" days"}
+                          {isOverdue ? pluralDays(daysUntilDue)+" overdue" : isDueToday ? "Due today" : "Due in "+pluralDays(daysUntilDue)}
                         </span>
                         <span style={{color:"var(--text3)"}}>→ {nextAction}</span>
                         {nextDue && <span style={{color:"var(--text3)",fontSize:11}}>{fmtDateShort(nextDue)} ({ordLabel[nextStep]})</span>}
@@ -2636,10 +2639,10 @@ export default function App() {
             <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctStageFilter} onChange={e=>setCtStageFilter(e.target.value)}>
               <option value="">All Stages</option>
               <option value="new">New</option>
-              <option value="1st">Contact 1</option>
-              <option value="2nd">Contact 2</option>
-              <option value="3rd">Contact 3</option>
-              <option value="4th">Contact 4</option>
+              <option value="1st">Email #1</option>
+              <option value="2nd">Follow-up #1</option>
+              <option value="3rd">Follow-up #2</option>
+              <option value="4th">Follow-up #3</option>
               <option value="replied">Replied</option>
               <option value="bounced">Bounced</option>
               <option value="done">Completed</option>
@@ -2661,23 +2664,28 @@ export default function App() {
               const priority = status === "done" ? "done" : status === "overdue" ? "high" : (daysUntilDue !== null && daysUntilDue <= 2) ? "high" : (daysUntilDue !== null && daysUntilDue <= 5) ? "medium" : "low";
               const priStyle = { high: {bg:"#fef2f2",color:"#dc2626",label:"High"}, medium: {bg:"#fffbeb",color:"#d97706",label:"Medium"}, low: {bg:"#f3f4f6",color:"#6b7280",label:"Low"}, done: {bg:"#ecfdf5",color:"#059669",label:"Done"} }[priority];
               // Next Action logic
-              const nextAction = status === "done" ? "\u2713 Sequence finished" : !actual[1] ? "\u2709 Send first email" : nextStep ? `\u21BA Follow-up #${nextStep-1}` : "\u23F3 Waiting reply";
+              const nextAction = status === "done" ? null : !actual[1] ? "\u2709 Send Email #1" : nextStep ? `\u21BA Send Follow-up #${nextStep-1}` : "\u23F3 Waiting reply";
               const emailAddr = t.email || p?.email;
               const gmFirst = (t.gm || p?.gm_name || "").split(" ")[0] || "there";
               return (<Fragment key={t.id}>
-                <tr style={{cursor:"pointer",borderLeft:priority==="high"?"3px solid #dc2626":priority==="medium"?"3px solid #d97706":"3px solid transparent",opacity:priority==="done"?0.55:1}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
+                <tr style={{cursor:"pointer",borderLeft:priority==="high"?"3px solid #dc2626":priority==="medium"?"3px solid #d97706":"3px solid transparent",opacity:priority==="done"?0.45:1,background:priority==="done"?"#fafafa":undefined}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
                   <td>
-                    <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
-                    <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · "+t.gm:""}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:10,color:"var(--text3)",flexShrink:0,transition:"transform 0.15s",transform:isExp?"rotate(90deg)":"rotate(0deg)"}}>▸</span>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
+                        <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · "+t.gm:""}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td style={{overflow:"visible"}}><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase",minWidth:90}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}if(newStage!=="lost"&&(t.rejection_reason)){updates.rejection_reason=null;}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s==="bounced"?"Bounced":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
+                  <td style={{overflow:"visible"}}><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase",minWidth:90}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}if(newStage!=="lost"&&(t.rejection_reason)){updates.rejection_reason=null;}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{stageLabel(s)}</option>)}</select></td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{lastDate ? <span>{fmtD(lastDate)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[lastN]})</span></span> : EM}</td>
-                  <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]} follow-up)</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?"Sequence complete":EM}</span>}</td>
-                  <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+" days overdue":daysUntilDue===0?"due today":"in "+daysUntilDue+" days"):EM}</td>
-                  <td><span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:10,background:priStyle.bg,color:priStyle.color}}>{priStyle.label}</span></td>
+                  <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span title={ordLabel[nextStep]+" follow-up"}>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]})</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?EM:EM}</span>}</td>
+                  <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?pluralDays(daysUntilDue)+" overdue":daysUntilDue===0?"due today":"in "+pluralDays(daysUntilDue)):EM}</td>
+                  <td>{status==="done"?<span style={{fontSize:10,color:"var(--text3)"}}>—</span>:<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:10,background:priStyle.bg,color:priStyle.color}}>{priStyle.label}</span>}</td>
                   <td>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:11,color:status==="done"?"var(--text3)":"var(--text)"}}>{nextAction}</span>
+                      <span style={{fontSize:11,color:status==="done"?"var(--text3)":"var(--text)"}}>{nextAction||EM}</span>
                       {emailAddr ? <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);const webUrl=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;const t0=Date.now();window.location.href=`ms-outlook://compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`;setTimeout(()=>{if(Date.now()-t0<1500)window.open(webUrl);},1200);}}>✉ Email</button>
                       : <button className="act-btn" style={{fontSize:9,padding:"2px 6px",background:"transparent",color:"var(--text3)",border:"1px solid var(--border)",borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>+ Add email</button>}
                     </div>
@@ -2685,23 +2693,20 @@ export default function App() {
                   <td><span style={{fontSize:11,color:"var(--text3)"}}>{t.sdr||EM}</span></td>
                 </tr>
                 {isExp && <tr><td colSpan={8} style={{background:"#f9fafb",padding:"10px 16px"}}>
-                  <div style={{display:"flex",gap:16,alignItems:"center"}}>
+                  <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
                     {[1,2,3,4].map(n => {
                       const hasActual = !!actual[n];
                       const isDue = nextStep === n;
                       const dueDate = due[n];
-                      const dotStyle = hasActual ? {background:"#059669"} : isDue ? {background:"#d97706"} : {background:"#d1d5db"};
-                      const label = n === 1 ? "1st Email" : `Follow-up ${n-1}`;
-                      return (<div key={n} style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",...dotStyle,flexShrink:0}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:10,fontWeight:600,color:hasActual?"#059669":isDue?"#d97706":"var(--text3)"}}>{label}</div>
-                          <input type="date" value={toInput(actual[n])} onChange={e=>updateDate(t.id,n,e.target.value)} onClick={e=>e.stopPropagation()}
-                            style={{fontSize:11,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%",fontFamily:"inherit",cursor:"pointer",marginTop:2}} />
-                          {n >= 2 && !hasActual && <div style={{fontSize:8,color:"var(--text3)",marginTop:1}}>Due: {dueDate ? fmtD(dueDate) : "—"}</div>}
-                          {hasActual && <div style={{fontSize:8,color:"#059669",marginTop:1}}>{"\u2713"} {fmtD(actual[n])}</div>}
-                        </div>
-                        {n < 4 && <div style={{width:20,height:1,background:hasActual?"#059669":"#d1d5db",flexShrink:0}}/>}
+                      const dotColor = hasActual ? "#059669" : isDue ? "#d97706" : "#d1d5db";
+                      const label = n === 1 ? "Email #1" : `Follow-up #${n-1}`;
+                      return (<div key={n} style={{flex:1,minWidth:0,textAlign:"center"}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:dotColor,margin:"0 auto 4px"}}/>
+                        <div style={{fontSize:10,fontWeight:600,color:hasActual?"#059669":isDue?"#d97706":"var(--text3)"}}>{label}</div>
+                        <input type="date" value={toInput(actual[n])} onChange={e=>updateDate(t.id,n,e.target.value)} onClick={e=>e.stopPropagation()}
+                          style={{fontSize:11,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%",fontFamily:"inherit",cursor:"pointer",marginTop:2}} />
+                        {n >= 2 && !hasActual && <div style={{fontSize:8,color:"var(--text3)",marginTop:1}}>Due: {dueDate ? fmtD(dueDate) : "—"}</div>}
+                        {hasActual && <div style={{fontSize:8,color:"#059669",marginTop:1}}>{"\u2713"} {fmtD(actual[n])}</div>}
                       </div>);
                     })}
                   </div>
@@ -3010,9 +3015,9 @@ export default function App() {
               const trk = tracking.find(x => x.prospect_id === sel.id);
               if (!trk) return null;
               const DS = [
-                {key:"new",label:"New",color:"#6b7280"},{key:"1st",label:"Contact 1",color:"#2563eb"},
-                {key:"2nd",label:"Contact 2",color:"#0891b2"},{key:"3rd",label:"Contact 3",color:"#7c3aed"},
-                {key:"4th",label:"Contact 4",color:"#6d28d9"},{key:"replied",label:"Replied",color:"#0d9488"},
+                {key:"new",label:"New",color:"#6b7280"},{key:"1st",label:"Email #1",color:"#2563eb"},
+                {key:"2nd",label:"Follow-up #1",color:"#0891b2"},{key:"3rd",label:"Follow-up #2",color:"#7c3aed"},
+                {key:"4th",label:"Follow-up #3",color:"#6d28d9"},{key:"replied",label:"Replied",color:"#0d9488"},
                 {key:"bounced",label:"Bounced",color:"#b45309"},{key:"demo",label:"Demo",color:"#c026d3"},
                 {key:"trial",label:"Trial",color:"#ea580c"},{key:"won",label:"Won",color:"#059669"},
                 {key:"lost",label:"Lost",color:"#dc2626"}
@@ -3048,7 +3053,7 @@ export default function App() {
                     <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Activity Timeline</div>
                     {(trk.done||[]).map(n => {
                       const d = trk["d"+n];
-                      const lbl = {1:"1st Email sent",2:"2nd Follow-up sent",3:"3rd Follow-up sent",4:"4th Follow-up sent"};
+                      const lbl = {1:"Email #1 sent",2:"Follow-up #1 sent",3:"Follow-up #2 sent",4:"Follow-up #3 sent"};
                       return <div key={n} style={{fontSize:11,color:"var(--text2)",padding:"2px 0",display:"flex",gap:8}}>
                         <span style={{color:"var(--text3)",minWidth:70}}>{d?fmtDate(d):"\u2014"}</span>
                         <span>{lbl[n]||("Touch "+n)}</span>
