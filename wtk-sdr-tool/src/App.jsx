@@ -618,7 +618,7 @@ const css = `
   .note-input { width: 100%; font-size: 12px; border: 1px solid var(--accent); border-radius: 4px; padding: 4px 6px; font-family: 'Inter',sans-serif; resize: vertical; min-height: 48px; box-sizing: border-box; }
   .del-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 2px 5px; border-radius: 3px; line-height: 1; }
   .del-btn:hover { color: var(--red); background: #fee2e2; }
-  .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
   .dup-modal { background: var(--bg); border-radius: 12px; width: 90vw; max-width: 900px; max-height: 80vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
   .dup-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
   .dup-group-hdr { padding: 10px 14px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; }
@@ -733,7 +733,7 @@ const css = `
   .act-btn.success:hover { border-color: var(--green); background: var(--green-bg); }
 
   /* Rejection modal */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 60; display: flex; align-items: center; justify-content: center; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
   .modal { background: var(--surface); border-radius: 10px; padding: 24px; width: 420px; box-shadow: var(--shadow-md); }
   .modal-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
   .modal-sub { font-size: 13px; color: var(--text3); margin-bottom: 16px; }
@@ -2625,7 +2625,7 @@ export default function App() {
 
       {sel && (
         <>
-          <div className="overlay" onClick={()=>setSelected(null)}/>
+          <div className="overlay" onClick={()=>{ if (!rejectModal) setSelected(null); }}/>
           <div className="drawer">
             <button className="drawer-close" onClick={()=>setSelected(null)}>✕</button>
             <div className="drawer-hotel">{sel.hotel_name}</div>
