@@ -1911,13 +1911,23 @@ export default function App() {
       let p;
       if (isDirectMode) {
         // CSV has exact DB field names — map directly
-        const hotelName = direct(row, "hotel_name");
+        const hotelName = direct(row, "hotel_name") || direct(row, "hotel");
         if (!hotelName) continue;
         p = { id: direct(row,"id") || uid(), created_at: direct(row,"created_at") || new Date().toISOString() };
         for (const f of DB_FIELDS) {
           if (f === "id" || f === "created_at") continue;
           p[f] = direct(row, f);
         }
+        // Force hotel_name from common aliases
+        if (!p.hotel_name) p.hotel_name = hotelName;
+        // Map common column aliases that don't match DB field names exactly
+        if (!p.hotel_group) p.hotel_group = direct(row, "group") || direct(row, "chain");
+        if (!p.current_provider) p.current_provider = direct(row, "provider");
+        if (!p.gm_name) p.gm_name = direct(row, "contact") || direct(row, "gm");
+        if (!p.gm_title) p.gm_title = direct(row, "position") || direct(row, "title");
+        if (!p.management_company) p.management_company = direct(row, "mgmt company") || direct(row, "management");
+        if (!p.operating_model) p.operating_model = direct(row, "ownership");
+        if (!p.adr_usd && !p.adr_usd) { const adr = num(direct(row, "adr")); if (adr) p.adr_usd = adr; }
         // Coerce numeric fields
         p.rooms = inte(p.rooms);
         p.restaurants = inte(p.restaurants);
