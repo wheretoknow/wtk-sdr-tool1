@@ -1185,7 +1185,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
       <div className="empty"><div className="empty-icon">{"\uD83D\uDD0D"}</div><div className="empty-title">No matches</div><button className="act-btn" style={{marginTop:8}} onClick={clearFilters}>{"\u2190"} Clear</button></div>
     ) : outreachView === "list" ? (
       <div className="table-card" style={{overflowX:"auto"}}><table className="outreach-list"><thead><tr>
-        <th style={{width:"16%"}}>Hotel</th><th style={{width:"7%"}}>City</th><th style={{width:"8%"}}>Group</th><th style={{width:"12%"}}>GM</th><th style={{width:"9%"}}>Stage</th><th style={{width:"9%"}}>Intent</th><th style={{width:"10%"}}>Last</th><th style={{width:"17%"}}>Notes</th><th style={{width:"8%"}}>Owner</th><th style={{width:"4%"}}></th>
+        <th style={{width:"16%"}}>Hotel</th><th style={{width:"7%"}}>City</th><th style={{width:"8%"}}>Group</th><th style={{width:"12%"}}>Contact</th><th style={{width:"9%"}}>Stage</th><th style={{width:"9%"}}>Intent</th><th style={{width:"10%"}}>Last</th><th style={{width:"17%"}}>Notes</th><th style={{width:"8%"}}>Owner</th><th style={{width:"4%"}}></th>
       </tr></thead><tbody>
         {displayT.map(t => {
           const stage = effectiveStage(t), stg = STAGES.find(s=>s.key===stage)||STAGES[0];
@@ -1307,6 +1307,8 @@ export default function App() {
   const [ctOwnerFilter, setCtOwnerFilter] = useState("");
   const [ctDueFilter, setCtDueFilter] = useState("");
   const [ctPriFilter, setCtPriFilter] = useState("");
+  const [ctSortCol, setCtSortCol] = useState(null);
+  const [ctSortDir, setCtSortDir] = useState("asc");
   const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
   const [addContactDraft, setAddContactDraft] = useState({name:"",title:"",email:"",linkedin:"",phone:"",is_primary:false});
@@ -1783,7 +1785,7 @@ export default function App() {
   }
 
   function exportCSV() {
-    const h = ["Hotel","Brand","Tier","City","Country","Rooms","F&B","ADR USD","Rating","Reviews","GM","Title","Email","LinkedIn","Confidence","Strategy","Provider","SDR","Batch","Added"];
+    const h = ["Hotel","Brand","Tier","City","Country","Rooms","F&B","ADR USD","Rating","Reviews","Contact","Title","Email","LinkedIn","Confidence","Strategy","Provider","SDR","Batch","Added"];
     const rows = filteredP.map(p => [p.hotel_name,p.brand,p.tier,p.city,p.country,p.rooms||"",p.restaurants||"",p.adr_usd||"",p.rating||"",p.review_count||"",p.gm_name||"",p.gm_title||"",p.email||"",p.linkedin||"",p.contact_confidence||"",p.engagement_strategy||"",p.current_provider||"",p.sdr||"",p.batch||"",fmtDateShort(p.created_at)]);
     const csv = [h,...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download = `WTK_SDR_${new Date().toISOString().slice(0,10)}.csv`; a.click();
@@ -2146,7 +2148,7 @@ export default function App() {
                   <th style={{width:"7%"}}>Country</th>
                   <th style={{width:"7%"}}>Group</th>
                   <th style={{width:"9%"}}>Brand</th>
-                  <th style={{width:"10%"}}>GM</th>
+                  <th style={{width:"10%"}}>Contact</th>
                   <th style={{width:"13%"}}>Email</th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
@@ -2164,7 +2166,7 @@ export default function App() {
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{normalizeBrand(p.brand) || inferBrandFromName(p.hotel_name) || "—"}</span></td>
-                      <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div><div className="gm-title-sm">{p.gm_title&&p.gm_title!=="General Manager"?p.gm_title:""}</div></td>
+                      <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div>{p.gm_name && p.gm_title && p.gm_title!=="General Manager" ? <div className="gm-title-sm">{p.gm_title}</div> : null}</td>
                       <td>{(()=>{const em=p.email; if(!em||em.includes('[email')||em.includes('email protected'))return<span className="cell-muted">—</span>; return<a className="email-link" href={`mailto:${em}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={em}>{em}</a>;})()}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
@@ -2291,8 +2293,6 @@ export default function App() {
           updatePipeline(tid, updates);
         }
 
-        const [ctSortCol, setCtSortCol] = useState(null); // "lastDate"|"nextDue"|"countdown"
-        const [ctSortDir, setCtSortDir] = useState("asc");
         function ctToggleSort(col) {
           if (ctSortCol === col) setCtSortDir(d => d === "asc" ? "desc" : "asc");
           else { setCtSortCol(col); setCtSortDir("asc"); }
@@ -2418,7 +2418,7 @@ export default function App() {
                 <tr style={{cursor:"pointer",borderLeft:priority==="high"?"3px solid #dc2626":priority==="medium"?"3px solid #d97706":"3px solid transparent",opacity:priority==="done"?0.55:1}} onClick={()=>setCtExpanded(isExp?null:t.id)}>
                   <td>
                     <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
-                    <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · GM: "+t.gm:""}</div>
+                    <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · "+t.gm:""}</div>
                   </td>
                   <td><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase"}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}if(newStage!=="lost"&&(t.rejection_reason)){updates.rejection_reason=null;}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s==="bounced"?"Bounced/Undeliverable":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{lastDate ? <span>{fmtD(lastDate)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[lastN]})</span></span> : EM}</td>
@@ -2532,7 +2532,7 @@ export default function App() {
                       <div style={{padding:"4px 14px",fontSize:10,color:"var(--text3)",background:"var(--bg2)"}}>{g.reason}</div>
                       <div className="dup-hotels">
                         <div className="dup-hotel-row" style={{fontWeight:600,fontSize:10,color:"var(--text3)"}}>
-                          <span>Hotel</span><span>City</span><span>Brand</span><span>Rooms</span><span>ADR</span><span>GM / Email</span><span></span>
+                          <span>Hotel</span><span>City</span><span>Brand</span><span>Rooms</span><span>ADR</span><span>Contact / Email</span><span></span>
                         </div>
                         {g.hotels.map(h => (
                           <div key={h.id} className="dup-hotel-row">
@@ -2597,7 +2597,7 @@ export default function App() {
               <div style={{gridColumn:"1/-1",borderTop:"1px solid var(--border)",marginTop:4,paddingTop:8}}>
                 <div style={{fontSize:10,fontWeight:700,color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Decision Maker</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <label>GM Name<input value={addHotelForm.gm_name||""} onChange={e=>setAddHotelForm(p=>({...p,gm_name:e.target.value}))} placeholder="e.g. John Smith"/></label>
+                  <label>Contact Name<input value={addHotelForm.gm_name||""} onChange={e=>setAddHotelForm(p=>({...p,gm_name:e.target.value}))} placeholder="e.g. John Smith"/></label>
                   <label>Title<input value={addHotelForm.gm_title||""} onChange={e=>setAddHotelForm(p=>({...p,gm_title:e.target.value}))} placeholder="General Manager"/></label>
                   <label>Email<input value={addHotelForm.email||""} onChange={e=>setAddHotelForm(p=>({...p,email:e.target.value}))} placeholder="gm@hotel.com" type="email"/></label>
                   <label>LinkedIn<input value={addHotelForm.linkedin||""} onChange={e=>setAddHotelForm(p=>({...p,linkedin:e.target.value}))} placeholder="linkedin.com/in/..."/></label>
