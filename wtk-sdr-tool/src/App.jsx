@@ -2340,10 +2340,14 @@ export default function App() {
 
         // Apply user sort on top of priority sort
         const sortedRows = ctSortCol ? [...filteredRows].sort((a, b) => {
-          let va, vb;
-          if (ctSortCol === "lastDate") { va = a.lastDate ? new Date(a.lastDate).getTime() : -Infinity; vb = b.lastDate ? new Date(b.lastDate).getTime() : -Infinity; }
-          if (ctSortCol === "nextDue") { va = a.nextDue ? new Date(a.nextDue).getTime() : Infinity; vb = b.nextDue ? new Date(b.nextDue).getTime() : Infinity; }
-          if (ctSortCol === "countdown") { va = a.daysUntilDue ?? Infinity; vb = b.daysUntilDue ?? Infinity; }
+          let va, vb, aN, bN;
+          if (ctSortCol === "lastDate") { va = a.lastDate ? new Date(a.lastDate).getTime() : null; vb = b.lastDate ? new Date(b.lastDate).getTime() : null; }
+          if (ctSortCol === "nextDue") { va = a.nextDue ? new Date(a.nextDue).getTime() : null; vb = b.nextDue ? new Date(b.nextDue).getTime() : null; }
+          if (ctSortCol === "countdown") { va = a.daysUntilDue ?? null; vb = b.daysUntilDue ?? null; }
+          aN = va === null; bN = vb === null;
+          if (aN && bN) return 0;
+          if (aN) return 1;
+          if (bN) return -1;
           return ctSortDir === "asc" ? va - vb : vb - va;
         }) : filteredRows;
 
@@ -2811,8 +2815,8 @@ export default function App() {
             <div className="d-sec">
               <div className="d-sec-title">Hotel Profile</div>
               <div className="d-row"><span className="d-key">Lead Status</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.lead_status||"Active"} onChange={e=>updateProspect(sel.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></span></div>
-              <div className="d-row"><span className="d-key">Mgmt Company</span><span className="d-val"><input type="text" style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%"}} defaultValue={sel.management_company||""} placeholder="e.g. IHG Hotels & Resorts" onBlur={e=>{const v=e.target.value.trim();if(v!==(sel.management_company||""))updateProspect(sel.id,{management_company:v||null});}}/></span></div>
-              <div className="d-row"><span className="d-key">Operating Model</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.operating_model||""} onChange={e=>updateProspect(sel.id,{operating_model:e.target.value||null})}><option value="">Select...</option><option value="Owned">Owned</option><option value="Managed">Managed</option><option value="Franchised">Franchised</option><option value="Leased">Leased</option><option value="Other">Other</option></select></span></div>
+              <div className="d-row"><span className="d-key">Management</span><span className="d-val"><input type="text" style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%"}} defaultValue={sel.management_company||""} placeholder="e.g. IHG Hotels & Resorts" onBlur={e=>{const v=e.target.value.trim();if(v!==(sel.management_company||""))updateProspect(sel.id,{management_company:v||null});}}/></span></div>
+              <div className="d-row"><span className="d-key">Op. Model</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.operating_model||""} onChange={e=>updateProspect(sel.id,{operating_model:e.target.value||null})}><option value="">Select...</option><option value="Owned">Owned</option><option value="Managed">Managed</option><option value="Franchised">Franchised</option><option value="Leased">Leased</option><option value="Other">Other</option></select></span></div>
               {sel.operating_model==="Other"&&<div className="d-row"><span className="d-key">Model Note</span><span className="d-val"><input type="text" style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%"}} defaultValue={sel.operating_model_note||""} placeholder="Required for Other" onBlur={e=>{const v=e.target.value.trim();if(v.length<3){alert("Note required (min 3 chars)");return;}updateProspect(sel.id,{operating_model_note:v});}}/></span></div>}
             </div>
             {(() => {
