@@ -517,6 +517,7 @@ CANONICAL LABEL RULES (strict — single source of truth):
 - hotel_group MUST be EXACTLY one of: ${PROMPT_GROUP_LIST}. If uncertain or not in this list, set hotel_group="Independent". Do NOT invent new group names.
 
 - research_notes: 2-3 sentences. State WHERE rooms and GM found, WHAT YEAR. No bullets.
+- EXISTENCE CHECK: If your web search reveals the hotel does NOT currently exist, has permanently closed, or was never built, set research_notes to start with "DOES NOT EXIST:" followed by the reason. Example: "DOES NOT EXIST: No current InterContinental property found in Munich."
 - Prefer the most recent information. If multiple GM sources exist, prefer ${YEAR} over ${PREV}.
 - Partial data OK. null is always better than guessing.
 - Set rating and review_count to null.
@@ -706,6 +707,31 @@ Return JSON array with all required fields. Use null for anything unverified. St
 
       // Fuzzy dedup within batch
       arr = dedupeHotelsFuzzy(arr);
+
+      // ── Existence filter: remove hotels that verify determined don't exist ──
+      const NON_EXIST_SIGNALS = [
+        "does not exist", "does not appear to exist", "not found", "no current",
+        "permanently closed", "never built", "never opened", "no longer operates",
+        "closed permanently", "not currently operating", "no evidence of",
+        "could not find", "appears to be fictional", "no such hotel",
+        "does not operate", "no property found",
+      ];
+      const beforeExist = arr.length;
+      arr = arr.filter(p => {
+        const notes = ((p.research_notes || "") + " " + (p.hotel_name || "")).toLowerCase();
+        // Explicit DOES NOT EXIST prefix (from our prompt instruction)
+        if (notes.startsWith("does not exist")) return false;
+        // Heuristic: if research_notes contains non-existence language AND hotel has no website, no address, no rooms → likely fake
+        const hasNoData = !p.website && !p.address && !p.rooms;
+        if (hasNoData) {
+          for (const sig of NON_EXIST_SIGNALS) {
+            if ((p.research_notes || "").toLowerCase().includes(sig)) return false;
+          }
+        }
+        return true;
+      });
+      const existDropped = beforeExist - arr.length;
+      if (existDropped > 0) console.log(`[VERIFY] Dropped ${existDropped} non-existent hotels`);
 
       // Build input lookup for similarity matching
       const inputLookup = {};
