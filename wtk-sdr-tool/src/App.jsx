@@ -785,6 +785,34 @@ const css = `
   /* Editable field in drawer */
   .d-val-edit { cursor: pointer; border-bottom: 1px dashed var(--border2); padding-bottom: 1px; transition: all 0.15s; }
   .d-val-edit:hover { border-bottom-color: var(--accent); color: var(--accent); }
+
+  /* Dashboard */
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .dash-card-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .dash-card-val { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.1; }
+  .dash-card-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .dash-stage-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 12px 0 6px; background: var(--bg); }
+  .dash-stage-seg { transition: width 0.3s; min-width: 2px; }
+  .dash-stage-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--text3); }
+  .dash-stage-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; }
+
+  /* Batch select */
+  .batch-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--accent-light); border: 1px solid #bfdbfe; border-radius: var(--radius); margin-bottom: 8px; flex-wrap: wrap; }
+  .batch-bar-count { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .batch-bar select, .batch-bar button { font-size: 11px; }
+  .cb-cell { width: 28px; text-align: center; flex-shrink: 0; }
+  .cb-cell input[type="checkbox"] { cursor: pointer; width: 14px; height: 14px; accent-color: var(--accent); }
+
+  /* Focus mode */
+  .focus-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 14px; transition: border-color 0.15s; }
+  .focus-card:hover { border-color: var(--accent); }
+  .focus-card.overdue { border-left: 3px solid var(--red); }
+  .focus-card.due-today { border-left: 3px solid var(--orange); }
+  .focus-card.due-soon { border-left: 3px solid var(--amber); }
+  .focus-done-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border2); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; font-size: 13px; color: transparent; }
+  .focus-done-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+  .focus-done-btn.checked { border-color: var(--green); color: var(--green); background: var(--green-bg); }
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -1240,7 +1268,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
   </>);
 }
 export default function App() {
-  const [tab, setTab] = useState("hotels");
+  const [tab, setTab] = useState("dashboard");
   const [addHotelModal, setAddHotelModal] = useState(false);
   const [addHotelForm, setAddHotelForm] = useState({});
   const [ctExpanded, setCtExpanded] = useState(null);
@@ -1309,6 +1337,9 @@ export default function App() {
   const [ctPriFilter, setCtPriFilter] = useState("");
   const [ctSortCol, setCtSortCol] = useState(null);
   const [ctSortDir, setCtSortDir] = useState("asc");
+  const [selectedIds, setSelectedIds] = useState(new Set()); // batch select
+  const [ctFocusMode, setCtFocusMode] = useState(true); // focus mode default on
+  const [focusDoneIds, setFocusDoneIds] = useState(new Set()); // temporarily dismissed in focus
   const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
   const [addContactDraft, setAddContactDraft] = useState({name:"",title:"",email:"",linkedin:"",phone:"",is_primary:false});
@@ -2097,10 +2128,111 @@ export default function App() {
           </div>
 
           <div className="tabs">
+            <button className={`tab ${tab==="dashboard"?"active":""}`} onClick={()=>setTab("dashboard")}>Dashboard</button>
             <button className={`tab ${tab==="hotels"?"active":""}`} onClick={()=>setTab("hotels")}>Hotels<span className="tab-badge">{sortedP.length}</span></button>
               <button className={`tab ${tab==="outreach"?"active":""}`} onClick={()=>setTab("outreach")}>Pipeline<span className="tab-badge">{filteredT.length}</span></button>
               <button className={`tab ${tab==="contacts"?"active":""}`} onClick={()=>setTab("contacts")}>Contact Tracker<span className="tab-badge">{tracking.filter(t=>t.d1).length}</span></button>
           </div>
+
+          {tab==="dashboard" && (() => {
+            const totalProspects = prospects.length;
+            const withEmail = prospects.filter(p => p.email).length;
+            const withGM = prospects.filter(p => p.gm_name).length;
+            const inPipeline = tracking.length;
+            const contacted1 = tracking.filter(t => t.d1).length;
+            // Stage distribution
+            const SM2 = s => { if (s==="active") return "new"; if (s==="emailed") return "1st"; if (s==="followup") return "2nd"; if (s==="dead") return "lost"; return s||"new"; };
+            const stCounts = {};
+            const ST_ALL = ["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"];
+            ST_ALL.forEach(s => stCounts[s] = 0);
+            tracking.forEach(t => { const s = SM2(t.pipeline_stage); stCounts[s] = (stCounts[s]||0) + 1; });
+            const stColors = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+            const stLabels = {new:"New","1st":"Contact 1","2nd":"Contact 2","3rd":"Contact 3","4th":"Contact 4",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
+            // Conversion metrics
+            const repliedCount = stCounts["replied"] + stCounts["demo"] + stCounts["trial"] + stCounts["won"];
+            const replyRate = contacted1 > 0 ? Math.round(repliedCount / contacted1 * 100) : 0;
+            // Overdue from contact tracker
+            const CAD2 = [0, 0, 3, 7, 7];
+            let overdueCount = 0, dueTodayCount = 0;
+            tracking.filter(t => t.d1).forEach(t => {
+              const actual = [null, t.d1, t.d2, t.d3, t.d4];
+              const due = [null, null, null, null, null];
+              for (let n = 2; n <= 4; n++) { const a = actual[n-1] || due[n-1]; if (a) due[n] = addBusinessDays(a, CAD2[n]); }
+              const stage = SM2(t.pipeline_stage);
+              const isClosed = ["won","lost","demo","trial"].includes(stage);
+              if (isClosed) return;
+              let nextDue = null;
+              for (let n = 2; n <= 4; n++) { if (!actual[n] && due[n]) { nextDue = due[n]; break; } }
+              if (!nextDue) return;
+              const target = new Date(nextDue); target.setHours(0,0,0,0);
+              const now = new Date(); now.setHours(0,0,0,0);
+              const diff = Math.round((target - now) / 86400000);
+              if (diff < 0) overdueCount++;
+              else if (diff === 0) dueTodayCount++;
+            });
+            // SDR breakdown
+            const sdrMap = {};
+            tracking.forEach(t => { const s = t.sdr || "Unassigned"; sdrMap[s] = (sdrMap[s]||0) + 1; });
+            const sdrEntries = Object.entries(sdrMap).sort((a,b) => b[1] - a[1]);
+
+            return (<div style={{padding:"8px 0"}}>
+              <div className="dash-grid">
+                <div className="dash-card">
+                  <div className="dash-card-label">Total Hotels</div>
+                  <div className="dash-card-val">{totalProspects}</div>
+                  <div className="dash-card-sub">{withGM} with contact · {withEmail} with email</div>
+                </div>
+                <div className="dash-card">
+                  <div className="dash-card-label">In Pipeline</div>
+                  <div className="dash-card-val">{inPipeline}</div>
+                  <div className="dash-card-sub">{contacted1} contacted · {inPipeline - contacted1} pending</div>
+                </div>
+                <div className="dash-card">
+                  <div className="dash-card-label">Reply Rate</div>
+                  <div className="dash-card-val">{replyRate}%</div>
+                  <div className="dash-card-sub">{repliedCount} replies from {contacted1} contacted</div>
+                </div>
+                <div className="dash-card">
+                  <div className="dash-card-label">Today's Actions</div>
+                  <div className="dash-card-val" style={{color: overdueCount > 0 ? "var(--red)" : dueTodayCount > 0 ? "var(--orange)" : "var(--green)"}}>{overdueCount + dueTodayCount}</div>
+                  <div className="dash-card-sub">{overdueCount > 0 ? overdueCount + " overdue · " : ""}{dueTodayCount} due today</div>
+                </div>
+              </div>
+
+              <div className="dash-card" style={{marginBottom: 16}}>
+                <div className="dash-card-label" style={{marginBottom: 10}}>Pipeline Distribution</div>
+                <div className="dash-stage-bar">
+                  {ST_ALL.filter(s => stCounts[s] > 0).map(s => (
+                    <div key={s} className="dash-stage-seg" style={{width: (stCounts[s] / Math.max(inPipeline,1) * 100) + "%", background: stColors[s]}} title={stLabels[s] + ": " + stCounts[s]} />
+                  ))}
+                </div>
+                <div className="dash-stage-legend">
+                  {ST_ALL.filter(s => stCounts[s] > 0).map(s => (
+                    <span key={s} style={{display:"flex",alignItems:"center",gap:3}}>
+                      <span className="dash-stage-dot" style={{background: stColors[s]}} />
+                      {stLabels[s]} <b>{stCounts[s]}</b>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {sdrEntries.length > 0 && <div className="dash-card">
+                <div className="dash-card-label" style={{marginBottom: 10}}>By SDR</div>
+                {sdrEntries.map(([sdr, cnt]) => {
+                  const sdrTracking = tracking.filter(t => (t.sdr||"Unassigned") === sdr);
+                  const sdrContacted = sdrTracking.filter(t => t.d1).length;
+                  const sdrReplied = sdrTracking.filter(t => ["replied","demo","trial","won"].includes(SM2(t.pipeline_stage))).length;
+                  return <div key={sdr} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+                    <span style={{fontSize:13,fontWeight:600,minWidth:100,color:"var(--text)"}}>{sdr}</span>
+                    <div style={{flex:1,height:6,background:"var(--bg)",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:(cnt/Math.max(...sdrEntries.map(e=>e[1]),1)*100)+"%",background:"var(--accent)",borderRadius:3,transition:"width 0.3s"}} />
+                    </div>
+                    <span style={{fontSize:12,color:"var(--text3)",minWidth:140,textAlign:"right"}}>{cnt} assigned · {sdrContacted} sent · {sdrReplied} replied</span>
+                  </div>;
+                })}
+              </div>}
+            </div>);
+          })()}
 
           {tab==="hotels" && (
             <div className="table-card">
@@ -2140,27 +2272,85 @@ export default function App() {
                 </div>
               ) : (
               <>
+              {selectedIds.size > 0 && (
+                <div className="batch-bar">
+                  <span className="batch-bar-count">{selectedIds.size} selected</span>
+                  <select className="cmd-input" style={{minWidth:100}} defaultValue="" onChange={async e => {
+                    const val = e.target.value; if (!val) return; e.target.value = "";
+                    const ids = [...selectedIds];
+                    for (const pid of ids) { await updateProspect(pid, {lead_status: val}); }
+                    setSelectedIds(new Set());
+                  }}>
+                    <option value="">Set Lead Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Dormant">Dormant</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                  <select className="cmd-input" style={{minWidth:100}} defaultValue="" onChange={async e => {
+                    const val = e.target.value; if (!val) return; e.target.value = "";
+                    const ids = [...selectedIds];
+                    for (const pid of ids) {
+                      const t = tracking.find(x => x.prospect_id === pid);
+                      if (t) await updatePipeline(t.id, {pipeline_stage: val});
+                    }
+                    setSelectedIds(new Set());
+                  }}>
+                    <option value="">Set Stage</option>
+                    {["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s => <option key={s} value={s}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                  </select>
+                  <select className="cmd-input" style={{minWidth:100}} defaultValue="" onChange={async e => {
+                    const val = e.target.value; if (!val) return; e.target.value = "";
+                    const ids = [...selectedIds];
+                    for (const pid of ids) {
+                      const t = tracking.find(x => x.prospect_id === pid);
+                      if (t) await updatePipeline(t.id, {sdr: val});
+                    }
+                    setSelectedIds(new Set());
+                  }}>
+                    <option value="">Assign SDR</option>
+                    {[...new Set(tracking.map(t=>t.sdr).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button className="act-btn" style={{fontSize:11,color:"var(--red)",border:"1px solid #fecaca",background:"#fef2f2"}} onClick={async () => {
+                    if (!confirm(`Delete ${selectedIds.size} selected hotels permanently?`)) return;
+                    for (const pid of [...selectedIds]) { await deleteProspect(pid); }
+                    setSelectedIds(new Set());
+                  }}>Delete {selectedIds.size}</button>
+                  <button className="act-btn" style={{fontSize:11,marginLeft:"auto"}} onClick={()=>setSelectedIds(new Set())}>✕ Deselect</button>
+                </div>
+              )}
               <div style={{overflowX:"auto"}}>
               <table>
                 <thead><tr>
-                  <th style={{width:"17%"}}>Hotel</th>
+                  <th className="cb-cell" onClick={e => e.stopPropagation()}><input type="checkbox" checked={pagedP.length > 0 && pagedP.every(p => selectedIds.has(p.id))} onChange={e => {
+                    const next = new Set(selectedIds);
+                    if (e.target.checked) pagedP.forEach(p => next.add(p.id));
+                    else pagedP.forEach(p => next.delete(p.id));
+                    setSelectedIds(next);
+                  }} /></th>
+                  <th style={{width:"16%"}}>Hotel</th>
                   <th style={{width:"6%"}}>City</th>
                   <th style={{width:"7%"}}>Country</th>
                   <th style={{width:"7%"}}>Group</th>
                   <th style={{width:"9%"}}>Brand</th>
                   <th style={{width:"10%"}}>Contact</th>
-                  <th style={{width:"13%"}}>Email</th>
+                  <th style={{width:"12%"}}>Email</th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th style={{width:"7%"}}>Provider</th>
                   <th style={{width:"7%"}}>Lead</th>
-                  <th style={{width:"4%"}}></th>
+                  <th style={{width:"3%"}}></th>
                 </tr></thead>
                 <tbody>
                   {pagedP.map(p=>{
                     const isIndependent = !p.hotel_group && !p.brand;
+                    const isChecked = selectedIds.has(p.id);
                     return (
-                    <tr key={p.id} onClick={()=>setSelected(p.id)}>
+                    <tr key={p.id} onClick={()=>setSelected(p.id)} style={{background: isChecked ? "var(--accent-light)" : undefined}}>
+                      <td className="cb-cell" onClick={e=>e.stopPropagation()}><input type="checkbox" checked={isChecked} onChange={e => {
+                        const next = new Set(selectedIds);
+                        e.target.checked ? next.add(p.id) : next.delete(p.id);
+                        setSelectedIds(next);
+                      }} /></td>
                       <td><div className="hotel-name">{p.hotel_name}</div></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.city||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
@@ -2367,7 +2557,63 @@ export default function App() {
             {dueSoonN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fffbeb",color:"#d97706",borderRadius:5,border:"1px solid #fde68a"}}>{dueSoonN} Due soon</span>}
             {upcomingN > 0 && <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{upcomingN} Upcoming</span>}
             {doneN > 0 && <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>}
+            <div style={{marginLeft:"auto",display:"flex",gap:4,background:"var(--bg)",borderRadius:6,border:"1px solid var(--border)",padding:2}}>
+              <button style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,border:"none",cursor:"pointer",background:ctFocusMode?"var(--accent)":"transparent",color:ctFocusMode?"white":"var(--text3)"}} onClick={()=>{setCtFocusMode(true);setFocusDoneIds(new Set());}}>Focus</button>
+              <button style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,border:"none",cursor:"pointer",background:!ctFocusMode?"var(--accent)":"transparent",color:!ctFocusMode?"white":"var(--text3)"}} onClick={()=>setCtFocusMode(false)}>Full List</button>
+            </div>
           </div>
+
+          {ctFocusMode ? (() => {
+            // Focus mode: only show overdue + due today + due within 2 days, excluding dismissed
+            const focusRows = rows.filter(r => {
+              if (r.status === "done") return false;
+              if (focusDoneIds.has(r.t.id)) return false;
+              return r.status === "overdue" || (r.daysUntilDue !== null && r.daysUntilDue <= 2);
+            });
+            const ordLabel = ["","1st","2nd","3rd","4th"];
+            if (focusRows.length === 0) return (
+              <div style={{textAlign:"center",padding:"40px 0"}}>
+                <div style={{fontSize:32,marginBottom:8}}>✓</div>
+                <div style={{fontSize:16,fontWeight:600,color:"var(--green)"}}>All caught up!</div>
+                <div style={{fontSize:13,color:"var(--text3)",marginTop:4}}>No overdue or imminent follow-ups. Next due items will appear here.</div>
+                <button className="act-btn" style={{marginTop:12}} onClick={()=>setCtFocusMode(false)}>View full list →</button>
+              </div>
+            );
+            return (<div style={{padding:"4px 0"}}>
+              <div style={{fontSize:11,color:"var(--text3)",marginBottom:8,fontWeight:600}}>{focusRows.length} action{focusRows.length!==1?"s":""} to do</div>
+              {focusRows.map(({t, p, stage, actual, due, nextStep, nextDue, daysUntilDue, status, lastN}) => {
+                const emailAddr = t.email || p?.email;
+                const gmFirst = (t.gm || p?.gm_name || "").split(" ")[0] || "there";
+                const isOverdue = status === "overdue";
+                const isDueToday = daysUntilDue === 0;
+                const nextAction = !actual[1] ? "Send first email" : nextStep ? `Follow-up #${nextStep-1}` : "Waiting reply";
+                return (
+                  <div key={t.id} className={`focus-card ${isOverdue?"overdue":isDueToday?"due-today":"due-soon"}`}>
+                    <button className={`focus-done-btn ${focusDoneIds.has(t.id)?"checked":""}`} onClick={() => {
+                      setFocusDoneIds(prev => { const n = new Set(prev); n.add(t.id); return n; });
+                    }} title="Mark done for today">✓</button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:600,color:"var(--text)",cursor:"pointer",fontSize:13}} onClick={()=>setSelected(t.prospect_id)}>{t.hotel}</span>
+                        <span style={{fontSize:11,color:"var(--text3)"}}>{p?.city||""}{t.gm?" · "+t.gm:""}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:4,fontSize:12}}>
+                        <span style={{fontWeight:600,color:isOverdue?"var(--red)":isDueToday?"var(--orange)":"var(--amber)"}}>
+                          {isOverdue ? Math.abs(daysUntilDue)+" days overdue" : isDueToday ? "Due today" : "Due in "+daysUntilDue+" days"}
+                        </span>
+                        <span style={{color:"var(--text3)"}}>→ {nextAction}</span>
+                        {nextDue && <span style={{color:"var(--text3)",fontSize:11}}>{fmtDateShort(nextDue)} ({ordLabel[nextStep]})</span>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexShrink:0}}>
+                      {emailAddr && <button className="act-btn" style={{fontSize:10,padding:"4px 10px",background:"var(--accent)",color:"white",border:"none",borderRadius:4,cursor:"pointer"}} onClick={e=>{e.stopPropagation();const subj=encodeURIComponent("Guest feedback insights for "+t.hotel);const body=encodeURIComponent(`Hi ${gmFirst},\n\nI recently reviewed guest feedback trends for ${t.hotel}...\n\nBest,\nZishuo Wang | Where to know`);window.open(`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(emailAddr)}&subject=${subj}&body=${body}`);}}>✉ Email</button>}
+                      <button className="act-btn" style={{fontSize:10,padding:"4px 10px"}} onClick={()=>{setCtFocusMode(false);setCtExpanded(t.id);}}>Details</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>);
+          })() : (<>
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0",flexWrap:"wrap"}}>
             <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctOwnerFilter} onChange={e=>setCtOwnerFilter(e.target.value)}>
               <option value="">All Owners</option>{ctSdrs.map(s=><option key={s} value={s}>{s}</option>)}
@@ -2463,6 +2709,7 @@ export default function App() {
               </Fragment>);
             })}
           </tbody></table></div>
+        </>)}
         </>);
       })()}
         </div>
