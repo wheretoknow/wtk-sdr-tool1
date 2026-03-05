@@ -1955,7 +1955,14 @@ export default function App() {
       imported.push(p);
     }
 
-    if (!imported.length) return alert("No valid rows found.");
+    if (!imported.length) {
+      // Debug: show what the parser actually saw
+      const debugHeaders = headers.join(" | ");
+      const debugRow1 = lines[1] ? parseRow(lines[1]).join(" | ") : "(no data)";
+      const debugMatched = headers.findIndex(h => h.includes("hotel"));
+      console.error("[Import Debug]", { headers, debugRow1, isDirectMode, hotelColIndex: debugMatched, lineCount: lines.length });
+      return alert(`No valid rows found.\n\nDebug info:\n- Lines: ${lines.length}\n- Mode: ${isDirectMode ? "Direct" : "Flexible"}\n- Headers: ${debugHeaders.slice(0,200)}\n- "hotel" col index: ${debugMatched}\n- Row 1 sample: ${debugRow1.slice(0,150)}`);
+    }
     if (!confirm(`Import ${imported.length} hotels? (Mode: ${isDirectMode ? "Direct field match" : "Flexible mapping"})`)) return;
 
     try {
