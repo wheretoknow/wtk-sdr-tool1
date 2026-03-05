@@ -2391,14 +2391,14 @@ export default function App() {
               <option value="3rd">Contact 3</option>
               <option value="4th">Contact 4</option>
               <option value="replied">Replied</option>
-              <option value="bounced">Bounced/Undeliverable</option>
+              <option value="bounced">Bounced</option>
               <option value="done">Completed</option>
             </select>
             {ctHasFilters && <button className="act-btn" style={{fontSize:11}} onClick={()=>{setCtOwnerFilter("");setCtDueFilter("");setCtPriFilter("");setCtStageFilter("");}}>✕ Clear</button>}
             <span style={{marginLeft:"auto",fontSize:12,color:"var(--text3)",fontWeight:600}}>{filteredRows.length} / {rows.length}</span>
           </div>
           <div className="table-card" style={{overflowX:"auto"}}><table className="contact-tracker"><thead><tr>
-            <th style={{width:"20%"}}>Hotel</th><th style={{width:"9%"}}>Stage</th>
+            <th style={{width:"20%"}}>Hotel</th><th style={{width:"12%"}}>Stage</th>
             <SortTh col="lastDate" label="Last Contact" width="14%" />
             <SortTh col="nextDue" label="Next Due" width="16%" />
             <SortTh col="countdown" label="Countdown" width="9%" />
@@ -2420,7 +2420,7 @@ export default function App() {
                     <div style={{fontWeight:600,color:"var(--text)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();setSelected(t.prospect_id);}}>{t.hotel}</div>
                     <div style={{fontSize:10,color:"var(--text3)"}}>{p?.city||""}{p?.country?", "+p.country:""}{t.gm?" · "+t.gm:""}</div>
                   </td>
-                  <td><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase"}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}if(newStage!=="lost"&&(t.rejection_reason)){updates.rejection_reason=null;}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s==="bounced"?"Bounced/Undeliverable":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
+                  <td style={{overflow:"visible"}}><select style={{fontSize:11,fontWeight:600,color:SC[stage]||"#6b7280",background:"transparent",border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",cursor:"pointer",textTransform:"uppercase",minWidth:90}} value={stage} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const newStage=e.target.value;const updates={pipeline_stage:newStage};if(newStage==="new"){updates.d1=null;updates.d2=null;updates.d3=null;updates.d4=null;updates.done=[];}if(newStage!=="lost"&&(t.rejection_reason)){updates.rejection_reason=null;}updatePipeline(t.id,updates);}}>{["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"].map(s=><option key={s} value={s} style={{color:SC[s]||"#6b7280"}}>{s==="1st"?"Contact 1":s==="2nd"?"Contact 2":s==="3rd"?"Contact 3":s==="4th"?"Contact 4":s==="bounced"?"Bounced":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{lastDate ? <span>{fmtD(lastDate)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[lastN]})</span></span> : EM}</td>
                   <td style={{fontSize:11,whiteSpace:"nowrap"}}>{nextDue ? <span>{fmtD(nextDue)}<span style={{fontSize:9,color:"var(--text3)",marginLeft:3}}>({ordLabel[nextStep]} follow-up)</span></span> : <span style={{color:"var(--text3)"}}>{status==="done"?"Sequence complete":EM}</span>}</td>
                   <td style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",color:daysUntilDue!==null&&daysUntilDue<0?"var(--red)":daysUntilDue!==null&&daysUntilDue<=2?"#d97706":"var(--text)"}}>{daysUntilDue!==null?(daysUntilDue<0?Math.abs(daysUntilDue)+" days overdue":daysUntilDue===0?"due today":"in "+daysUntilDue+" days"):EM}</td>
