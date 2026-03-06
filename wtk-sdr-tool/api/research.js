@@ -534,7 +534,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { mode, city, brand, group, scope, minAdr, count, exclude, hotels, region, country } = req.body;
+    const { mode, city, brand, group, scope, minAdr, minRooms, count, exclude, hotels, region, country } = req.body;
 
     // ═════════════════════════════════════════════════════════════════════
     // STEP 1: LIST — no web search, training data only (~$0.001)
@@ -559,9 +559,10 @@ export default async function handler(req, res) {
           listPrompt = `List ALL known hotels belonging to ${group} group. Include every brand.`;
         }
       } else if (scope === "independent") {
-        const adr = parseInt(minAdr) || 150;
+        const adr = parseInt(minAdr) || 100;
+        const rooms = parseInt(minRooms) || 40;
         const market = city || "worldwide";
-        listPrompt = `List luxury independent hotels (NOT part of major chains) in ${market} with estimated ADR above $${adr}/night.`;
+        listPrompt = `List luxury independent hotels (NOT part of major chains) in ${market} with estimated ADR above $${adr}/night and at least ${rooms} rooms.`;
       } else {
         const market = city || "worldwide";
         listPrompt = `List all luxury and upscale hotels in ${market}.`;
