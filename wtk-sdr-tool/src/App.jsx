@@ -2259,7 +2259,7 @@ export default function App() {
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
-            {[\"Active\",\"Dormant\",\"Closed\"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
+            {["Active","Dormant","Closed"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
             {["A","B","C"].map(g=><button key={g} className={`filter-pill ${filterGrade.includes(g)?"active":""}`} onClick={()=>{setFilterGrade(prev=>prev.includes(g)?prev.filter(x=>x!==g):[...prev,g]);setHotelsPage(1);}} style={{borderColor:{A:"#1d4ed8",B:"#475569",C:"#94a3b8"}[g],color:filterGrade.includes(g)?undefined:{A:"#1d4ed8",B:"#475569",C:"#94a3b8"}[g]}}>{g}</button>)}
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
