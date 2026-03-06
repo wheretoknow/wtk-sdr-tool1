@@ -1353,6 +1353,7 @@ export default function App() {
   const [ctStageFilter, setCtStageFilter] = useState("");
   const [ctPriorityFilter, setCtPriorityFilter] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState(["Active"]);
+  const [filterGrade, setFilterGrade] = useState([]);
   // Geo state
   const [region, setRegion] = useState("Europe");
   const [country, setCountry] = useState("Austria");
@@ -2120,6 +2121,7 @@ export default function App() {
       const prov = getProvider(p) || "Unknown";
       if (prov !== filterProvider) return false;
     }
+    if (filterGrade.length > 0 && !filterGrade.includes(calcLeadScore(p).grade)) return false;
     if (filterHasEmail && !p.email) return false;
     if (filterHasGM && !p.gm_name) return false;
     if (filterVerified === "yes" && !p.verified) return false;
@@ -2257,7 +2259,9 @@ export default function App() {
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
-            {["Active","Dormant","Closed"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
+            {[\"Active\",\"Dormant\",\"Closed\"].map(ls=><button key={ls} className={`filter-pill ${leadStatusFilter.includes(ls)?"active":""}`} onClick={()=>setLeadStatusFilter(prev=>prev.includes(ls)?prev.filter(x=>x!==ls):[...prev,ls])} style={{borderColor:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[ls]}}>{ls}</button>)}
+            <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
+            {["A","B","C"].map(g=><button key={g} className={`filter-pill ${filterGrade.includes(g)?"active":""}`} onClick={()=>{setFilterGrade(prev=>prev.includes(g)?prev.filter(x=>x!==g):[...prev,g]);setHotelsPage(1);}} style={{borderColor:{A:"#1d4ed8",B:"#475569",C:"#94a3b8"}[g],color:filterGrade.includes(g)?undefined:{A:"#1d4ed8",B:"#475569",C:"#94a3b8"}[g]}}>{g}</button>)}
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
             <button className="export-btn" style={{fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
             {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
@@ -3106,6 +3110,7 @@ export default function App() {
               <div className="d-row"><span className="d-key">Rooms</span><span className="d-val"><EditableField value={sel.rooms ? String(sel.rooms) : ""} placeholder="Add rooms" type="number" onSave={v => updateProspectField(sel.id, 'rooms', v)} /></span></div>
               <div className="d-row"><span className="d-key">Restaurants</span><span className="d-val"><EditableField value={sel.restaurants ? String(sel.restaurants) : ""} placeholder="Add count" type="number" onSave={v => updateProspectField(sel.id, 'restaurants', v)} /></span></div>
               <div className="d-row"><span className="d-key">Est. ADR</span><span className="d-val"><EditableField value={sel.adr_usd ? String(sel.adr_usd) : ""} placeholder="Add ADR (USD)" type="number" onSave={v => updateProspectField(sel.id, 'adr_usd', v)} /></span></div>
+              <div className="d-row"><span className="d-key">Lead Score</span><span className="d-val">{(()=>{const s=calcLeadScore(sel);return<span style={{display:"inline-flex",alignItems:"center",gap:6}}><LeadScoreBadge score={s}/><span style={{fontSize:11,color:"var(--text3)"}}>{s.breakdown.join(" · ")}</span></span>;})()}</span></div>
               <div className="d-row"><span className="d-key">Rating</span><span className="d-val">
                 {(() => {
                   if (!sel.rating) return <EditableField value="" placeholder="Add rating" type="number" onSave={v => updateProspectField(sel.id, 'rating', v)} />;
