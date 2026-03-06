@@ -993,6 +993,89 @@ function ResearchNotes({ text }) {
   );
 }
 
+function calcLeadScore(p) {
+  let score = 0;
+  const breakdown = [];
+
+  // Rooms (max 40)
+  const rooms = p.rooms || 0;
+  let roomPts = 0;
+  if (rooms >= 500) roomPts = 40;
+  else if (rooms >= 300) roomPts = 30;
+  else if (rooms >= 200) roomPts = 20;
+  else if (rooms >= 100) roomPts = 10;
+  score += roomPts;
+  breakdown.push(`Rooms: +${roomPts}`);
+
+  // ADR (max 35)
+  const adr = p.adr_usd || 0;
+  let adrPts = 0;
+  if (adr >= 600) adrPts = 35;
+  else if (adr >= 400) adrPts = 25;
+  else if (adr >= 250) adrPts = 15;
+  else if (adr >= 150) adrPts = 5;
+  score += adrPts;
+  breakdown.push(`ADR: +${adrPts}`);
+
+  // Provider (max 10) — has provider = budget exists
+  const provider = (p.current_provider || "").trim().toLowerCase();
+  const tierProviders = ["medallia","reviewpro","trustyou","qualtrics"];
+  let provPts = 0;
+  if (tierProviders.some(t => provider.includes(t))) provPts = 10;
+  else if (provider) provPts = 5;
+  else provPts = 2;
+  score += provPts;
+  breakdown.push(`Provider: +${provPts}`);
+
+  // Email (max 10)
+  const email = p.email || "";
+  const hasEmail = email && !email.includes("[email") && !email.includes("email protected");
+  const emailPts = hasEmail ? 10 : 0;
+  score += emailPts;
+  breakdown.push(`Email: +${emailPts}`);
+
+  // GM info (max 5)
+  const gmPts = p.gm_name ? 5 : 0;
+  score += gmPts;
+  breakdown.push(`GM: +${gmPts}`);
+
+  const total = Math.max(0, Math.min(100, score));
+  const grade = total >= 80 ? "A" : total >= 50 ? "B" : "C";
+  return { total, grade, breakdown };
+}
+
+function LeadScoreBadge({ score: scoreObj }) {
+  const { total, grade, breakdown } = scoreObj;
+  const styles = {
+    A: { color: "#1d4ed8", bg: "#dbeafe" },
+    B: { color: "#475569", bg: "#e2e8f0" },
+    C: { color: "#94a3b8", bg: "#f1f5f9" },
+  };
+  const { color, bg } = styles[grade];
+  const tooltip = breakdown.join("\n");
+  return (
+    <span title={tooltip} style={{
+      display: "inline-flex", alignItems: "center", gap: 3,
+      padding: "2px 7px", borderRadius: 5, background: bg,
+      color, fontWeight: 700, fontSize: 12, lineHeight: "18px", cursor: "help"
+    }}>
+      {grade} <span style={{fontWeight:400, opacity:0.8}}>{total}</span>
+    </span>
+  );
+}
+
+function LeadScoreBadge({ score }) {
+  const color = score >= 70 ? "#22c55e" : score >= 40 ? "#f59e0b" : "#ef4444";
+  const bg = score >= 70 ? "#dcfce7" : score >= 40 ? "#fef3c7" : "#fee2e2";
+  return (
+    <span style={{
+      display: "inline-block", minWidth: 32, padding: "2px 7px",
+      borderRadius: 5, background: bg, color, fontWeight: 700,
+      fontSize: 12, textAlign: "center", lineHeight: "18px"
+    }}>{score}</span>
+  );
+}
+
 function TierBadge({ tier }) {
   const t = (tier || "").toLowerCase();
   const cls = t.includes("lux") ? "badge-luxury" : t.includes("prem") ? "badge-premium" : t.includes("life") ? "badge-lifestyle" : "badge-economy";
@@ -1351,7 +1434,7 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState(new Set()); // batch select
   const [ctFocusMode, setCtFocusMode] = useState(true); // focus mode default on
   const [focusDoneIds, setFocusDoneIds] = useState(new Set()); // temporarily dismissed in focus
-  const [sortCol, setSortCol] = useState(null); // "adr" | "rooms" | null
+  const [sortCol, setSortCol] = useState("score"); // "adr" | "rooms" | "score" | null
   const [sortDir, setSortDir] = useState("desc"); // "asc" | "desc"
   const [addContactDraft, setAddContactDraft] = useState({name:"",title:"",email:"",linkedin:"",phone:"",is_primary:false});
   // Multi-contact state: { [prospect_id]: [{id, name, title, email, linkedin, phone, is_primary}] }
@@ -2061,8 +2144,8 @@ export default function App() {
   });
   // Sort if active — nulls always at bottom
   const sortedP = sortCol ? [...filteredP].sort((a, b) => {
-    const va = sortCol === "adr" ? (a.adr_usd||null) : sortCol === "rooms" ? (a.rooms||null) : null;
-    const vb = sortCol === "adr" ? (b.adr_usd||null) : sortCol === "rooms" ? (b.rooms||null) : null;
+    const va = sortCol === "adr" ? (a.adr_usd||null) : sortCol === "rooms" ? (a.rooms||null) : sortCol === "score" ? calcLeadScore(a).total : null;
+    const vb = sortCol === "adr" ? (b.adr_usd||null) : sortCol === "rooms" ? (b.rooms||null) : sortCol === "score" ? calcLeadScore(b).total : null;
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
@@ -2428,6 +2511,7 @@ export default function App() {
                   <th style={{width:"12%"}}>Email</th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
+                  <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("score")}>Score <span className={`sort-arrow ${sortCol==="score"?"active":""}`}>{sortCol==="score"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th style={{width:"7%"}}>Provider</th>
                   <th style={{width:"7%"}}>Lead</th>
                   <th style={{width:"3%"}}></th>
@@ -2452,6 +2536,7 @@ export default function App() {
                       <td>{(()=>{const em=p.email; if(!em||em.includes('[email')||em.includes('email protected'))return<span className="cell-muted">—</span>; return<a className="email-link" href={`mailto:${em}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={em}>{em}</a>;})()}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
+                      <td><LeadScoreBadge score={calcLeadScore(p)} /></td>
                       <td><span className="cell-muted" style={{fontSize:11}}>{getProvider(p)||"—"}</span></td>
                                             <td style={{overflow:"visible"}} onClick={e=>e.stopPropagation()}><select style={{fontSize:10,border:"1px solid var(--border2)",borderRadius:3,padding:"2px 4px",background:"transparent",cursor:"pointer",color:({Active:"var(--green)",Dormant:"#d97706",Closed:"var(--text3)"})[p.lead_status||"Active"]}} value={p.lead_status||"Active"} onChange={e=>updateProspect(p.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></td>
 <td style={{overflow:"visible",textOverflow:"clip"}} onClick={e=>e.stopPropagation()}><button className="del-btn" onClick={()=>setDeleteConfirm(p.id)} title="Delete">🗑</button></td>
