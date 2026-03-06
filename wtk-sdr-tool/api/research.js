@@ -62,16 +62,17 @@ const PROVIDER_MAP = {
   "mantra":"TrustYou","peppers":"TrustYou","tribe":"TrustYou",
   "mandarin oriental":"TrustYou","rosewood":"TrustYou",
   "langham":"Medallia","dorchester":"Medallia",
-  "shangri-la":"ReviewPro","shangri la":"ReviewPro",
+  "shangri-la":"Internal","shangri la":"Internal",
   "pan pacific":"ReviewPro","parkroyal":"ReviewPro",
-  "jumeirah":"TrustYou","four seasons":"Medallia","aman":"Medallia",
+  "jumeirah":"TrustYou","four seasons":"Qualtrics","aman":"Medallia",
 };
 
 const PROVIDER_SOURCES = {
-  "Qualtrics":  { brands: "Marriott International", url: "https://www.qualtrics.com/customers/marriott/" },
-  "Medallia":   { brands: "IHG, Hilton, Hyatt, Four Seasons, Wyndham", url: "https://www.medallia.com/customers/" },
-  "ReviewPro":  { brands: "Kempinski, Radisson, Minor/NH, Barceló, Meliá, Pestana, Iberostar, Shangri-La", url: "https://www.shijigroup.com/press-news/shiji-reviewpro-forms-customer-advisory-board" },
+  "Qualtrics":  { brands: "Marriott International, Four Seasons", url: "https://www.qualtrics.com/customers/marriott/" },
+  "Medallia":   { brands: "IHG, Hilton, Hyatt, Wyndham, Aman, Langham, Dorchester Collection", url: "https://www.medallia.com/customers/" },
+  "ReviewPro":  { brands: "Kempinski, Radisson, Minor/NH, Barceló, Meliá, Pestana, Iberostar, Peninsula, Capella", url: "https://www.shijigroup.com/press-news/shiji-reviewpro-forms-customer-advisory-board" },
   "TrustYou":   { brands: "Accor, Mandarin Oriental, Rosewood, Jumeirah", url: "https://hoteltechreport.com/marketing/reputation-management/trustyou" },
+  "Internal":   { brands: "Shangri-La", url: null },
 };
 
 function inferProvider(brand, hotelName) {
