@@ -1064,18 +1064,6 @@ function LeadScoreBadge({ score: scoreObj }) {
   );
 }
 
-function LeadScoreBadge({ score }) {
-  const color = score >= 70 ? "#22c55e" : score >= 40 ? "#f59e0b" : "#ef4444";
-  const bg = score >= 70 ? "#dcfce7" : score >= 40 ? "#fef3c7" : "#fee2e2";
-  return (
-    <span style={{
-      display: "inline-block", minWidth: 32, padding: "2px 7px",
-      borderRadius: 5, background: bg, color, fontWeight: 700,
-      fontSize: 12, textAlign: "center", lineHeight: "18px"
-    }}>{score}</span>
-  );
-}
-
 function TierBadge({ tier }) {
   const t = (tier || "").toLowerCase();
   const cls = t.includes("lux") ? "badge-luxury" : t.includes("prem") ? "badge-premium" : t.includes("life") ? "badge-lifestyle" : "badge-economy";
