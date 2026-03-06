@@ -813,6 +813,10 @@ const css = `
   .focus-done-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border2); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; font-size: 13px; color: transparent; }
   .focus-done-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
   .focus-done-btn.checked { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+
+  /* Verified badge */
+  .verified-badge { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: var(--green); color: white; font-size: 9px; font-weight: 700; margin-left: 4px; flex-shrink: 0; vertical-align: middle; }
+  .verified-badge.unverified { background: transparent; border: 1.5px dashed var(--border2); color: var(--border2); font-size: 8px; }
 `;
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -1326,6 +1330,7 @@ export default function App() {
   const [filterProvider, setFilterProvider] = useState("");
   const [filterHasEmail, setFilterHasEmail] = useState(false);
   const [filterHasGM, setFilterHasGM] = useState(false);
+  const [filterVerified, setFilterVerified] = useState(""); // "" | "yes" | "no"
   // Outreach tracker filters
   const [outreachSearch, setOutreachSearch] = useState("");
   const [outreachCountry, setOutreachCountry] = useState("");
@@ -1533,7 +1538,7 @@ export default function App() {
     const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
     const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
 
-    const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at"];
+    const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at","verified"];
     const sdr = sdrName || "Unknown";
     const batchLabel = `${market} · ${fmtDateShort(new Date())}`;
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1885,7 +1890,7 @@ export default function App() {
       cols.push(cur); return cols.map(s => s.trim());
     }
 
-    const DB_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at","lead_status","management_company","operating_model","operating_model_note"];
+    const DB_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at","lead_status","management_company","operating_model","operating_model_note","verified"];
     const headers = parseRow(lines[0]).map(h => h.toLowerCase().trim());
     const isDirectMode = DB_FIELDS.filter(f => headers.includes(f)).length >= 5;
 
@@ -2046,6 +2051,8 @@ export default function App() {
     }
     if (filterHasEmail && !p.email) return false;
     if (filterHasGM && !p.gm_name) return false;
+    if (filterVerified === "yes" && !p.verified) return false;
+    if (filterVerified === "no" && p.verified) return false;
     if (filterSearch) {
       const q = normalizeSearch(filterSearch);
       if (!normalizeSearch(p.hotel_name).includes(q) && !normalizeSearch(p.gm_name).includes(q) && !normalizeSearch(p.city).includes(q)) return false;
@@ -2203,6 +2210,7 @@ export default function App() {
             const totalProspects = prospects.length;
             const withEmail = prospects.filter(p => p.email).length;
             const withGM = prospects.filter(p => p.gm_name).length;
+            const verifiedCount = prospects.filter(p => p.verified).length;
             const inPipeline = tracking.length;
             const contacted1 = tracking.filter(t => t.d1).length;
             // Stage distribution
@@ -2245,7 +2253,7 @@ export default function App() {
                 <div className="dash-card">
                   <div className="dash-card-label">Total Hotels</div>
                   <div className="dash-card-val">{totalProspects}</div>
-                  <div className="dash-card-sub">{withGM} with contact · {withEmail} with email</div>
+                  <div className="dash-card-sub">{withGM} with contact · {withEmail} with email · {verifiedCount} verified</div>
                 </div>
                 <div className="dash-card">
                   <div className="dash-card-label">In Pipeline</div>
@@ -2329,8 +2337,13 @@ export default function App() {
                 </select>
                 <button className="act-btn" style={{fontSize:11,flexShrink:0,background:filterHasGM?"var(--accent)":"transparent",color:filterHasGM?"white":"var(--text2)",border:filterHasGM?"1px solid var(--accent)":"1px solid var(--border)",borderRadius:4,padding:"4px 8px"}} onClick={()=>{setFilterHasGM(v=>!v);setHotelsPage(1);}}>Has GM</button>
                 <button className="act-btn" style={{fontSize:11,flexShrink:0,background:filterHasEmail?"var(--accent)":"transparent",color:filterHasEmail?"white":"var(--text2)",border:filterHasEmail?"1px solid var(--accent)":"1px solid var(--border)",borderRadius:4,padding:"4px 8px"}} onClick={()=>{setFilterHasEmail(v=>!v);setHotelsPage(1);}}>Has Email</button>
-                {(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider||filterHasEmail||filterHasGM) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterBrand("");setFilterSearch("");setFilterProvider("");setFilterHasEmail(false);setFilterHasGM(false);setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
-                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider||filterHasEmail||filterHasGM)?" (filtered)":""}</span>
+                <select className="cmd-input" style={{minWidth:80,flexShrink:0,fontSize:11}} value={filterVerified} onChange={e=>{setFilterVerified(e.target.value);setHotelsPage(1);}}>
+                  <option value="">All Status</option>
+                  <option value="yes">✓ Verified</option>
+                  <option value="no">? Unverified</option>
+                </select>
+                {(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider||filterHasEmail||filterHasGM||filterVerified) && <button className="act-btn" style={{fontSize:11,flexShrink:0}} onClick={()=>{setFilterCountry("");setFilterCity("");setFilterGroup("");setFilterBrand("");setFilterSearch("");setFilterProvider("");setFilterHasEmail(false);setFilterHasGM(false);setFilterVerified("");setHotelsPage(1);setSortCol(null);}}>✕ Clear</button>}
+                <span style={{marginLeft:"auto",fontSize:12,color:"var(--text2)",whiteSpace:"nowrap",flexShrink:0,fontWeight:600,background:"var(--bg)",padding:"4px 10px",borderRadius:5,border:"1px solid var(--border)"}}>{sortedP.length} hotels{(filterCountry||filterCity||filterGroup||filterBrand||filterSearch||filterProvider||filterHasEmail||filterHasGM||filterVerified)?" (filtered)":""}</span>
               </div>
               {filteredP.length === 0 ? (
                 <div className="empty">
@@ -2379,6 +2392,16 @@ export default function App() {
                     <option value="">Assign SDR</option>
                     {[...new Set(tracking.map(t=>t.sdr).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  <button className="act-btn" style={{fontSize:11,color:"var(--green)",border:"1px solid var(--green-border)",background:"var(--green-bg)"}} onClick={async () => {
+                    const ids = [...selectedIds];
+                    for (const pid of ids) { await updateProspect(pid, {verified: true}); }
+                    setSelectedIds(new Set());
+                  }}>✓ Verified ({selectedIds.size})</button>
+                  <button className="act-btn" style={{fontSize:11,color:"var(--text3)",border:"1px solid var(--border)"}} onClick={async () => {
+                    const ids = [...selectedIds];
+                    for (const pid of ids) { await updateProspect(pid, {verified: false}); }
+                    setSelectedIds(new Set());
+                  }}>✕ Unverified</button>
                   <button className="act-btn" style={{fontSize:11,color:"var(--red)",border:"1px solid #fecaca",background:"#fef2f2"}} onClick={async () => {
                     if (!confirm(`Delete ${selectedIds.size} selected hotels permanently?`)) return;
                     for (const pid of [...selectedIds]) { await deleteProspect(pid); }
@@ -2420,7 +2443,7 @@ export default function App() {
                         e.target.checked ? next.add(p.id) : next.delete(p.id);
                         setSelectedIds(next);
                       }} /></td>
-                      <td><div className="hotel-name">{p.hotel_name}</div></td>
+                      <td><div className="hotel-name" style={{display:"flex",alignItems:"center"}}>{p.hotel_name}{p.verified ? <span className="verified-badge" title="Manually verified by SDR">✓</span> : <span className="verified-badge unverified" title="Not yet verified" onClick={e=>{e.stopPropagation();updateProspect(p.id,{verified:true});}}>?</span>}</div></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.city||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
@@ -3155,6 +3178,12 @@ export default function App() {
             })()}
             <div className="d-sec">
               <div className="d-sec-title">Hotel Profile</div>
+              <div className="d-row"><span className="d-key">Verified</span><span className="d-val">
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12}}>
+                  <input type="checkbox" checked={!!sel.verified} onChange={e=>updateProspect(sel.id,{verified:e.target.checked})} style={{accentColor:"var(--green)",width:14,height:14}} />
+                  <span style={{color:sel.verified?"var(--green)":"var(--text3)",fontWeight:sel.verified?600:400}}>{sel.verified ? "Manually verified" : "Not verified"}</span>
+                </label>
+              </span></div>
               <div className="d-row"><span className="d-key">Lead Status</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.lead_status||"Active"} onChange={e=>updateProspect(sel.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></span></div>
               <div className="d-row"><span className="d-key">Management</span><span className="d-val"><input type="text" style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px",width:"100%"}} defaultValue={sel.management_company||""} placeholder="e.g. IHG Hotels & Resorts" onBlur={e=>{const v=e.target.value.trim();if(v!==(sel.management_company||""))updateProspect(sel.id,{management_company:v||null});}}/></span></div>
               <div className="d-row"><span className="d-key">Op. Model</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.operating_model||""} onChange={e=>updateProspect(sel.id,{operating_model:e.target.value||null})}><option value="">Select...</option><option value="Owned">Owned</option><option value="Managed">Managed</option><option value="Franchised">Franchised</option><option value="Leased">Leased</option><option value="Other">Other</option></select></span></div>
