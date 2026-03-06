@@ -1288,8 +1288,9 @@ export default function App() {
   const [scope, setScope] = useState("chain");
   const [group, setGroup] = useState("");
   const [brand, setBrand] = useState("");
-  const [minAdr, setMinAdr] = useState("150");
-  const [count, setCount] = useState("8");
+  const [minAdr, setMinAdr] = useState("100");
+  const [count, setCount] = useState("5");
+  const [minRooms, setMinRooms] = useState("40");
   const [sdrName, setSdrName] = useState("");
   // State
   const [running, setRunning] = useState(false);
@@ -1527,7 +1528,7 @@ export default function App() {
 
     setRunning(true); setError(null); setProgress(5);
     const market = getMarket();
-    const n = Math.min(Math.max(parseInt(count) || 8, 1), 8);
+    const n = Math.min(Math.max(parseInt(count) || 5, 1), 5);
 
     const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
     const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
@@ -1579,7 +1580,7 @@ export default function App() {
       setLog("Step 1: Building hotel list from knowledge base...");
 
       const listData = await apiFetch({
-        mode: "list", city: market, brand, group, scope, minAdr,
+        mode: "list", city: market, brand, group, scope, minAdr, minRooms,
         region: region || "", country: country || ""
       });
 
@@ -1962,6 +1963,27 @@ export default function App() {
         };
         if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
       }
+
+      // ── Sanitize multi-value fields: take first value only ──
+      function firstVal(v, sep) {
+        if (!v) return v;
+        const s = String(v);
+        // Split on comma, semicolon, newline, " / ", " & " (but not within names like "JW Marriott")
+        const parts = s.split(/[,;\n]|(?:\s\/\s)/).map(x => x.trim()).filter(Boolean);
+        return parts[0] || v;
+      }
+      function firstEmail(v) {
+        if (!v) return v;
+        const s = String(v);
+        // Find first email-like pattern
+        const emails = s.match(/[^\s,;]+@[^\s,;]+/g);
+        return emails ? emails[0] : null;
+      }
+      if (p.gm_name && /[,;\n]/.test(p.gm_name)) p.gm_name = firstVal(p.gm_name);
+      if (p.email) p.email = firstEmail(p.email);
+      if (p.phone && /[,;\n]/.test(String(p.phone))) p.phone = firstVal(String(p.phone));
+      if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
+
       imported.push(p);
     }
 
@@ -2014,10 +2036,10 @@ export default function App() {
   const filteredP = prospects.filter(p => {
     if (leadStatusFilter.length > 0 && !leadStatusFilter.includes(p.lead_status || "Active")) return false;
     if (filterSdr !== "all" && p.sdr !== filterSdr) return false;
-    if (filterCountry && (p.country||"") !== filterCountry) return false;
-    if (filterCity && (p.city||"") !== filterCity) return false;
-    if (filterGroup && normalizeGroup(p.hotel_group||p.brand||"") !== filterGroup) return false;
-    if (filterBrand && normalizeBrand(p.brand) !== filterBrand) return false;
+    if (filterCountry === "__blank__" ? !!(p.country||"").trim() : filterCountry && (p.country||"") !== filterCountry) return false;
+    if (filterCity === "__blank__" ? !!(p.city||"").trim() : filterCity && (p.city||"") !== filterCity) return false;
+    if (filterGroup === "__blank__" ? !!(normalizeGroup(p.hotel_group||p.brand||"")) : filterGroup && normalizeGroup(p.hotel_group||p.brand||"") !== filterGroup) return false;
+    if (filterBrand === "__blank__" ? !!(normalizeBrand(p.brand)) : filterBrand && normalizeBrand(p.brand) !== filterBrand) return false;
     if (filterProvider) {
       const prov = getProvider(p) || "Unknown";
       if (prov !== filterProvider) return false;
@@ -2136,12 +2158,14 @@ export default function App() {
                 </>
               )}
               {scope === "independent" && (
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>Min ADR $</span>
                   <input type="number" min="50" max="2000" step="50" value={minAdr} onChange={e=>setMinAdr(e.target.value)} className="cmd-input" style={{width:60}} title="Minimum ADR in USD" />
+                  <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>Min Rooms</span>
+                  <input type="number" min="10" max="500" step="10" value={minRooms} onChange={e=>setMinRooms(e.target.value)} className="cmd-input" style={{width:52}} title="Minimum room count" />
                 </div>
               )}
-              <input type="number" min="1" max="8" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count (max 8)" />
+              <input type="number" min="1" max="5" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count (max 5)" />
               <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="Your name" className="cmd-input" style={{width:90}} />
               <button className="run-btn" onClick={run} disabled={running}>
                 {running ? <><div className="spinner"/>Searching...</> : cooldown > 0 ? `⏱ ${cooldown}s` : "▶ Run"}
@@ -2281,18 +2305,22 @@ export default function App() {
                 <input className="cmd-input" style={{minWidth:150,flexShrink:0}} placeholder="🔍 Hotel or person..." value={filterSearch} onChange={e=>{setFilterSearch(e.target.value);setHotelsPage(1);}}/>
                 <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={filterCountry} onChange={e=>{setFilterCountry(e.target.value);setFilterCity("");setHotelsPage(1);}}>
                   <option value="">All Countries</option>
+                  <option value="__blank__">(Blank)</option>
                   {allCountries.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
                 <select className="cmd-input" style={{minWidth:110,flexShrink:0}} value={filterCity} onChange={e=>{setFilterCity(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Cities</option>
+                  <option value="__blank__">(Blank)</option>
                   {allCities.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
                 <select className="cmd-input" style={{width:160,flexShrink:0,maxWidth:160}} value={filterGroup} onChange={e=>{setFilterGroup(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Groups</option>
+                  <option value="__blank__">(Blank)</option>
                   {allGroups.map(g=><option key={g} value={g}>{g.length>28?g.slice(0,26)+"…":g}</option>)}
                 </select>
                 <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterBrand} onChange={e=>{setFilterBrand(e.target.value);setHotelsPage(1);}}>
                   <option value="">All Brands</option>
+                  <option value="__blank__">(Blank)</option>
                   {allBrands.map(b=><option key={b} value={b}>{b}</option>)}
                 </select>
                 <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={filterProvider} onChange={e=>{setFilterProvider(e.target.value);setHotelsPage(1);}}>
@@ -2803,10 +2831,11 @@ export default function App() {
                 </div>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                {dupGroups.length > 0 && <button className="act-btn" style={{fontSize:11,background:"#991b1b",color:"white",border:"none",borderRadius:4,padding:"6px 12px",cursor:"pointer",fontWeight:600}} onClick={async()=>{
+                {dupGroups.length > 0 && <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <button className="act-btn" style={{fontSize:11,background:"#991b1b",color:"white",border:"none",borderRadius:4,padding:"6px 12px",cursor:"pointer",fontWeight:600}} onClick={async()=>{
                   const identicalGroups = dupGroups.filter(g=>g.confidence==="Identical");
                   if(!identicalGroups.length) return alert("No Identical groups found.");
-                  if(!confirm(`Auto-merge ${identicalGroups.length} Identical groups? These are exact same-name duplicates. The entry with the most data will be kept for each.`)) return;
+                  if(!confirm(`Auto-merge ${identicalGroups.length} Identical groups?\n\nFor each duplicate pair, the record with the most data (GM, email, rooms, website, address) will be kept. Empty records will be deleted.`)) return;
                   const allDeleteIds = [];
                   for(const g of identicalGroups){
                     const scored = g.hotels.map(h=>({h,s:(h.website?2:0)+(h.rooms?2:0)+(h.gm_name?2:0)+(h.email?2:0)+(h.address?1:0)+((h.hotel_name||"").length>25?1:0)}));
@@ -2826,7 +2855,9 @@ export default function App() {
                     setDupGroups(prev=>prev.filter(g=>g.confidence!=="Identical"));
                     alert(`✓ Merged ${identicalGroups.length} groups, deleted ${allDeleteIds.length} duplicates.`);
                   }catch(e){alert("Error: "+e.message);}
-                }}>Merge All Identical ({dupGroups.filter(g=>g.confidence==="Identical").length})</button>}
+                }}>Merge All Identical ({dupGroups.filter(g=>g.confidence==="Identical").length})</button>
+                  <span style={{fontSize:10,color:"var(--text3)",maxWidth:180}}>Keeps the record with the most data</span>
+                </div>}
                 <button className="act-btn" onClick={()=>setDupGroups(null)} style={{fontSize:16,padding:"4px 10px"}}>✕</button>
               </div>
             </div>
