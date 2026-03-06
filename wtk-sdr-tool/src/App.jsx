@@ -574,7 +574,7 @@ const css = `
   tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #f9fafb; }
-  td { padding: 7px 8px; vertical-align: middle; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td { padding: 9px 8px; vertical-align: middle; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
   .hotel-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hotel-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
   .gm-name { font-size: 13px; font-weight: 500; }
@@ -2159,6 +2159,7 @@ export default function App() {
     }
     if (pipeHasGM && !t.gm) return false;
     if (pipeHasEmail && !t.email) return false;
+    if (filterGrade.length > 0 && p && !filterGrade.includes(calcLeadScore(p).grade)) return false;
     return true;
   });
   const contacted = tracking.filter(t => (t.done || []).length > 0).length;
@@ -2494,18 +2495,18 @@ export default function App() {
                     else pagedP.forEach(p => next.delete(p.id));
                     setSelectedIds(next);
                   }} /></th>
-                  <th style={{width:"16%"}}>Hotel</th>
+                  <th style={{width:"17%"}}>Hotel</th>
                   <th style={{width:"6%"}}>City</th>
-                  <th style={{width:"7%"}}>Country</th>
+                  <th style={{width:"6%"}}>Country</th>
                   <th style={{width:"7%"}}>Group</th>
-                  <th style={{width:"9%"}}>Brand</th>
-                  <th style={{width:"10%"}}>Contact</th>
+                  <th style={{width:"7%"}}>Brand</th>
+                  <th style={{width:"13%"}}>Contact</th>
                   <th style={{width:"12%"}}>Email</th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("adr")}>ADR <span className={`sort-arrow ${sortCol==="adr"?"active":""}`}>{sortCol==="adr"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("score")}>Score <span className={`sort-arrow ${sortCol==="score"?"active":""}`}>{sortCol==="score"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
                   <th style={{width:"7%"}}>Provider</th>
-                  <th style={{width:"7%"}}>Lead</th>
+                  <th style={{width:"6%"}}>Lead</th>
                   <th style={{width:"3%"}}></th>
                 </tr></thead>
                 <tbody>
@@ -2524,7 +2525,7 @@ export default function App() {
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{normalizeBrand(p.brand) || inferBrandFromName(p.hotel_name) || "—"}</span></td>
-                      <td><div className="gm-name" style={{fontSize:12}}>{p.gm_name||<span className="cell-muted">—</span>}</div>{p.gm_name && p.gm_title && p.gm_title!=="General Manager" ? <div className="gm-title-sm">{p.gm_title}</div> : null}</td>
+                      <td><div className="gm-name" style={{fontSize:12}} title={p.gm_name||""}>{p.gm_name||<span className="cell-muted">—</span>}</div>{p.gm_name && p.gm_title && p.gm_title!=="General Manager" ? <div className="gm-title-sm">{p.gm_title}</div> : null}</td>
                       <td>{(()=>{const em=p.email; if(!em||em.includes('[email')||em.includes('email protected'))return<span className="cell-muted">—</span>; return<a className="email-link" href={`mailto:${em}`} onClick={e=>e.stopPropagation()} style={{maxWidth:150,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={em}>{em}</a>;})()}</td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.rooms||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.adr_usd?`~$${p.adr_usd}`:"—"}</span></td>
