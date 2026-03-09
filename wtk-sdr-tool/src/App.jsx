@@ -359,127 +359,204 @@ function dedupJaccard(a, b) {
   return inter / (A.size + B.size - inter);
 }
 
-function findDuplicates(prospects) {
-  const groups = [];
-  const assigned = new Set();
+// pair key: stable regardless of grouping changes
+function buildPairKey(idA, idB) {
+  const a = String(idA), b = String(idB);
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
 
-  // Index by city for blocking
+// extract all pairs from a group
+function groupToPairs(hotels) {
+  const pairs = [];
+  for (let i = 0; i < hotels.length; i++)
+    for (let j = i + 1; j < hotels.length; j++)
+      pairs.push(buildPairKey(hotels[i].id, hotels[j].id));
+  return pairs;
+}
+
+// group is dismissed only when ALL pairs have been individually ignored
+// (prevents one A-B dismiss from hiding A-B-C where B-C may still be real)
+function groupIsDismissed(hotels, dismissedPairs) {
+  const pairs = groupToPairs(hotels);
+  return pairs.length > 0 && pairs.every(p => dismissedPairs.has(p));
+}
+
+function buildDupGroupKey(hotels) {
+  return hotels.map(h => String(h.id)).sort().join("|");
+}
+
+// confidence numeric score for conflict resolution
+const CONF_SCORE = { Identical: 4, High: 3, Medium: 2, Low: 1 };
+
+function findDuplicates(prospects) {
+  // ── Build city buckets (unknown city = isolated, never cross-compared) ──
   const byCity = {};
+  const noCityGroup = []; // reserved for future cross-cityless pass — intentionally not used in current logic
   for (const p of prospects) {
-    const city = (p.city || "unknown").toLowerCase().trim();
+    const city = (p.city || "").trim().toLowerCase();
+    if (!city) { noCityGroup.push(p); continue; }
     if (!byCity[city]) byCity[city] = [];
     byCity[city].push(p);
   }
 
-  // Pass 0: Identical — exact normalized name + same city (safe to auto-merge)
-  for (const [city, cityPs] of Object.entries(byCity)) {
-    const byName = {};
-    for (const p of cityPs) {
-      if (assigned.has(p.id)) continue;
-      const key = dedupNormName(p.hotel_name);
-      if (!key) continue;
-      if (!byName[key]) byName[key] = [];
-      byName[key].push(p);
-    }
-    for (const [name, ps] of Object.entries(byName)) {
-      if (ps.length < 2) continue;
-      groups.push({ confidence: "Identical", reason: "Exact same name (same city)", hotels: ps, key: name });
-      ps.forEach(p => assigned.add(p.id));
-    }
+  const candidates = []; // all candidate groups before conflict resolution
+
+  function addCandidate(confidence, reason, hotels) {
+    const uniq = hotels.filter(
+      (h, i, arr) => arr.findIndex(x => String(x.id) === String(h.id)) === i
+    );
+    if (uniq.length < 2) return;
+    candidates.push({
+      confidence,
+      reason,
+      hotels: uniq,
+      key: buildDupGroupKey(uniq),
+      score: CONF_SCORE[confidence] || 0,
+    });
   }
 
-  // Pass 1: Identical — same hotel-level website
-  const byUrl = {};
-  for (const p of prospects) {
-    if (assigned.has(p.id)) continue;
-    if (!isHotelLevelUrl(p.website)) continue;
-    const key = canonicalizeUrl(p.website);
-    if (!key) continue;
-    if (!byUrl[key]) byUrl[key] = [];
-    byUrl[key].push(p);
-  }
-  for (const [url, ps] of Object.entries(byUrl)) {
-    if (ps.length < 2) continue;
-    const ids = ps.map(p => p.id);
-    if (ids.some(id => assigned.has(id))) continue;
-    groups.push({ confidence: "Identical", reason: "Same hotel-level website", hotels: ps, key: url });
-    ids.forEach(id => assigned.add(id));
-  }
+  // ── Pass 1: exact normalized name, same city ──
+  Object.values(byCity).forEach(cityHotels => {
+    const buckets = {};
+    cityHotels.forEach(h => {
+      const norm = dedupNormName(h.hotel_name || "");
+      if (!norm) return;
+      if (!buckets[norm]) buckets[norm] = [];
+      buckets[norm].push(h);
+    });
+    Object.values(buckets).forEach(bucket => {
+      if (bucket.length >= 2)
+        addCandidate("Identical", "Exact same normalized hotel name in same city", bucket);
+    });
+  });
 
-  // Pass 2: High — same normalized address (same city)
-  for (const [city, cityPs] of Object.entries(byCity)) {
-    const byAddr = {};
-    for (const p of cityPs) {
-      if (assigned.has(p.id)) continue;
-      const addr = normalizeAddr(p.address);
-      if (!addr || addr.length < 10) continue;
-      if (!byAddr[addr]) byAddr[addr] = [];
-      byAddr[addr].push(p);
-    }
-    for (const [addr, ps] of Object.entries(byAddr)) {
-      if (ps.length < 2) continue;
-      const ids = ps.map(p => p.id);
-      groups.push({ confidence: "High", reason: "Same normalized address", hotels: ps, key: addr });
-      ids.forEach(id => assigned.add(id));
-    }
-  }
+  // ── Pass 2: same hotel-level website ──
+  const websiteBuckets = {};
+  prospects.forEach(h => {
+    const url = canonicalizeUrl(h.website || "");
+    if (!url || !isHotelLevelUrl(url)) return;
+    if (!websiteBuckets[url]) websiteBuckets[url] = [];
+    websiteBuckets[url].push(h);
+  });
+  Object.values(websiteBuckets).forEach(bucket => {
+    if (bucket.length >= 2)
+      addCandidate("Identical", "Same hotel-level website", bucket);
+  });
 
-  // Pass 3: High — very similar name (>=0.80) + same city + rooms match
-  // Medium — similar name (>=0.70) + same city
-  for (const [city, cityPs] of Object.entries(byCity)) {
-    for (let i = 0; i < cityPs.length; i++) {
-      if (assigned.has(cityPs[i].id)) continue;
-      const cluster = [cityPs[i]];
-      for (let j = i + 1; j < cityPs.length; j++) {
-        if (assigned.has(cityPs[j].id)) continue;
-        const jac = dedupJaccard(cityPs[i].hotel_name, cityPs[j].hotel_name);
-        if (jac >= 0.70) {
-          cluster.push(cityPs[j]);
-        }
+  // ── Pass 3: same normalized address, same city ──
+  Object.values(byCity).forEach(cityHotels => {
+    const addrBuckets = {};
+    cityHotels.forEach(h => {
+      const addr = normalizeAddr(h.address || "");
+      if (!addr || addr.length < 8) return;
+      if (!addrBuckets[addr]) addrBuckets[addr] = [];
+      addrBuckets[addr].push(h);
+    });
+    Object.values(addrBuckets).forEach(bucket => {
+      if (bucket.length >= 2)
+        addCandidate("High", "Same normalized address in same city", bucket);
+    });
+  });
+
+  // ── Pass 4: fuzzy name, same city — all-pairs clustering (no hub effect) ──
+  Object.values(byCity).forEach(cityHotels => {
+    const n = cityHotels.length;
+    // Build similarity matrix
+    const sim = Array.from({length: n}, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++) {
+        const jac = dedupJaccard(cityHotels[i].hotel_name || "", cityHotels[j].hotel_name || "");
+        sim[i][j] = sim[j][i] = jac;
       }
-      if (cluster.length >= 2) {
-        const jac = dedupJaccard(cluster[0].hotel_name, cluster[1].hotel_name);
-        const roomsMatch = cluster.every(p => p.rooms) &&
-          Math.abs((cluster[0].rooms || 0) - (cluster[1].rooms || 0)) <= 5;
-        const isHigh = jac >= 0.80 && roomsMatch;
-        groups.push({
-          confidence: isHigh ? "High" : "Medium",
-          reason: isHigh ? "Very similar name + matching rooms" : "Similar hotel name (same city)",
-          hotels: cluster,
-          key: dedupNormName(cityPs[i].hotel_name),
-        });
-        cluster.forEach(p => assigned.add(p.id));
-      }
+    // Union-find for clusters where ALL pairs meet threshold
+    const parent = Array.from({length: n}, (_, i) => i);
+    function find(x) { return parent[x] === x ? x : (parent[x] = find(parent[x])); }
+    function union(x, y) { parent[find(x)] = find(y); }
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++)
+        if (sim[i][j] >= 0.7) union(i, j);
+    // Group by cluster root
+    const clusterMap = {};
+    for (let i = 0; i < n; i++) {
+      const root = find(i);
+      if (!clusterMap[root]) clusterMap[root] = [];
+      clusterMap[root].push(i);
     }
-  }
-
-  // Pass 4: Low — cross-city name similarity
-  const allCities = Object.keys(byCity);
-  for (let ci = 0; ci < allCities.length; ci++) {
-    for (let cj = ci + 1; cj < allCities.length; cj++) {
-      for (const a of byCity[allCities[ci]]) {
-        if (assigned.has(a.id)) continue;
-        for (const b of byCity[allCities[cj]]) {
-          if (assigned.has(b.id)) continue;
-          if (dedupJaccard(a.hotel_name, b.hotel_name) >= 0.85) {
-            groups.push({
-              confidence: "Low",
-              reason: `Similar name across cities (${a.city} / ${b.city})`,
-              hotels: [a, b],
-              key: dedupNormName(a.hotel_name),
-            });
-            assigned.add(a.id);
-            assigned.add(b.id);
+    Object.values(clusterMap).forEach(idxs => {
+      if (idxs.length < 2) return;
+      // Validate: every pair must meet threshold (reject hub-only clusters)
+      // If a pair is below 0.65, it must have a secondary signal (rooms/address/website)
+      const cluster = idxs.map(i => cityHotels[i]);
+      let clusterValid = true;
+      for (let a = 0; a < cluster.length && clusterValid; a++) {
+        for (let b = a + 1; b < cluster.length && clusterValid; b++) {
+          const pairJac = dedupJaccard(cluster[a].hotel_name || "", cluster[b].hotel_name || "");
+          if (pairJac < 0.65) {
+            // Allow if secondary signal exists: rooms close OR same address OR same website domain
+            const rA = Number(cluster[a].rooms), rB = Number(cluster[b].rooms);
+            const roomsClose = rA && rB && Math.abs(rA - rB) <= 5;
+            const addrMatch = cluster[a].address && cluster[b].address &&
+              normalizeAddr(cluster[a].address) === normalizeAddr(cluster[b].address);
+            const domA = getUrlDomain(cluster[a].website || ""), domB = getUrlDomain(cluster[b].website || "");
+            const domainMatch = domA && domB && domA === domB && !CORPORATE_DOMAINS.has(domA);
+            if (!roomsClose && !addrMatch && !domainMatch) { clusterValid = false; }
           }
         }
       }
+      if (!clusterValid) return;
+      // Confidence: High if any pair has rooms within 5 and jac >= 0.8
+      let isHigh = false;
+      for (let a = 0; a < cluster.length; a++)
+        for (let b = a + 1; b < cluster.length; b++) {
+          const rA = Number(cluster[a].rooms), rB = Number(cluster[b].rooms);
+          if (sim[idxs[a]][idxs[b]] >= 0.8 && rA && rB && Math.abs(rA - rB) <= 5) isHigh = true;
+        }
+      addCandidate(
+        isHigh ? "High" : "Medium",
+        isHigh ? "Very similar name + matching room count" : "Similar hotel name in same city",
+        cluster
+      );
+    });
+  });
+
+  // ── Pass 5: cross-city — require strong secondary signal ──
+  const allProspects = prospects.filter(p => (p.city || "").trim());
+  for (let i = 0; i < allProspects.length; i++) {
+    const a = allProspects[i];
+    for (let j = i + 1; j < allProspects.length; j++) {
+      const b = allProspects[j];
+      if ((a.city || "").trim().toLowerCase() === (b.city || "").trim().toLowerCase()) continue;
+      const jac = dedupJaccard(a.hotel_name || "", b.hotel_name || "");
+      if (jac < 0.85) continue;
+      // Must have at least one strong secondary signal
+      const rA = Number(a.rooms), rB = Number(b.rooms);
+      const roomsClose = rA && rB && Math.abs(rA - rB) <= 5;
+      const domA = getUrlDomain(a.website || ""), domB = getUrlDomain(b.website || "");
+      const sameIndepDomain = domA && domB && domA === domB && !CORPORATE_DOMAINS.has(domA);
+      // bothHaveNoGroup: weak signal only (missing data, not evidence of duplication)
+      // intentionally excluded from allow condition — data absence ≠ duplicate evidence
+      const bothHaveNoGroup = !a.hotel_group && !b.hotel_group; // kept for future scoring use
+      if (!roomsClose && !sameIndepDomain) continue;
+      addCandidate("Low", "Very similar name across cities" + (sameIndepDomain ? " + same website domain" : roomsClose ? " + matching room count" : ""), [a, b]);
     }
   }
 
-  return groups.sort((a, b) => {
-    const order = { Identical: 0, High: 1, Medium: 2, Low: 3 };
-    return (order[a.confidence] || 4) - (order[b.confidence] || 4);
-  });
+  // ── Conflict resolution: greedy select strongest non-overlapping groups ──
+  // Sort by score desc, then size desc
+  candidates.sort((a, b) =>
+    b.score !== a.score ? b.score - a.score : b.hotels.length - a.hotels.length
+  );
+
+  const usedIds = new Set();
+  const selected = [];
+  for (const g of candidates) {
+    if (g.hotels.some(h => usedIds.has(String(h.id)))) continue;
+    selected.push(g);
+    g.hotels.forEach(h => usedIds.add(String(h.id)));
+  }
+
+  const order = { Identical: 0, High: 1, Medium: 2, Low: 3 };
+  return selected.sort((a, b) => order[a.confidence] - order[b.confidence]);
 }
 
 
@@ -1394,6 +1471,14 @@ export default function App() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [dupGroups, setDupGroups] = useState(null);
   const [dupExpanded, setDupExpanded] = useState(new Set());
+  // pair-level ignore: each entry is "minId|maxId"
+  const [dismissedDupPairs, setDismissedDupPairs] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("wtk_dismissed_dup_pairs") || "[]"));
+    } catch {
+      return new Set();
+    }
+  });
   const [cooldown, setCooldown] = useState(0); // seconds until next search allowed
   const lastBatchTime = useRef(0); // timestamp of last API batch completion
   const cooldownTimer = useRef(null);
@@ -2271,7 +2356,7 @@ export default function App() {
               <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
             </label>
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
-            {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP);setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
+            {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP).filter(g=>!groupIsDismissed(g.hotels,dismissedDupPairs));setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
             <span className="record-count">{loading?"Loading...":`${filteredP.length} prospects in shared database`}</span>
           </div>
 
@@ -2932,6 +3017,12 @@ export default function App() {
                 </div>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                {dismissedDupPairs.size > 0 && (
+                  <button className="act-btn" style={{fontSize:11}} onClick={()=>{
+                    setDismissedDupPairs(new Set());
+                    localStorage.removeItem("wtk_dismissed_dup_pairs");
+                  }}>Reset ignored decisions ({dismissedDupPairs.size})</button>
+                )}
                 {dupGroups.length > 0 && <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <button className="act-btn" style={{fontSize:11,background:"#991b1b",color:"white",border:"none",borderRadius:4,padding:"6px 12px",cursor:"pointer",fontWeight:600}} onClick={async()=>{
                   const identicalGroups = dupGroups.filter(g=>g.confidence==="Identical");
@@ -3011,7 +3102,17 @@ export default function App() {
                         ))}
                       </div>
                       <div className="dup-actions">
-                        <button className="act-btn" style={{fontSize:11}} onClick={()=>setDupGroups(prev=>prev.filter((_,i)=>i!==gi))}>Not duplicate</button>
+                        <button className="act-btn" style={{fontSize:11}} onClick={()=>{
+                          const pairs = groupToPairs(g.hotels);
+                          if (!pairs.length) return;
+                          setDismissedDupPairs(prev => {
+                            const next = new Set(prev);
+                            pairs.forEach(p => next.add(p));
+                            localStorage.setItem("wtk_dismissed_dup_pairs", JSON.stringify([...next]));
+                            return next;
+                          });
+                          setDupGroups(prev => prev.filter((_, i) => i !== gi));
+                        }}>Not duplicate</button>
                       </div>
                     </>
                   )}
