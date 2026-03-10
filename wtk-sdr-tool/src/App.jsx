@@ -2226,7 +2226,14 @@ export default function App() {
     if (vb == null) return -1;
     return sortDir === "asc" ? va - vb : vb - va;
   }) : filteredP;
-  const filteredT = tracking.filter(t => {
+  // validTracking: only tracking rows whose prospect still exists in the prospects array.
+  // This is the single source of truth for all counts (Pipeline, Contact Tracker, Dashboard).
+  // When a prospect is deleted, its tracking row may linger in Supabase until next full reload;
+  // filtering here keeps all three views consistent without requiring an immediate DB cleanup.
+  const validProspectIds = new Set(prospects.map(p => p.id));
+  const validTracking = tracking.filter(t => validProspectIds.has(t.prospect_id));
+
+  const filteredT = validTracking.filter(t => {
     if (filterSdr !== "all" && t.sdr !== filterSdr) return false;
     const p = prospects.find(x => x.id === t.prospect_id);
     if (leadStatusFilter.length > 0 && !leadStatusFilter.includes(p?.lead_status || "Active")) return false;
@@ -2364,7 +2371,7 @@ export default function App() {
             <button className={`tab ${tab==="dashboard"?"active":""}`} onClick={()=>setTab("dashboard")}>Dashboard</button>
             <button className={`tab ${tab==="hotels"?"active":""}`} onClick={()=>setTab("hotels")}>Hotels<span className="tab-badge">{sortedP.length}</span></button>
               <button className={`tab ${tab==="outreach"?"active":""}`} onClick={()=>setTab("outreach")}>Pipeline<span className="tab-badge">{filteredT.length}</span></button>
-              <button className={`tab ${tab==="contacts"?"active":""}`} onClick={()=>setTab("contacts")}>Contact Tracker<span className="tab-badge">{tracking.filter(t=>t.d1).length}</span></button>
+              <button className={`tab ${tab==="contacts"?"active":""}`} onClick={()=>setTab("contacts")}>Contact Tracker<span className="tab-badge">{validTracking.filter(t=>t.d1).length}</span></button>
           </div>
 
           {tab==="dashboard" && (() => {
@@ -2372,14 +2379,14 @@ export default function App() {
             const withEmail = prospects.filter(p => p.email).length;
             const withGM = prospects.filter(p => p.gm_name).length;
             const verifiedCount = prospects.filter(p => p.verified).length;
-            const inPipeline = tracking.length;
-            const contacted1 = tracking.filter(t => t.d1).length;
+            const inPipeline = validTracking.length;
+            const contacted1 = validTracking.filter(t => t.d1).length;
             // Stage distribution
             const SM2 = s => { if (s==="active") return "new"; if (s==="emailed") return "1st"; if (s==="followup") return "2nd"; if (s==="dead") return "lost"; return s||"new"; };
             const stCounts = {};
             const ST_ALL = ["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"];
             ST_ALL.forEach(s => stCounts[s] = 0);
-            tracking.forEach(t => { const s = SM2(t.pipeline_stage); stCounts[s] = (stCounts[s]||0) + 1; });
+            validTracking.forEach(t => { const s = SM2(t.pipeline_stage); stCounts[s] = (stCounts[s]||0) + 1; });
             const stColors = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
             const stLabels = {new:"New","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
             // Conversion metrics
@@ -2388,7 +2395,7 @@ export default function App() {
             // Overdue from contact tracker
             const CAD2 = [0, 0, 3, 7, 7];
             let overdueCount = 0, dueTodayCount = 0;
-            tracking.filter(t => t.d1).forEach(t => {
+            validTracking.filter(t => t.d1).forEach(t => {
               const actual = [null, t.d1, t.d2, t.d3, t.d4];
               const due = [null, null, null, null, null];
               for (let n = 2; n <= 4; n++) { const a = actual[n-1] || due[n-1]; if (a) due[n] = addBusinessDays(a, CAD2[n]); }
@@ -2406,7 +2413,7 @@ export default function App() {
             });
             // SDR breakdown
             const sdrMap = {};
-            tracking.forEach(t => { const s = t.sdr || "Unassigned"; sdrMap[s] = (sdrMap[s]||0) + 1; });
+            validTracking.forEach(t => { const s = t.sdr || "Unassigned"; sdrMap[s] = (sdrMap[s]||0) + 1; });
             const sdrEntries = Object.entries(sdrMap).sort((a,b) => b[1] - a[1]);
 
             return (<div style={{padding:"8px 0"}}>
@@ -2453,7 +2460,7 @@ export default function App() {
               {sdrEntries.length > 0 && <div className="dash-card">
                 <div className="dash-card-label" style={{marginBottom: 10}}>By SDR</div>
                 {sdrEntries.map(([sdr, cnt]) => {
-                  const sdrTracking = tracking.filter(t => (t.sdr||"Unassigned") === sdr);
+                  const sdrTracking = validTracking.filter(t => (t.sdr||"Unassigned") === sdr);
                   const sdrContacted = sdrTracking.filter(t => t.d1).length;
                   const sdrReplied = sdrTracking.filter(t => ["replied","demo","trial","won"].includes(SM2(t.pipeline_stage))).length;
                   return <div key={sdr} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
@@ -2743,7 +2750,7 @@ export default function App() {
           else { setCtSortCol(col); setCtSortDir("asc"); }
         }
 
-        const rows = tracking.filter(t => t.d1 || (t.done && t.done.length > 0)).map(t => {
+        const rows = validTracking.filter(t => t.d1 || (t.done && t.done.length > 0)).map(t => {
           const p = prospects.find(x => x.id === t.prospect_id);
           const sched = computeSchedule(t);
           const stage = ms(t.pipeline_stage);
