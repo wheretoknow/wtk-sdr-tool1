@@ -943,7 +943,7 @@ function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); retu
 function fmtDate(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); }
 function fmtDateShort(d) { if (!d) return null; return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }); }
 function pluralDays(n) { const a = Math.abs(n); return a === 1 ? "1 day" : a + " days"; }
-const STAGE_LABELS = {new:"New","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
+const STAGE_LABELS = {new:"Verified","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
 function stageLabel(s) { return STAGE_LABELS[s] || s?.charAt(0).toUpperCase() + s?.slice(1) || "New"; }
 const TODAY = new Date();
 function isOverdue(d) { return d && new Date(d) < TODAY; }
@@ -1222,7 +1222,7 @@ function OutreachTab({ filteredT, stageFilter, setStageFilter, setSelected, touc
   if (filteredT.length === 0 && !hasActiveFilters) return <div className="empty"><div className="empty-icon">{"\u{1F4EC}"}</div><div className="empty-title">No outreach tracked</div><div className="empty-sub">Run research to start the tracker.</div></div>;
 
   const STAGES = [
-    { key: "new", label: "New", color: "#6b7280", bg: "#f9fafb" },
+    { key: "new", label: "Verified", color: "#059669", bg: "#ecfdf5" },
     { key: "1st", label: "Email #1", color: "#2563eb", bg: "#eff6ff" },
     { key: "2nd", label: "Follow-up #1", color: "#0891b2", bg: "#ecfeff" },
     { key: "3rd", label: "Follow-up #2", color: "#7c3aed", bg: "#f5f3ff" },
@@ -1643,7 +1643,32 @@ export default function App() {
         loadAll("/prospects?order=created_at.desc"),
         loadAll("/tracking?order=created_at.desc")
       ]);
-      setProspects(p || []); setTracking(t || []);
+      const prospects = p || [], trackingData = t || [];
+      setProspects(prospects); setTracking(trackingData);
+
+      // ── Auto-verify migration ──────────────────────────────────────────────
+      // Prospects that already have real outreach (stage beyond "new") are
+      // implicitly verified — someone already contacted them. Mark them verified
+      // so they remain visible in Pipeline. Runs once on load, skips already-verified.
+      const CONTACTED_STAGES = new Set(["1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost","emailed","followup"]);
+      const contactedPids = new Set(
+        trackingData
+          .filter(t => CONTACTED_STAGES.has(t.pipeline_stage))
+          .map(t => t.prospect_id)
+      );
+      const toAutoVerify = prospects.filter(p => !p.verified && contactedPids.has(p.id));
+      if (toAutoVerify.length > 0) {
+        const ids = toAutoVerify.map(p => p.id);
+        // Patch in DB (fire-and-forget, non-blocking)
+        sbFetch(`/prospects?id=in.(${ids.join(",")})`, {
+          method: "PATCH", prefer: "return=minimal",
+          body: JSON.stringify({ verified: true })
+        }).catch(e => console.error("Auto-verify migration failed:", e));
+        // Update local state immediately so UI reflects it right away
+        setProspects(prev => prev.map(p => ids.includes(p.id) ? { ...p, verified: true } : p));
+        console.log(`[WTK] Auto-verified ${toAutoVerify.length} prospects with existing outreach.`);
+      }
+      // ─────────────────────────────────────────────────────────────────────
     } catch (e) { console.error(e); }
     setLoading(false);
   }
@@ -1858,24 +1883,23 @@ export default function App() {
 
         if (batchFresh.length > 0) {
           const enriched = batchFresh.map(p => {
-            const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch: batchLabel, sdr };
+            const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch: batchLabel, sdr, verified: false };
             const safe = {};
             PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
             return safe;
           });
-          const newT = enriched.map(p => ({ id: uid(), prospect_id: p.id, hotel: p.hotel_name, gm: p.gm_name, email: p.email, done: [], sdr, created_at: new Date().toISOString() }));
+          // No tracking rows created here — hotels start as unverified in Hotel list.
+          // SDR must manually verify each hotel before it enters the Pipeline.
 
           try {
             await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched) });
-            await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newT) });
           } catch (e) { console.error("Batch save error:", e); }
 
           setProspects(prev => [...enriched, ...prev]);
-          setTracking(prev => [...newT, ...prev]);
           allFresh.push(...enriched);
           startCooldown();
 
-          setLog(`✓ ${allFresh.length} hotels verified & saved${i < batches.length - 1 ? ` · batch ${i + 2} next...` : ""}`);
+          setLog(`✓ ${allFresh.length} hotels saved to Hotel list${i < batches.length - 1 ? ` · batch ${i + 2} next...` : ""} — verify to add to Pipeline`);
         }
       }
 
@@ -1923,6 +1947,41 @@ export default function App() {
   async function updateProspect(pid, updates) {
     setProspects(prev => prev.map(p => p.id === pid ? { ...p, ...updates } : p));
     try { await sbFetch(`/prospects?id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(updates) }); } catch (e) { console.error("updateProspect:", e); }
+  }
+
+  // Verify a prospect and ensure it has a tracking row so it appears in Pipeline.
+  async function verifyAndAddToPipeline(pid) {
+    const p = prospects.find(x => x.id === pid);
+    if (!p) return;
+
+    // Optimistic update
+    setProspects(prev => prev.map(x => x.id === pid ? { ...x, verified: true } : x));
+
+    try {
+      await sbFetch(`/prospects?id=eq.${pid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ verified: true }) });
+    } catch (e) {
+      // Rollback on failure
+      setProspects(prev => prev.map(x => x.id === pid ? { ...x, verified: false } : x));
+      console.error("verifyAndAddToPipeline: prospect patch failed", e);
+      alert(`Failed to verify "${p.hotel_name}". Please try again.`);
+      return;
+    }
+
+    // If no tracking row exists yet, create one so the hotel enters the Pipeline "Verified" column
+    const hasTracking = tracking.some(t => t.prospect_id === pid);
+    if (!hasTracking) {
+      const newRow = { id: uid(), prospect_id: pid, hotel: p.hotel_name, gm: p.gm_name || null, sdr: sdrName || "Unknown", pipeline_stage: "new", done: [], intention: 0, created_at: new Date().toISOString() };
+      // Optimistic update
+      setTracking(prev => [...prev, newRow]);
+      try {
+        await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newRow) });
+      } catch (e) {
+        // Rollback tracking row on failure (verified stays true — prospect was patched successfully)
+        setTracking(prev => prev.filter(t => t.id !== newRow.id));
+        console.error("verifyAndAddToPipeline: tracking insert failed", e);
+        alert(`"${p.hotel_name}" was verified but couldn't be added to Pipeline. Please refresh and try again.`);
+      }
+    }
   }
 
   function openRejectModal(tid, stage, e) {
@@ -2162,32 +2221,15 @@ export default function App() {
     try {
       // Supabase has 1000 row insert limit — chunk it
       const CHUNK = 500;
-      for (let i = 0; i < imported.length; i += CHUNK) {
-        await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(imported.slice(i, i+CHUNK)) });
+      // Ensure all imported records have verified=false — they start in Hotel list only.
+      // SDR must manually verify before they enter Pipeline.
+      const toSave = imported.map(p => ({ ...p, verified: p.verified ?? false }));
+      for (let i = 0; i < toSave.length; i += CHUNK) {
+        await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(toSave.slice(i, i+CHUNK)) });
       }
-      // Create tracking records so Pipeline + Contact Tracker show these hotels
-      // Skip hotels that already have tracking records (e.g. re-import)
-      const existingPids = new Set(tracking.map(t => t.prospect_id));
-      const needTracking = imported.filter(p => !existingPids.has(p.id));
-      const newTracking = needTracking.map(p => ({
-        id: uid(),
-        prospect_id: p.id,
-        hotel: p.hotel_name,
-        gm: p.gm_name || null,
-        email: p.email || null,   // stored independently — email valid even if no GM name
-        sdr: p.sdr || sdrName || "Unknown",
-        pipeline_stage: "new",
-        done: [],
-        created_at: p.created_at || new Date().toISOString(),
-      }));
-      if (newTracking.length > 0) {
-        for (let i = 0; i < newTracking.length; i += CHUNK) {
-          await sbFetch("/tracking", { method: "POST", prefer: "return=minimal", body: JSON.stringify(newTracking.slice(i, i+CHUNK)) });
-        }
-      }
-      setProspects(prev => [...prev, ...imported]);
-      setTracking(prev => [...prev, ...newTracking]);
-      alert(`✓ ${imported.length} hotels imported with pipeline tracking.`);
+      // No tracking rows created on import — verify flow handles that.
+      setProspects(prev => [...prev, ...toSave]);
+      alert(`✓ ${toSave.length} hotels imported to Hotel list. Verify each hotel to add to Pipeline.`);
     } catch(err) {
       alert("Import failed: " + err.message);
     }
@@ -2236,6 +2278,10 @@ export default function App() {
   const filteredT = validTracking.filter(t => {
     if (filterSdr !== "all" && t.sdr !== filterSdr) return false;
     const p = prospects.find(x => x.id === t.prospect_id);
+    // Pipeline gate: only verified prospects are shown. Prospects that have been
+    // contacted (stage >= "1st") are auto-verified on load; unverified prospects
+    // with pipeline_stage="new" sit in the Hotel list only until manually verified.
+    if (!p?.verified) return false;
     if (leadStatusFilter.length > 0 && !leadStatusFilter.includes(p?.lead_status || "Active")) return false;
     if (outreachSearch) {
       const q = normalizeSearch(outreachSearch);
@@ -2254,7 +2300,7 @@ export default function App() {
     if (filterGrade.length > 0 && p && !filterGrade.includes(calcLeadScore(p).grade)) return false;
     return true;
   });
-  const contacted = tracking.filter(t => (t.done || []).length > 0).length;
+  const contacted = validTracking.filter(t => (t.done || []).length > 0).length;
   const totalHotelPages = Math.ceil(sortedP.length / HOTELS_PER_PAGE);
   const pagedP = sortedP.slice((hotelsPage-1)*HOTELS_PER_PAGE, hotelsPage*HOTELS_PER_PAGE);
   const allCountries = [...new Set(prospects.map(p=>p.country).filter(Boolean))].sort();
@@ -2387,8 +2433,8 @@ export default function App() {
             const ST_ALL = ["new","1st","2nd","3rd","4th","replied","bounced","demo","trial","won","lost"];
             ST_ALL.forEach(s => stCounts[s] = 0);
             validTracking.forEach(t => { const s = SM2(t.pipeline_stage); stCounts[s] = (stCounts[s]||0) + 1; });
-            const stColors = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
-            const stLabels = {new:"New","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
+            const stColors = {new:"#059669","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+            const stLabels = {new:"Verified","1st":"Email #1","2nd":"Follow-up #1","3rd":"Follow-up #2","4th":"Follow-up #3",replied:"Replied",bounced:"Bounced",demo:"Demo",trial:"Trial",won:"Won",lost:"Lost"};
             // Conversion metrics
             const repliedCount = stCounts["replied"] + stCounts["demo"] + stCounts["trial"] + stCounts["won"];
             const replyRate = contacted1 > 0 ? Math.round(repliedCount / contacted1 * 100) : 0;
@@ -2562,9 +2608,9 @@ export default function App() {
                   </select>
                   <button className="act-btn" style={{fontSize:11,color:"var(--green)",border:"1px solid var(--green-border)",background:"var(--green-bg)"}} onClick={async () => {
                     const ids = [...selectedIds];
-                    for (const pid of ids) { await updateProspect(pid, {verified: true}); }
+                    for (const pid of ids) { await verifyAndAddToPipeline(pid); }
                     setSelectedIds(new Set());
-                  }}>✓ Verified ({selectedIds.size})</button>
+                  }}>✓ Verify & Add to Pipeline ({selectedIds.size})</button>
                   <button className="act-btn" style={{fontSize:11,color:"var(--text3)",border:"1px solid var(--border)"}} onClick={async () => {
                     const ids = [...selectedIds];
                     for (const pid of ids) { await updateProspect(pid, {verified: false}); }
@@ -2612,7 +2658,7 @@ export default function App() {
                         e.target.checked ? next.add(p.id) : next.delete(p.id);
                         setSelectedIds(next);
                       }} /></td>
-                      <td><div className="hotel-name" style={{display:"flex",alignItems:"center"}}>{p.hotel_name}{p.verified ? <span className="verified-badge" title="Manually verified by SDR">✓</span> : <span className="verified-badge unverified" title="Not yet verified" onClick={e=>{e.stopPropagation();updateProspect(p.id,{verified:true});}}>?</span>}</div></td>
+                      <td><div className="hotel-name" style={{display:"flex",alignItems:"center"}}>{p.hotel_name}{p.verified ? <span className="verified-badge" title="Verified — appears in Pipeline">✓</span> : <span className="verified-badge unverified" title="Click to verify & add to Pipeline" onClick={e=>{e.stopPropagation();verifyAndAddToPipeline(p.id);}}>?</span>}</div></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.city||"—"}</span></td>
                       <td><span className="cell-muted" style={{fontSize:12}}>{p.country||"—"}</span></td>
                       <td><div style={{fontSize:12,color:"var(--text2)",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={normalizeGroup(p.hotel_group||p.brand)||"Independent"}>{isIndependent?"Independent":normalizeGroup(p.hotel_group||p.brand)||"—"}</div></td>
@@ -2669,7 +2715,7 @@ export default function App() {
         const SM = { active:"new", emailed:"1st", followup:"2nd", dead:"lost" };
         const ms = s => SM[s] || s || "new";
         const EM = String.fromCodePoint(0x2014);
-        const SC = {new:"#6b7280","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
+        const SC = {new:"#059669","1st":"#2563eb","2nd":"#0891b2","3rd":"#7c3aed","4th":"#6d28d9",replied:"#0d9488",bounced:"#b45309",demo:"#c026d3",trial:"#ea580c",won:"#059669",lost:"#dc2626"};
         function toInput(d) { if (!d) return ""; const dt=new Date(d),y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,"0"),dd=String(dt.getDate()).padStart(2,"0"); return y+"-"+m+"-"+dd; }
         function fmtD(d) { if (!d) return null; const dt = new Date(d); const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; return fmtDateShort(d)+" ("+days[dt.getDay()]+")"; }
 
@@ -3314,7 +3360,7 @@ export default function App() {
               const trk = tracking.find(x => x.prospect_id === sel.id);
               if (!trk) return null;
               const DS = [
-                {key:"new",label:"New",color:"#6b7280"},{key:"1st",label:"Email #1",color:"#2563eb"},
+                {key:"new",label:"Verified",color:"#059669"},{key:"1st",label:"Email #1",color:"#2563eb"},
                 {key:"2nd",label:"Follow-up #1",color:"#0891b2"},{key:"3rd",label:"Follow-up #2",color:"#7c3aed"},
                 {key:"4th",label:"Follow-up #3",color:"#6d28d9"},{key:"replied",label:"Replied",color:"#0d9488"},
                 {key:"bounced",label:"Bounced",color:"#b45309"},{key:"demo",label:"Demo",color:"#c026d3"},
