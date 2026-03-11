@@ -2796,7 +2796,12 @@ export default function App() {
           else { setCtSortCol(col); setCtSortDir("asc"); }
         }
 
-        const rows = validTracking.filter(t => t.d1 || (t.done && t.done.length > 0)).map(t => {
+        const OUTREACH_STAGES = new Set(["1st","2nd","3rd","4th","replied","bounced","emailed","followup"]);
+        const rows = validTracking.filter(t => {
+          // Show if: has any actual contact date, OR has done entries, OR is in an outreach stage
+          // (catches hotels moved to Email#1+ from Pipeline/drawer without manually setting d1)
+          return t.d1 || (t.done && t.done.length > 0) || OUTREACH_STAGES.has(ms(t.pipeline_stage));
+        }).map(t => {
           const p = prospects.find(x => x.id === t.prospect_id);
           const sched = computeSchedule(t);
           const stage = ms(t.pipeline_stage);
@@ -3381,9 +3386,22 @@ export default function App() {
                         onChange={async e => {
                           const newStage = e.target.value;
                           if (newStage === "lost") { openRejectModal(trk.id, "lost"); return; }
+                          const now = new Date().toISOString();
+                          const stageToTouch = { "1st": 1, "2nd": 2, "3rd": 3, "4th": 4 };
+                          const touchN = stageToTouch[newStage];
                           const updates = { pipeline_stage: newStage };
                           if (newStage !== "lost" && trk.rejection_reason) updates.rejection_reason = null;
                           if (newStage === "new") { updates.d1=null; updates.d2=null; updates.d3=null; updates.d4=null; updates.done=[]; }
+                          // Auto-set missing dN dates so Contact Tracker picks this up immediately
+                          if (touchN) {
+                            const done = [...(trk.done || [])];
+                            for (let i = 1; i <= touchN; i++) {
+                              if (!trk["d" + i]) updates["d" + i] = now;
+                              if (!done.includes(i)) done.push(i);
+                            }
+                            done.sort((a,b) => a - b);
+                            updates.done = done;
+                          }
                           await updatePipeline(trk.id, updates);
                         }}
                         style={{fontSize:13,fontWeight:700,color:so.color,background:"transparent",border:"1px solid var(--border2)",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}
@@ -3411,10 +3429,10 @@ export default function App() {
             })()}
             <div className="d-sec">
               <div className="d-sec-title">Hotel Profile</div>
-              <div className="d-row"><span className="d-key">Verified</span><span className="d-val">
+              <div className="d-row"><span className="d-key">SDR Verified</span><span className="d-val">
                 <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12}}>
                   <input type="checkbox" checked={!!sel.verified} onChange={e=>updateProspect(sel.id,{verified:e.target.checked})} style={{accentColor:"var(--green)",width:14,height:14}} />
-                  <span style={{color:sel.verified?"var(--green)":"var(--text3)",fontWeight:sel.verified?600:400}}>{sel.verified ? "Manually verified" : "Not verified"}</span>
+                  <span style={{color:sel.verified?"var(--green)":"var(--text3)",fontWeight:sel.verified?600:400}}>{sel.verified ? "✓ Verified by SDR — active in Pipeline" : "Not yet verified (won't appear in Pipeline)"}</span>
                 </label>
               </span></div>
               <div className="d-row"><span className="d-key">Lead Status</span><span className="d-val"><select style={{fontSize:12,border:"1px solid var(--border2)",borderRadius:4,padding:"2px 4px"}} value={sel.lead_status||"Active"} onChange={e=>updateProspect(sel.id,{lead_status:e.target.value})}><option value="Active">Active</option><option value="Dormant">Dormant</option><option value="Closed">Closed</option></select></span></div>
