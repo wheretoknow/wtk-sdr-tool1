@@ -618,6 +618,7 @@ const css = `
   .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .spinner { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeInUp { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
   .progress-wrap { margin-top: 12px; }
   .progress-bar { height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; }
   .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s; }
@@ -1514,7 +1515,7 @@ export default function App() {
   // Multi-contact state: { [prospect_id]: [{id, name, title, email, linkedin, phone, is_primary}] }
   const [contacts, setContacts] = useState({});
   const [addContactForm, setAddContactForm] = useState(null); // prospect_id or null
-
+  const [toast, setToast] = useState(null);
   function toggleSort(col) {
     if (sortCol === col) { setSortDir(d => d === "asc" ? "desc" : "asc"); }
     else { setSortCol(col); setSortDir("desc"); }
@@ -2016,7 +2017,22 @@ export default function App() {
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ intention: newVal }) }); } catch (e) { console.error(e); }
   }
 
+function showToast(msg, type = "success") {
+  setToast({ msg, type });
+  setTimeout(() => setToast(null), 3000);
+}
 
+function addHotelFormHasData() {
+  return Object.values(addHotelForm).some(v => v !== null && v !== undefined && String(v).trim() !== "");
+}
+
+function closeAddHotelModal() {
+  if (addHotelFormHasData()) {
+    if (!window.confirm("您输入的信息尚未保存，确定关闭？")) return;
+  }
+  setAddHotelModal(false);
+  setAddHotelForm({});
+}
   function copy(text, key) { navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 1500); }); }
 
   async function saveManualHotel() {
@@ -2057,7 +2073,9 @@ export default function App() {
         });
         if (tRes.ok) { const tData = await tRes.json(); if (tData?.length > 0) setTracking(prev => [...prev, tData[0]]); }
       }
-      setAddHotelModal(false); setAddHotelForm({});
+      setAddHotelModal(false);
+      setAddHotelForm({});
+      showToast(`✓ "${record.hotel_name}" 已成功添加到酒店列表`);
     } catch (err) { console.error("Save hotel error:", err); alert("Error: " + err.message); }
   }
 
@@ -3182,7 +3200,7 @@ export default function App() {
       )}
       {/* Add Hotel Modal */}
       {addHotelModal && (
-        <div className="modal-overlay" onClick={()=>setAddHotelModal(false)}>
+        <div className="modal-overlay" onClick={closeAddHotelModal}>
           <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
             <div className="modal-title">Add Hotel</div>
             <div className="add-hotel-grid">
@@ -3221,7 +3239,7 @@ export default function App() {
               <label className="full-width">Notes<input value={addHotelForm.notes||""} onChange={e=>setAddHotelForm(p=>({...p,notes:e.target.value}))} placeholder="Any context..."/></label>
             </div>
             <div className="modal-footer">
-              <button className="modal-cancel" onClick={()=>setAddHotelModal(false)}>Cancel</button>
+              <button className="modal-cancel" onClick={closeAddHotelModal}>Cancel</button>
               <button className="modal-confirm" disabled={!(addHotelForm.hotel_name && addHotelForm.hotel_name.trim())} style={{opacity:(addHotelForm.hotel_name && addHotelForm.hotel_name.trim())?1:0.5}} onClick={saveManualHotel}>Save Hotel</button>
             </div>
           </div>
@@ -3499,6 +3517,18 @@ export default function App() {
           </div>
         </>
       )}
+      {toast && (
+  <div style={{
+    position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)",
+    background: toast.type === "error" ? "#dc2626" : "#059669",
+    color:"white", padding:"10px 24px", borderRadius:8,
+    fontSize:13, fontWeight:600, boxShadow:"0 4px 20px rgba(0,0,0,0.2)",
+    zIndex:9999, animation:"fadeInUp 0.2s ease",
+    whiteSpace:"nowrap", pointerEvents:"none"
+  }}>
+    {toast.msg}
+  </div>
+)}
     </>
   );
 
