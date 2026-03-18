@@ -1622,6 +1622,16 @@ export default function App() {
     const n = localStorage.getItem("wtk_sdr_name"); if (n) setSdrName(n);
     loadData();
   }, []);
+  useEffect(() => {
+  function handleKeyDown(e) {
+    if (e.key !== "Escape") return;
+    if (addHotelModal) { closeAddHotelModal(); return; }
+    if (selected && !rejectModal) { setSelected(null); return; }
+    if (dupGroups !== null) { setDupGroups(null); return; }
+  }
+  document.addEventListener("keydown", handleKeyDown);
+  return () => document.removeEventListener("keydown", handleKeyDown);
+}, [addHotelModal, selected, rejectModal, dupGroups, addHotelForm]);
 
   async function loadData() {
     setLoading(true);
@@ -2028,7 +2038,7 @@ function addHotelFormHasData() {
 
 function closeAddHotelModal() {
   if (addHotelFormHasData()) {
-    if (!window.confirm("您输入的信息尚未保存，确定关闭？")) return;
+    if (!window.confirm("You have unsaved changes. Close anyway?")) return;
   }
   setAddHotelModal(false);
   setAddHotelForm({});
@@ -2075,7 +2085,7 @@ function closeAddHotelModal() {
       }
       setAddHotelModal(false);
       setAddHotelForm({});
-      showToast(`✓ "${record.hotel_name}" 已成功添加到酒店列表`);
+      showToast(`✓ "${record.hotel_name}" added to hotel list`);
     } catch (err) { console.error("Save hotel error:", err); alert("Error: " + err.message); }
   }
 
@@ -2343,9 +2353,9 @@ function closeAddHotelModal() {
             <span className="nav-page">SDR Intelligence</span>
           </div>
           <div className="nav-stats">
-            <div className="nav-stat"><span className="nav-stat-n">{prospects.length}</span><span className="nav-stat-l">Prospects</span></div>
-            <div className="nav-stat"><span className="nav-stat-n">{prospects.filter(p=>p.email).length}</span><span className="nav-stat-l">Emails</span></div>
-            <div className="nav-stat"><span className="nav-stat-n">{contacted}</span><span className="nav-stat-l">Contacted</span></div>
+            <div className="nav-stat"><span className="nav-stat-n">{filteredP.length}</span><span className="nav-stat-l">{filterSdr !== "all" ? filterSdr : "Prospects"}</span></div>
+            <div className="nav-stat"><span className="nav-stat-n">{filteredP.filter(p=>p.email).length}</span><span className="nav-stat-l">Emails</span></div>
+            <div className="nav-stat"><span className="nav-stat-n">{validTracking.filter(t=>(t.done||[]).length>0 && (filterSdr==="all"||t.sdr===filterSdr)).length}</span><span className="nav-stat-l">Contacted</span></div>
           </div>
         </nav>
 
@@ -2651,11 +2661,11 @@ function closeAddHotelModal() {
                     else pagedP.forEach(p => next.delete(p.id));
                     setSelectedIds(next);
                   }} /></th>
-                  <th style={{width:"17%"}}>Hotel</th>
+                  <th style={{width:"22%"}}>Hotel</th>
                   <th style={{width:"6%"}}>City</th>
                   <th style={{width:"6%"}}>Country</th>
-                  <th style={{width:"7%"}}>Group</th>
-                  <th style={{width:"7%"}}>Brand</th>
+                  <th style={{width:"5%"}}>Group</th>
+                  <th style={{width:"4%"}}>Brand</th>
                   <th style={{width:"13%"}}>Contact</th>
                   <th style={{width:"12%"}}>Email</th>
                   <th className="sortable" style={{width:"5%"}} onClick={()=>toggleSort("rooms")}>Rooms <span className={`sort-arrow ${sortCol==="rooms"?"active":""}`}>{sortCol==="rooms"?(sortDir==="asc"?"▲":"▼"):"⇅"}</span></th>
@@ -2670,7 +2680,7 @@ function closeAddHotelModal() {
                     const isIndependent = !p.hotel_group && !p.brand;
                     const isChecked = selectedIds.has(p.id);
                     return (
-                    <tr key={p.id} onClick={()=>setSelected(p.id)} style={{background: isChecked ? "var(--accent-light)" : undefined}}>
+                    <tr key={p.id} onClick={()=>setSelected(p.id)} style={{background: isChecked ? "var(--accent-light)" : selected === p.id ? "#f0f7ff" : undefined, outline: selected === p.id ? "2px solid #bfdbfe" : "none", outlineOffset: "-2px"}}>
                       <td className="cb-cell" onClick={e=>e.stopPropagation()}><input type="checkbox" checked={isChecked} onChange={e => {
                         const next = new Set(selectedIds);
                         e.target.checked ? next.add(p.id) : next.delete(p.id);
@@ -2883,11 +2893,11 @@ function closeAddHotelModal() {
           <div style={{display:"flex",gap:8,alignItems:"center",padding:"12px 0 8px",flexWrap:"wrap"}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Today: {fmtDateShort(new Date())}</div>
             <span style={{fontSize:12,color:"var(--text3)",padding:"4px 10px",background:"var(--bg)",borderRadius:5,border:"1px solid var(--border)"}}>{rows.length} tracked</span>
-            {overdueN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fef2f2",color:"#dc2626",borderRadius:5,border:"1px solid #fecaca"}}>{overdueN} Overdue</span>}
-            {dueTodayN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fff7ed",color:"#ea580c",borderRadius:5,border:"1px solid #fed7aa"}}>{dueTodayN} Due today</span>}
-            {dueSoonN > 0 && <span style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:"#fffbeb",color:"#d97706",borderRadius:5,border:"1px solid #fde68a"}}>{dueSoonN} Due soon</span>}
-            {upcomingN > 0 && <span style={{fontSize:12,padding:"4px 10px",background:"#f0fdf4",color:"#059669",borderRadius:5,border:"1px solid #bbf7d0"}}>{upcomingN} Upcoming</span>}
-            {doneN > 0 && <span style={{fontSize:12,padding:"4px 10px",background:"#f9fafb",color:"var(--text3)",borderRadius:5,border:"1px solid var(--border)"}}>{doneN} Completed</span>}
+            {overdueN > 0 && <button onClick={()=>setCtDueFilter(f=>f==="overdue"?"":"overdue")} style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:ctDueFilter==="overdue"?"#dc2626":"#fef2f2",color:ctDueFilter==="overdue"?"white":"#dc2626",borderRadius:5,border:"1px solid #fecaca",cursor:"pointer",fontFamily:"inherit"}}>{overdueN} Overdue</button>}
+            {dueTodayN > 0 && <button onClick={()=>setCtDueFilter(f=>f==="today"?"":"today")} style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:ctDueFilter==="today"?"#ea580c":"#fff7ed",color:ctDueFilter==="today"?"white":"#ea580c",borderRadius:5,border:"1px solid #fed7aa",cursor:"pointer",fontFamily:"inherit"}}>{dueTodayN} Due today</button>}
+            {dueSoonN > 0 && <button onClick={()=>setCtDueFilter(f=>f==="3days"?"":"3days")} style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:ctDueFilter==="3days"?"#d97706":"#fffbeb",color:ctDueFilter==="3days"?"white":"#d97706",borderRadius:5,border:"1px solid #fde68a",cursor:"pointer",fontFamily:"inherit"}}>{dueSoonN} Due soon</button>}
+            {upcomingN > 0 && <button onClick={()=>setCtDueFilter(f=>f==="7days"?"":"7days")} style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:ctDueFilter==="7days"?"#059669":"#f0fdf4",color:ctDueFilter==="7days"?"white":"#059669",borderRadius:5,border:"1px solid #bbf7d0",cursor:"pointer",fontFamily:"inherit"}}>{upcomingN} Upcoming</button>}
+            {doneN > 0 && <button onClick={()=>setCtDueFilter(f=>f==="none"?"":"none")} style={{fontSize:12,fontWeight:600,padding:"4px 10px",background:ctDueFilter==="none"?"#6b7280":"#f9fafb",color:ctDueFilter==="none"?"white":"var(--text3)",borderRadius:5,border:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}>{doneN} Completed</button>}
             <div style={{marginLeft:"auto",display:"flex",gap:4,background:"var(--bg)",borderRadius:6,border:"1px solid var(--border)",padding:2}}>
               <button style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,border:"none",cursor:"pointer",background:ctFocusMode?"var(--accent)":"transparent",color:ctFocusMode?"white":"var(--text3)"}} onClick={()=>{setCtFocusMode(true);setFocusDoneIds(new Set());}}>Focus</button>
               <button style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,border:"none",cursor:"pointer",background:!ctFocusMode?"var(--accent)":"transparent",color:!ctFocusMode?"white":"var(--text3)"}} onClick={()=>setCtFocusMode(false)}>Full List</button>
@@ -2949,7 +2959,7 @@ function closeAddHotelModal() {
             <select className="cmd-input" style={{minWidth:90,flexShrink:0}} value={ctOwnerFilter} onChange={e=>{setCtOwnerFilter(e.target.value);setCtPage(1);}}>
               <option value="">All Owners</option>{ctSdrs.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="cmd-input" style={{minWidth:100,flexShrink:0}} value={ctDueFilter} onChange={e=>{setCtDueFilter(e.target.value);setCtPage(1);}}>
+            <select className="cmd-input" style={{minWidth:100,flexShrink:0,fontWeight:ctDueFilter?"600":"400",borderColor:ctDueFilter?"var(--accent)":"var(--border2)",color:ctDueFilter?"var(--accent)":"var(--text)",background:ctDueFilter?"var(--accent-light)":"var(--bg)"}} value={ctDueFilter} onChange={e=>{setCtDueFilter(e.target.value);setCtPage(1);}}>
               <option value="">All Due Dates</option>
               <option value="overdue">Overdue</option>
               <option value="today">Due today</option>
@@ -3071,8 +3081,10 @@ function closeAddHotelModal() {
       {deleteConfirm && (
         <div className="confirm-overlay" onClick={()=>setDeleteConfirm(null)}>
           <div className="confirm-box" onClick={e=>e.stopPropagation()}>
-            <div className="confirm-title">Delete this prospect?</div>
-            <div className="confirm-sub">This will permanently remove the hotel and all outreach history from the shared database. This action cannot be undone.</div>
+           <div className="confirm-title">Delete this hotel?</div>
+            <div className="confirm-sub">
+            {(() => { const p = prospects.find(x => x.id === deleteConfirm); return p ? <><strong>"{p.hotel_name}"</strong> and all its outreach history will be permanently deleted from the shared database. This cannot be undone.</> : "This hotel and all outreach history will be permanently deleted. This cannot be undone."; })()}
+</div>
             <div className="confirm-btns">
               <button className="confirm-cancel" onClick={()=>setDeleteConfirm(null)}>Cancel</button>
               <button className="confirm-del" onClick={()=>deleteProspect(deleteConfirm)}>Delete permanently</button>
@@ -3508,12 +3520,21 @@ function closeAddHotelModal() {
                 <button className={`copy-btn ${copied==="dm"?"copied":""}`} onClick={()=>copy(sel.linkedin_dm,"dm")}>{copied==="dm"?"✓ Copied":"Copy DM"}</button>
               </div>
             )}
-            {sel.research_notes && (
-              <div className="d-sec">
-                <div className="d-sec-title">Research Notes</div>
-                <ResearchNotes text={sel.research_notes} />
-              </div>
-            )}
+            <div className="d-sec">
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+    <span className="d-sec-title" style={{margin:0}}>Research Notes</span>
+  </div>
+  <textarea
+    style={{width:"100%",minHeight:80,fontSize:12,lineHeight:1.7,padding:8,border:"1px solid var(--border2)",borderRadius:5,fontFamily:"'Inter',sans-serif",resize:"vertical",color:"var(--text2)",background:"#f9fafb"}}
+    value={(sel.research_notes||"").replace(/<!--contacts:.*?-->\n?/s,"")}
+    onChange={e => {
+      const match = (sel.research_notes||"").match(/<!--contacts:.*?-->/s);
+      const contactsBlock = match ? match[0] + "\n" : "";
+      updateProspectField(sel.id, 'research_notes', contactsBlock + e.target.value);
+    }}
+    placeholder="Add research notes..."
+  />
+</div>
           </div>
         </>
       )}
