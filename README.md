@@ -8,10 +8,46 @@ WTK SDR Intelligence Tool 是一个基于 React + Supabase 构建的单页应用
 
 ## 技术栈
 
-- **前端框架**：React（JSX，单文件架构）
+- **前端框架**：React（JSX）+ Vite + React Router
 - **后端 / 数据库**：Supabase（PostgreSQL + REST API）
-- **AI 研究引擎**：Claude API（Anthropic）
-- **部署方式**：Claude Artifact 或独立托管
+- **AI 研究引擎**：Claude API（Anthropic），经 Vercel Serverless `api/research.js` 代理
+- **部署方式**：Vercel（见 `wtk-sdr-tool/vercel.json`）或独立静态托管（需自行提供 `/api/research` 等价接口）
+
+## 项目目录结构（`wtk-sdr-tool/`）
+
+应用代码集中在子目录 **`wtk-sdr-tool`**，大致如下：
+
+```
+wtk-sdr-tool/
+├── api/
+│   └── research.js          # Vercel Serverless：处理 POST /api/research（AI List/Verify 等）
+├── router/
+│   └── routes.jsx           # 客户端路由（createBrowserRouter），如 /、/login
+├── src/
+│   ├── main.jsx             # 入口：挂载 RouterProvider
+│   ├── assets/
+│   │   └── styles/
+│   │       └── app.css      # 全局样式（CSS 变量与布局）
+│   ├── api/
+│   │   ├── researchApi.js   # 前端封装 → fetch("/api/research")
+│   │   └── supabase.js      # Supabase REST 封装
+│   ├── components/          # 跨页面复用组件（如 OutreachTab、ErrorBoundary、EditableField）
+│   ├── data/                # 静态配置（geo、pipeline 常量、酒店映射等）
+│   ├── utils/               # 工具函数（日期、去重、评分、邮件模板等）
+│   └── pages/
+│       ├── home/
+│       │   ├── HomePage.jsx # 主工作台（原 App 主体）
+│       │   └── components/  # 仅首页使用的 Tab、弹窗、抽屉等
+│       └── login/
+│           └── LoginPage.jsx # 登录占位页（路由 /login）
+├── scripts/                 # 可选本地维护脚本（拆分/组装等）
+├── index.html
+├── package.json
+├── vite.config.js
+└── vercel.json              # 构建输出与 api/research 函数超时等
+```
+
+说明：**不要删除 `api/research.js`**。前端通过 `researchApi.js` 与 `HomePage` 内请求访问 **`/api/research`**；在 Vercel 上由该文件实现；删除后 AI 研究相关请求将失败。
 
 ## 核心功能
 
@@ -123,7 +159,7 @@ Pipeline 采用看板（Kanban）视图，支持拖拽操作：
 
 ## 已知限制与后续方向
 
-- **单文件架构**：当前 3300+ 行单文件 JSX，建议后续拆分为模块化组件
+- **模块化**：主界面已拆为 `pages/home` 与 `components`，仍可继续下沉状态与副作用逻辑
 - **Supabase Key**：anon key 硬编码在前端，建议迁移至环境变量
 - **TypeScript**：当前无类型定义，随着团队扩大建议引入
 - **localStorage**：部分场景使用 localStorage（如 SDR 姓名记忆），在 Claude Artifact 环境中会静默失败
