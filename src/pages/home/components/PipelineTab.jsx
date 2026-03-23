@@ -1,5 +1,5 @@
-import { ErrorBoundary } from "../../../components/ErrorBoundary.jsx";
-import { OutreachTab } from "../../../components/OutreachTab.jsx";
+import { ErrorBoundary } from "./ErrorBoundary.jsx";
+import { OutreachTab } from "./OutreachTab.jsx";
 
 /** Pipeline（外联看板）：ErrorBoundary + OutreachTab */
 export function PipelineTab(props) {

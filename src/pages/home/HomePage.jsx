@@ -1,20 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "../../assets/styles/app.css";
-import { GEO } from "../../data/geo.js";
-import { CHAIN_BRANDS } from "../../data/hotelMaps.js";
 import { sbFetch } from "../../api/supabase.js";
-import { postResearch } from "../../api/researchApi.js";
 import { uid } from "../../utils/uid.js";
 import { normalizeSearch } from "../../utils/strings.js";
-import { parseJSON } from "../../utils/jsonUtils.js";
-import { fmtDateShort } from "../../utils/dateUtils.js";
-import {
-  getProvider,
-  normalizeGroup,
-  normalizeBrand,
-  inferBrandFromName,
-  inferProvider,
-} from "../../utils/hotelNormalize.js";
+import { getProvider, normalizeGroup, normalizeBrand } from "../../utils/hotelNormalize.js";
 import { findDuplicates, groupIsDismissed, groupToPairs } from "../../utils/duplicateFinder.js";
 import { parseDone } from "../../utils/pipelineTouch.js";
 import { calcLeadScore } from "../../utils/leadScore.js";
@@ -24,40 +13,25 @@ import { PipelineTab } from "./components/PipelineTab.jsx";
 import { ContactTrackerTab } from "./components/ContactTrackerTab.jsx";
 import { DeleteHotelConfirm } from "./components/DeleteHotelConfirm.jsx";
 import { DuplicateFinderModal } from "./components/DuplicateFinderModal.jsx";
-import { AddHotelModal } from "./components/AddHotelModal.jsx";
 import { RejectLostModal } from "./components/RejectLostModal.jsx";
 import { HotelDetailDrawer } from "./components/HotelDetailDrawer.jsx";
 import { Toast } from "./components/Toast.jsx";
+import { ResearchCommandPanel } from "./components/ResearchCommandPanel.jsx";
+import { AddHotelToolbarControl } from "./components/AddHotelToolbarControl.jsx";
+import { exportProspectsCsv, importProspectsFromFile } from "./utils/prospectCsv.js";
+import { useRejectLost } from "./hooks/useRejectLost.js";
 
 export default function HomePage() {
   const [tab, setTab] = useState("dashboard");
-  const [addHotelModal, setAddHotelModal] = useState(false);
-  const [addHotelForm, setAddHotelForm] = useState({});
+  const [addHotelModalOpen, setAddHotelModalOpen] = useState(false);
+  const addHotelRef = useRef(null);
   const [ctExpanded, setCtExpanded] = useState(null);
   const [ctStageFilter, setCtStageFilter] = useState("");
   const [ctPriorityFilter, setCtPriorityFilter] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState(["Active"]);
   const [filterGrade, setFilterGrade] = useState([]);
-  // Geo state
-  const [region, setRegion] = useState("Europe");
-  const [country, setCountry] = useState("Austria");
-  const [cityInput, setCityInput] = useState("Vienna");
-  const [customMarket, setCustomMarket] = useState("");
-  const [multiMode, setMultiMode] = useState(false);
-  // Other filters
-  const [scope, setScope] = useState("chain");
-  const [group, setGroup] = useState("");
-  const [brand, setBrand] = useState("");
-  const [minAdr, setMinAdr] = useState("100");
-  const [count, setCount] = useState("5");
-  const [minRooms, setMinRooms] = useState("40");
   const [sdrName, setSdrName] = useState("");
-  // State
-  const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState(0);
-  const [log, setLog] = useState("");
-  const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [copied, setCopied] = useState(null);
   const [filterSdr, setFilterSdr] = useState("all");
@@ -71,9 +45,6 @@ export default function HomePage() {
   const HOTELS_PER_PAGE = 20;
   const [prospects, setProspects] = useState([]);
   const [tracking, setTracking] = useState([]);
-  const [rejectModal, setRejectModal] = useState(null); // { tid, stage: 'dead'|'reopen' }
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejectOtherText, setRejectOtherText] = useState("");
   const [outreachView, setOutreachView] = useState("card");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [dupGroups, setDupGroups] = useState(null);
@@ -86,9 +57,6 @@ export default function HomePage() {
       return new Set();
     }
   });
-  const [cooldown, setCooldown] = useState(0); // seconds until next search allowed
-  const lastBatchTime = useRef(0); // timestamp of last API batch completion
-  const cooldownTimer = useRef(null);
   const [editingNote, setEditingNote] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [filterProvider, setFilterProvider] = useState("");
@@ -121,6 +89,28 @@ export default function HomePage() {
   const [contacts, setContacts] = useState({});
   const [addContactForm, setAddContactForm] = useState(null); // prospect_id or null
   const [toast, setToast] = useState(null);
+
+  const updatePipeline = useCallback(async (tid, updates, e) => {
+    if (e) e.stopPropagation();
+    setTracking((prev) => prev.map((x) => (x.id === tid ? { ...x, ...updates } : x)));
+    try {
+      await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(updates) });
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const {
+    rejectModal,
+    rejectReason,
+    setRejectReason,
+    rejectOtherText,
+    setRejectOtherText,
+    openRejectModal,
+    confirmReject,
+    closeRejectModal,
+  } = useRejectLost(updatePipeline);
+
   function toggleSort(col) {
     if (sortCol === col) { setSortDir(d => d === "asc" ? "desc" : "asc"); }
     else { setSortCol(col); setSortDir("desc"); }
@@ -228,15 +218,24 @@ export default function HomePage() {
     loadData();
   }, []);
   useEffect(() => {
-  function handleKeyDown(e) {
-    if (e.key !== "Escape") return;
-    if (addHotelModal) { closeAddHotelModal(); return; }
-    if (selected && !rejectModal) { setSelected(null); return; }
-    if (dupGroups !== null) { setDupGroups(null); return; }
-  }
-  document.addEventListener("keydown", handleKeyDown);
-  return () => document.removeEventListener("keydown", handleKeyDown);
-}, [addHotelModal, selected, rejectModal, dupGroups, addHotelForm]);
+    function handleKeyDown(e) {
+      if (e.key !== "Escape") return;
+      if (addHotelModalOpen) {
+        addHotelRef.current?.requestClose();
+        return;
+      }
+      if (selected && !rejectModal) {
+        setSelected(null);
+        return;
+      }
+      if (dupGroups !== null) {
+        setDupGroups(null);
+        return;
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [addHotelModalOpen, selected, rejectModal, dupGroups]);
 
   async function loadData() {
     setLoading(true);
@@ -289,249 +288,9 @@ export default function HomePage() {
     setLoading(false);
   }
 
-  function saveSdrName(v) { setSdrName(v); localStorage.setItem("wtk_sdr_name", v); }
-
-  // Compute market string from geo selections
-  function getMarket() {
-    if (multiMode && customMarket.trim()) return customMarket.trim();
-    if (cityInput.trim()) return `${cityInput.trim()}${country ? ", " + country : ""}${region ? ", " + region : ""}`;
-    if (country) return `${country}${region ? ", " + region : ""}`;
-    if (region) return region;
-    return "Global";
-  }
-
-  // ── Cooldown timer: 15s between verify batches (Claude Haiku rate limit) ────
-  const COOLDOWN_SEC = 15;
-
-  function startCooldown() {
-    lastBatchTime.current = Date.now();
-    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
-    setCooldown(COOLDOWN_SEC);
-    cooldownTimer.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - lastBatchTime.current) / 1000);
-      const remaining = Math.max(0, COOLDOWN_SEC - elapsed);
-      setCooldown(remaining);
-      if (remaining <= 0) { clearInterval(cooldownTimer.current); cooldownTimer.current = null; }
-    }, 1000);
-  }
-
-  async function run() {
-    // Auto-wait if cooldown from previous search is still active
-    const elapsed = Math.floor((Date.now() - lastBatchTime.current) / 1000);
-    const remaining = Math.max(0, COOLDOWN_SEC - elapsed);
-    if (remaining > 0 && lastBatchTime.current > 0) {
-      setRunning(true); setError(null);
-      for (let s = remaining; s > 0; s--) {
-        setLog(`Cooling down — ${s}s remaining...`);
-        setCooldown(s);
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      setCooldown(0);
-    }
-
-    setRunning(true); setError(null); setProgress(5);
-    const market = getMarket();
-    const n = Math.min(Math.max(parseInt(count) || 5, 1), 5);
-
-    const normKey = (name, city) => `${(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}::${(city||"").toLowerCase().replace(/[^a-z0-9]/g,"")}`;
-    const existingKeys = new Set(prospects.map(p => normKey(p.hotel_name, p.city)));
-
-    const PROSPECT_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at","verified"];
-    const sdr = sdrName || "Unknown";
-    const batchLabel = `${market} · ${fmtDateShort(new Date())}`;
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-    async function rateLimitWait(seconds) {
-      for (let s = seconds; s > 0; s--) {
-        setLog(`Cooling down — ${s}s before next batch...`);
-        setCooldown(s);
-        await sleep(1000);
-      }
-      setCooldown(0);
-    }
-
-    async function apiFetch(body, attempt = 0) {
-      const r = await fetch("/api/research", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const data = await r.json();
-      // Backend now returns rateLimited/overloaded as explicit flags
-      const isRateLimit = data?.rateLimited || (data?.error && data.error.toLowerCase().includes("rate limit"));
-      const isOverloaded = data?.overloaded || (data?.error && data.error.toLowerCase().includes("overloaded"));
-      if (isRateLimit) {
-        if (attempt >= 1) return { ...data, rateLimited: true };
-        startCooldown();
-        await rateLimitWait(62);
-        return apiFetch(body, attempt + 1);
-      }
-      if (isOverloaded) {
-        if (attempt >= 1) return { ...data, overloaded: true, error: data.error || "API overloaded" };
-        setLog("API overloaded — waiting 30s before retry...");
-        await rateLimitWait(30);
-        return apiFetch(body, attempt + 1);
-      }
-      return data;
-    }
-
-    try {
-      // ═══════════════════════════════════════════════════════════════════
-      // STEP 1: LIST — get hotel names (no web search, instant, ~$0.001)
-      // ═══════════════════════════════════════════════════════════════════
-      setProgress(10);
-      setLog("Step 1: Building hotel list from knowledge base...");
-
-      const listData = await apiFetch({
-        mode: "list", city: market, brand, group, scope, minAdr, minRooms,
-        region: region || "", country: country || ""
-      });
-
-      if (listData?.error) {
-        if (listData.rateLimited) { setError("Rate limit hit — wait and try again."); return; }
-        if (listData.overloaded) { setError("API overloaded — wait 30s and try again."); return; }
-        setError("List step failed: " + listData.error);
-        return;
-      }
-      if (listData?.debug) setLog(`Backend: ${listData.debug}`);
-
-      const allKnown = parseJSON(listData.result).filter(h => h.hotel_name && h.hotel_name.trim());
-
-      // ── Geographic safety filter: remove results outside selected region/country ──
-      const regionCountries = region ? new Set(Object.keys(GEO[region] || {}).map(c => c.toLowerCase())) : null;
-      const selectedCountryLower = country ? country.toLowerCase() : null;
-      const geoFiltered = allKnown.filter(h => {
-        if (!h.country) return false; // no country = discard (backend v9.1 already strips these, this is safety net)
-        const hCountry = (h.country || "").toLowerCase();
-        // If a specific country was selected, enforce it
-        if (selectedCountryLower && hCountry !== selectedCountryLower) return false;
-        // If only region selected, enforce region membership
-        if (!selectedCountryLower && regionCountries && !regionCountries.has(hCountry)) return false;
-        return true;
-      });
-      const geoDropped = allKnown.length - geoFiltered.length;
-      if (geoDropped > 0) setLog(`Filtered out ${geoDropped} hotels outside ${country || region || "target region"}`);
-
-      if (!geoFiltered.length) {
-        setError("No hotels found in knowledge base. Try a different brand or market.");
-        setProgress(100);
-        return;
-      }
-
-      // Filter out hotels already in DB
-      const newHotels = geoFiltered.filter(h => !existingKeys.has(normKey(h.hotel_name, h.city)));
-      const dupeCount = allKnown.length - newHotels.length;
-
-      // Take only up to requested count
-      const toVerify = newHotels.slice(0, n);
-
-      setLog(`Found ${geoFiltered.length} hotels in ${country || region || "target"} · ${dupeCount} already in DB · ${toVerify.length} to verify${geoDropped > 0 ? ` · ${geoDropped} outside region removed` : ""}`);
-      setProgress(20);
-
-      if (toVerify.length === 0) {
-        setLog(`All ${geoFiltered.length} known hotels already in database. ${geoFiltered.length < 50 ? "This may not be the complete list — the model only knows hotels from its training data." : ""}`);
-        setProgress(100);
-        setTab("hotels");
-        return;
-      }
-
-      // ═══════════════════════════════════════════════════════════════════
-      // STEP 2: VERIFY — web search for rooms + GM (batches of 10)
-      // ═══════════════════════════════════════════════════════════════════
-      const BATCH_SIZE = 5; // 5×2=10 searches, leaves margin in 20 budget for retries
-      const batches = [];
-      for (let i = 0; i < toVerify.length; i += BATCH_SIZE) {
-        batches.push(toVerify.slice(i, i + BATCH_SIZE));
-      }
-
-      let allFresh = [];
-      let totalErrors = 0;
-      let rateLimitHit = false;
-
-      for (let i = 0; i < batches.length; i++) {
-        const batchHotels = batches[i];
-        const pct = Math.round(20 + (i / batches.length) * 70);
-        setProgress(pct);
-        setLog(`Step 2: Verifying batch ${i + 1}/${batches.length} (${batchHotels.length} hotels)${allFresh.length ? ` · ${allFresh.length} saved so far` : ""}...`);
-
-        // Inter-batch cooldown — 15s between verify calls
-        if (i > 0) {
-          await rateLimitWait(15);
-        }
-
-        const data = await apiFetch({ mode: "verify", hotels: batchHotels, brand, group });
-
-        if (data?.rateLimited || data?.overloaded) {
-          rateLimitHit = true;
-          startCooldown();
-          setError(`${data.rateLimited ? "Rate limit" : "API overloaded"} after batch ${i + 1}. ${allFresh.length} hotels saved. Wait and run again.`);
-          break;
-        }
-
-        if (data?.error) {
-          totalErrors++;
-          setError("Verify error: " + data.error);
-          if (allFresh.length === 0 && i === 0) break;
-          continue;
-        }
-
-        const raw = parseJSON(data.result);
-        
-        // If verify returned no usable data, skip this batch entirely — don't save garbage
-        if (!raw.length) {
-          const debugInfo = data.debug || (data.result || "").slice(0, 300);
-          setLog(`⚠ Verify failed for batch ${i + 1} — skipping (won't save unverified data). ${debugInfo ? "Debug: " + debugInfo.slice(0,100) : ""}`);
-          totalErrors++;
-          continue;
-        }
-
-        const hotelsToSave = raw;
-
-        // Save this batch immediately — skip entries without hotel_name
-        const batchFresh = [];
-        for (const p of hotelsToSave) {
-          if (!p.hotel_name || !p.hotel_name.trim()) continue; // skip empty entries
-          const key = normKey(p.hotel_name, p.city);
-          if (existingKeys.has(key)) continue;
-          batchFresh.push(p);
-          existingKeys.add(key);
-        }
-
-        if (batchFresh.length > 0) {
-          const enriched = batchFresh.map(p => {
-            const base = { ...p, id: uid(), created_at: new Date().toISOString(), batch: batchLabel, sdr, verified: false };
-            const safe = {};
-            PROSPECT_FIELDS.forEach(k => { if (base[k] !== undefined) safe[k] = base[k]; });
-            return safe;
-          });
-          // No tracking rows created here — hotels start as unverified in Hotel list.
-          // SDR must manually verify each hotel before it enters the Pipeline.
-
-          try {
-            await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(enriched) });
-          } catch (e) { console.error("Batch save error:", e); }
-
-          setProspects(prev => [...enriched, ...prev]);
-          allFresh.push(...enriched);
-          startCooldown();
-
-          setLog(`✓ ${allFresh.length} hotels saved to Hotel list${i < batches.length - 1 ? ` · batch ${i + 2} next...` : ""} — verify to add to Pipeline`);
-        }
-      }
-
-      // Final summary
-      const dupeNote = dupeCount > 0 ? ` · ${dupeCount} already in DB` : "";
-      const errNote = totalErrors > 0 ? ` · ${totalErrors} batch(es) failed` : "";
-      const rlNote = rateLimitHit ? ` · rate limited, ${toVerify.length - allFresh.length} remaining` : "";
-      if (allFresh.length > 0) {
-        setLog(`Done — ${allFresh.length} new hotels saved${dupeNote}${errNote}${rlNote}`);
-      } else if (!rateLimitHit) {
-        setLog(`No new hotels verified${dupeNote}. Try a different market.`);
-      }
-      setProgress(100);
-      setTab("hotels");
-    } catch (err) { setError(err.message); }
-    finally { setRunning(false); setTimeout(() => setProgress(0), 3000); }
+  function saveSdrName(v) {
+    setSdrName(v);
+    localStorage.setItem("wtk_sdr_name", v);
   }
 
   async function touchToggle(tid, n, e) {
@@ -552,12 +311,6 @@ export default function HomePage() {
     if (n === 4 && i < 0) upd.d4 = new Date().toISOString();
     setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...upd } : x));
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(upd) }); } catch (e) { console.error(e); }
-  }
-
-  async function updatePipeline(tid, updates, e) {
-    if (e) e.stopPropagation();
-    setTracking(prev => prev.map(x => x.id === tid ? { ...x, ...updates } : x));
-    try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify(updates) }); } catch (e) { console.error(e); }
   }
 
   async function updateProspect(pid, updates) {
@@ -600,23 +353,6 @@ export default function HomePage() {
     }
   }
 
-  function openRejectModal(tid, stage, e) {
-    if (e) e.stopPropagation();
-    setRejectReason("");
-    setRejectOtherText("");
-    setRejectModal({ tid, stage });
-  }
-
-  async function confirmReject() {
-    if (!rejectModal) return;
-    const stageVal = rejectModal.stage === "dead" ? "lost" : rejectModal.stage;
-    const reason = rejectReason === "Other" && rejectOtherText ? "Other: " + rejectOtherText.trim() : (rejectReason || "Not specified");
-    const updates = { pipeline_stage: stageVal, rejection_reason: reason };
-    await updatePipeline(rejectModal.tid, updates);
-    setRejectModal(null);
-    setRejectOtherText("");
-  }
-
   async function reopenSequence(tid, e) {
     if (e) e.stopPropagation();
     const upd = { pipeline_stage: "new", rejection_reason: null };
@@ -632,240 +368,16 @@ export default function HomePage() {
     try { await sbFetch(`/tracking?id=eq.${tid}`, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ intention: newVal }) }); } catch (e) { console.error(e); }
   }
 
-function showToast(msg, type = "success") {
-  setToast({ msg, type });
-  setTimeout(() => setToast(null), 3000);
-}
-
-function addHotelFormHasData() {
-  return Object.values(addHotelForm).some(v => v !== null && v !== undefined && String(v).trim() !== "");
-}
-
-function closeAddHotelModal() {
-  if (addHotelFormHasData()) {
-    if (!window.confirm("You have unsaved changes. Close anyway?")) return;
-  }
-  setAddHotelModal(false);
-  setAddHotelForm({});
-}
-  function copy(text, key) { navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 1500); }); }
-
-  async function saveManualHotel() {
-    console.log("saveManualHotel called", addHotelForm);
-    const f = addHotelForm;
-    if (!f.hotel_name || !f.hotel_name.trim()) { alert("Hotel name is required"); return; }
-    const record = {
-      id: uid(), hotel_name: f.hotel_name.trim(), city: f.city?.trim() || null, country: f.country?.trim() || null,
-      hotel_group: f.hotel_group?.trim() || null, brand: f.brand?.trim() || null,
-      address: f.address?.trim() || null, website: f.website?.trim() || null,
-      adr_usd: f.adr_usd ? Number(f.adr_usd) : null, rooms: f.rooms ? Number(f.rooms) : null,
-      current_provider: f.current_provider || null,
-      gm_name: f.gm_name?.trim() || null,
-      gm_first_name: f.gm_name?.trim() ? f.gm_name.trim().split(" ")[0] : null,
-      gm_title: f.gm_title?.trim() || null,
-      email: f.email?.trim() || null,
-      linkedin: f.linkedin?.trim() || null,
-      management_company: f.management_company?.trim() || null,
-      operating_model: f.operating_model || null,
-      research_notes: f.notes?.trim() || "Manually added",
-      sdr: sdrName || "Unknown", batch: "manual-" + new Date().toISOString().slice(0,10),
-    };
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/prospects`, {
-        method: "POST",
-        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-        body: JSON.stringify(record)
-      });
-      if (!res.ok) { const e = await res.text(); alert("Save failed: " + e); return; }
-      const resp = await res.json();
-      if (resp && resp.length > 0) {
-        setProspects(prev => [...prev, resp[0]]);
-        // Auto-create tracking entry
-        const tRes = await fetch(`${SUPABASE_URL}/rest/v1/tracking`, {
-          method: "POST",
-          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-          body: JSON.stringify({ id: uid(), prospect_id: resp[0].id, hotel: resp[0].hotel_name, gm: resp[0].gm_name || null, sdr: sdrName || "Unknown", pipeline_stage: "new", done: [], intention: 0 })
-        });
-        if (tRes.ok) { const tData = await tRes.json(); if (tData?.length > 0) setTracking(prev => [...prev, tData[0]]); }
-      }
-      setAddHotelModal(false);
-      setAddHotelForm({});
-      showToast(`✓ "${record.hotel_name}" added to hotel list`);
-    } catch (err) { console.error("Save hotel error:", err); alert("Error: " + err.message); }
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
   }
 
-  function exportCSV() {
-    const h = ["Hotel","Brand","Tier","City","Country","Rooms","F&B","ADR USD","Rating","Reviews","Contact","Title","Email","LinkedIn","Confidence","Strategy","Provider","SDR","Batch","Added"];
-    const rows = filteredP.map(p => [p.hotel_name,p.brand,p.tier,p.city,p.country,p.rooms||"",p.restaurants||"",p.adr_usd||"",p.rating||"",p.review_count||"",p.gm_name||"",p.gm_title||"",p.email||"",p.linkedin||"",p.contact_confidence||"",p.engagement_strategy||"",p.current_provider||"",p.sdr||"",p.batch||"",fmtDateShort(p.created_at)]);
-    const csv = [h,...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download = `WTK_SDR_${new Date().toISOString().slice(0,10)}.csv`; a.click();
-  }
-
-  async function importCSV(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = "";
-
-    let lines;
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-
-    if (isExcel) {
-      // Parse Excel using SheetJS (available as global XLSX from CDN)
-      try {
-        const ab = await file.arrayBuffer();
-        const mod = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
-        const wb = mod.read(ab, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const csv = mod.utils.sheet_to_csv(ws);
-        lines = csv.split(/\r?\n/).filter(Boolean);
-      } catch (err) {
-        return alert("Failed to parse Excel file: " + err.message);
-      }
-    } else {
-      let text = await file.text();
-      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-      lines = text.split(/\r?\n/).filter(Boolean);
-    }
-    if (lines.length < 2) return alert("CSV appears empty.");
-
-    function parseRow(line) {
-      const cols = []; let cur = "", inQ = false;
-      for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
-        else if (c === ',' && !inQ) { cols.push(cur); cur = ""; }
-        else cur += c;
-      }
-      cols.push(cur); return cols.map(s => s.trim());
-    }
-
-    const DB_FIELDS = ["id","hotel_name","brand","hotel_group","tier","city","country","address","website","rooms","restaurants","adr_usd","rating","review_count","current_provider","gm_name","gm_first_name","gm_title","email","linkedin","phone","email_source","contact_confidence","outreach_email_subject","outreach_email_body","linkedin_dm","engagement_strategy","strategy_reason","research_notes","sdr","batch","created_at","lead_status","management_company","operating_model","operating_model_note","verified"];
-    const headers = parseRow(lines[0]).map(h => h.toLowerCase().trim());
-    const isDirectMode = DB_FIELDS.filter(f => headers.includes(f)).length >= 5;
-
-    function col(row, ...names) {
-      for (const n of names) {
-        const idx = headers.findIndex(h => h.includes(n));
-        if (idx >= 0 && row[idx] && row[idx].trim()) return row[idx].trim();
-      }
-      return null;
-    }
-    function direct(row, field) {
-      const idx = headers.indexOf(field);
-      if (idx >= 0 && row[idx] && row[idx].trim() && row[idx].trim() !== 'None') return row[idx].trim();
-      return null;
-    }
-    function num(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
-    function inte(v) { const n = parseInt(v); return isNaN(n) ? null : n; }
-
-    const imported = [];
-    for (const line of lines.slice(1)) {
-      const row = parseRow(line);
-      if (!row.some(Boolean)) continue;
-
-      let p;
-      if (isDirectMode) {
-        // CSV has exact DB field names — map directly
-        const hotelName = direct(row, "hotel_name") || direct(row, "hotel");
-        if (!hotelName) continue;
-        p = { id: direct(row,"id") || uid(), created_at: direct(row,"created_at") || new Date().toISOString() };
-        for (const f of DB_FIELDS) {
-          if (f === "id" || f === "created_at") continue;
-          p[f] = direct(row, f);
-        }
-        // Force hotel_name from common aliases
-        if (!p.hotel_name) p.hotel_name = hotelName;
-        // Map common column aliases that don't match DB field names exactly
-        if (!p.hotel_group) p.hotel_group = direct(row, "group") || direct(row, "chain");
-        if (!p.current_provider) p.current_provider = direct(row, "provider");
-        if (!p.gm_name) p.gm_name = direct(row, "contact") || direct(row, "gm");
-        if (!p.gm_title) p.gm_title = direct(row, "position") || direct(row, "title");
-        if (!p.management_company) p.management_company = direct(row, "mgmt company") || direct(row, "management");
-        if (!p.operating_model) p.operating_model = direct(row, "ownership");
-        if (!p.adr_usd && !p.adr_usd) { const adr = num(direct(row, "adr")); if (adr) p.adr_usd = adr; }
-        // Coerce numeric fields
-        p.rooms = inte(p.rooms);
-        p.restaurants = inte(p.restaurants);
-        p.adr_usd = num(p.adr_usd);
-        p.rating = num(p.rating);
-        p.review_count = inte(p.review_count);
-        if (!p.current_provider && p.brand) p.current_provider = inferProvider(p.brand, p.hotel_name);
-        if (!p.gm_first_name && p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
-      } else {
-        // Generic flexible mapping
-        const hotelName = col(row, "hotel","property","name");
-        if (!hotelName) continue;
-        const brand = col(row, "brand");
-        p = {
-          id: uid(), created_at: new Date().toISOString(), batch: "import",
-          hotel_name: hotelName, brand: brand || null,
-          hotel_group: col(row, "group","chain","company") || brand || null,
-          tier: col(row, "tier","segment","category") || "Luxury",
-          city: col(row, "city","location"), country: col(row, "country"),
-          address: col(row, "address"), website: col(row, "website","url","web"),
-          rooms: inte(col(row, "room","rooms")), restaurants: inte(col(row, "f&b","restaurant")),
-          adr_usd: num(col(row, "adr","rate","price")), rating: num(col(row, "rating","score")),
-          review_count: inte(col(row, "review")),
-          gm_name: col(row, "gm","general manager","contact"),
-          gm_first_name: null, gm_title: col(row, "title","position") || "General Manager",
-          email: col(row, "email","mail"), linkedin: col(row, "linkedin"),
-          current_provider: col(row, "provider","platform","tech") || inferProvider(brand, hotelName),
-          engagement_strategy: col(row, "strategy","engagement") || "DIRECT-TO-GM",
-          sdr: col(row, "sdr","owner","assigned") || sdrName || "Unknown",
-          outreach_email_subject: null, outreach_email_body: null, linkedin_dm: null,
-          research_notes: null, contact_confidence: "L",
-        };
-        if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
-      }
-
-      // ── Sanitize multi-value fields: take first value only ──
-      function firstVal(v, sep) {
-        if (!v) return v;
-        const s = String(v);
-        // Split on comma, semicolon, newline, " / ", " & " (but not within names like "JW Marriott")
-        const parts = s.split(/[,;\n]|(?:\s\/\s)/).map(x => x.trim()).filter(Boolean);
-        return parts[0] || v;
-      }
-      function firstEmail(v) {
-        if (!v) return v;
-        const s = String(v);
-        // Find first email-like pattern
-        const emails = s.match(/[^\s,;]+@[^\s,;]+/g);
-        return emails ? emails[0] : null;
-      }
-      if (p.gm_name && /[,;\n]/.test(p.gm_name)) p.gm_name = firstVal(p.gm_name);
-      if (p.email) p.email = firstEmail(p.email);
-      if (p.phone && /[,;\n]/.test(String(p.phone))) p.phone = firstVal(String(p.phone));
-      if (p.gm_name) p.gm_first_name = p.gm_name.split(" ")[0];
-
-      imported.push(p);
-    }
-
-    if (!imported.length) {
-      // Debug: show what the parser actually saw
-      const debugHeaders = headers.join(" | ");
-      const debugRow1 = lines[1] ? parseRow(lines[1]).join(" | ") : "(no data)";
-      const debugMatched = headers.findIndex(h => h.includes("hotel"));
-      console.error("[Import Debug]", { headers, debugRow1, isDirectMode, hotelColIndex: debugMatched, lineCount: lines.length });
-      return alert(`No valid rows found.\n\nDebug info:\n- Lines: ${lines.length}\n- Mode: ${isDirectMode ? "Direct" : "Flexible"}\n- Headers: ${debugHeaders.slice(0,200)}\n- "hotel" col index: ${debugMatched}\n- Row 1 sample: ${debugRow1.slice(0,150)}`);
-    }
-    if (!confirm(`Import ${imported.length} hotels? (Mode: ${isDirectMode ? "Direct field match" : "Flexible mapping"})`)) return;
-
-    try {
-      // Supabase has 1000 row insert limit — chunk it
-      const CHUNK = 500;
-      // Ensure all imported records have verified=false — they start in Hotel list only.
-      // SDR must manually verify before they enter Pipeline.
-      const toSave = imported.map(p => ({ ...p, verified: p.verified ?? false }));
-      for (let i = 0; i < toSave.length; i += CHUNK) {
-        await sbFetch("/prospects", { method: "POST", prefer: "return=minimal", body: JSON.stringify(toSave.slice(i, i+CHUNK)) });
-      }
-      // No tracking rows created on import — verify flow handles that.
-      setProspects(prev => [...prev, ...toSave]);
-      alert(`✓ ${toSave.length} hotels imported to Hotel list. Verify each hotel to add to Pipeline.`);
-    } catch(err) {
-      alert("Import failed: " + err.message);
-    }
+  function copy(text, key) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 1500);
+    });
   }
 
   const sel = selected ? prospects.find(p => p.id === selected) : null;
@@ -933,7 +445,6 @@ function closeAddHotelModal() {
     if (filterGrade.length > 0 && p && !filterGrade.includes(calcLeadScore(p).grade)) return false;
     return true;
   });
-  const contacted = validTracking.filter(t => (t.done || []).length > 0).length;
   const totalHotelPages = Math.ceil(sortedP.length / HOTELS_PER_PAGE);
   const pagedP = sortedP.slice((hotelsPage-1)*HOTELS_PER_PAGE, hotelsPage*HOTELS_PER_PAGE);
   const allCountries = [...new Set(prospects.map(p=>p.country).filter(Boolean))].sort();
@@ -941,10 +452,6 @@ function closeAddHotelModal() {
   const allGroups = [...new Set(prospects.map(p=>normalizeGroup(p.hotel_group||p.brand)).filter(Boolean))].sort();
   const allBrands = [...new Set(prospects.map(p=>normalizeBrand(p.brand)).filter(Boolean))].sort();
   const allProviders = [...new Set(prospects.map(p=>getProvider(p)||"Unknown"))].sort();
-  const countries = region ? Object.keys(GEO[region] || {}) : [];
-  const cities = region && country ? (GEO[region] || {})[country] || [] : [];
-  const chainGroups = Object.keys(CHAIN_BRANDS).sort();
-  const brandOptions = group ? (CHAIN_BRANDS[group] || []) : [];
 
   return (
     <>
@@ -964,68 +471,13 @@ function closeAddHotelModal() {
         </nav>
 
         <div className="main">
-          <div className="cmd-panel">
-            <div className="cmd-inline">
-              {!multiMode ? (
-                <div className="cmd-geo">
-                  <select value={region} onChange={e=>{setRegion(e.target.value);setCountry("");setCityInput("");}} title="Region" className="cmd-input">
-                    <option value="">Global</option>
-                    {Object.keys(GEO).map(r=><option key={r}>{r}</option>)}
-                  </select>
-                  <select value={country} onChange={e=>{setCountry(e.target.value);setCityInput((GEO[region]||{})[e.target.value]?.[0]||"")}} title="Country" className="cmd-input" disabled={!region}>
-                    <option value="">All Countries</option>
-                    {countries.map(c=><option key={c}>{c}</option>)}
-                  </select>
-                  <select value={cityInput} onChange={e=>setCityInput(e.target.value)} title="City" className="cmd-input">
-                    <option value="">All cities</option>
-                    {cities.map(c=><option key={c}>{c}</option>)}
-                  </select>
-                  <button className="cmd-link" onClick={()=>setMultiMode(true)}>custom ▾</button>
-                </div>
-              ) : (
-                <div className="cmd-geo">
-                  <input value={customMarket} onChange={e=>setCustomMarket(e.target.value)} placeholder="e.g. Europe, China + Japan" className="cmd-input" style={{width:200}} />
-                  <button className="cmd-link" onClick={()=>setMultiMode(false)}>← picker</button>
-                </div>
-              )}
-              <div className="cmd-divider"/>
-              <button className={`tier-btn ${scope==="chain"?"active":""}`} onClick={()=>{setScope("chain");setBrand("");}} title="Search by hotel chain/brand">Chain</button>
-              <button className={`tier-btn ${scope==="independent"?"active":""}`} onClick={()=>{setScope("independent");setGroup("");setBrand("");}} title="Independent/boutique hotels">Independent</button>
-              <button className={`tier-btn ${scope==="all"?"active":""}`} onClick={()=>{setScope("all");setGroup("");setBrand("");}} title="All hotels in market">All</button>
-              <div className="cmd-divider"/>
-              {scope === "chain" && (
-                <>
-                  <select value={group} onChange={e=>{setGroup(e.target.value);setBrand("");}} className="cmd-input" style={{width:120}}>
-                    <option value="">Group</option>
-                    {chainGroups.map(g=><option key={g} value={g}>{g}</option>)}
-                  </select>
-                  {group && brandOptions.length > 1 && (
-                    <select value={brand} onChange={e=>setBrand(e.target.value)} className="cmd-input" style={{width:130}}>
-                      <option value="">All {group} brands</option>
-                      {brandOptions.map(b=><option key={b} value={b}>{b}</option>)}
-                    </select>
-                  )}
-                  {!group && <input value={brand} onChange={e=>setBrand(e.target.value)} placeholder="or type brand..." className="cmd-input" style={{width:120}} />}
-                </>
-              )}
-              {scope === "independent" && (
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>Min ADR $</span>
-                  <input type="number" min="50" max="2000" step="50" value={minAdr} onChange={e=>setMinAdr(e.target.value)} className="cmd-input" style={{width:60}} title="Minimum ADR in USD" />
-                  <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>Min Rooms</span>
-                  <input type="number" min="10" max="500" step="10" value={minRooms} onChange={e=>setMinRooms(e.target.value)} className="cmd-input" style={{width:52}} title="Minimum room count" />
-                </div>
-              )}
-              <input type="number" min="1" max="5" value={count} onChange={e=>setCount(e.target.value)} className="cmd-input" style={{width:44}} title="Count (max 5)" />
-              <input value={sdrName} onChange={e=>saveSdrName(e.target.value)} placeholder="Your name" className="cmd-input" style={{width:90}} />
-              <button className="run-btn" onClick={run} disabled={running}>
-                {running ? <><div className="spinner"/>Searching...</> : cooldown > 0 ? `⏱ ${cooldown}s` : "▶ Run"}
-              </button>
-            </div>
-            {running && <div className="progress-wrap" style={{marginTop:8}}><div className="progress-bar"><div className="progress-fill" style={{width:`${progress}%`}}/></div><div className="progress-text">› {log}</div></div>}
-            {!running && log && !error && <div className="success-msg" style={{marginTop:6}}>✓ {log}</div>}
-            {error && <div className="error-msg" style={{marginTop:6}}>⚠ {error}</div>}
-          </div>
+          <ResearchCommandPanel
+            prospects={prospects}
+            setProspects={setProspects}
+            setTab={setTab}
+            sdrName={sdrName}
+            saveSdrName={saveSdrName}
+          />
 
           <div className="toolbar">
             {sdrs.length > 1 && sdrs.map(s=><button key={s} className={`filter-pill ${filterSdr===s?"active":""}`} onClick={()=>{setFilterSdr(s);setHotelsPage(1);}}>{s==="all"?"All SDRs":s}</button>)}
@@ -1034,11 +486,31 @@ function closeAddHotelModal() {
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
             {["A","B","C"].map(g=><button key={g} className={`filter-pill ${filterGrade.includes(g)?"active":""}`} onClick={()=>{setFilterGrade(prev=>prev.includes(g)?prev.filter(x=>x!==g):[...prev,g]);setHotelsPage(1);}} style={{borderColor:{A:"#1d4ed8",B:"#475569",C:"#94a3b8"}[g],color:filterGrade.includes(g)?undefined:{A:"#1d4ed8",B:"#475569",C:"#94a3b8"}[g]}}>{g}</button>)}
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
-            <button className="export-btn" style={{fontWeight:600}} onClick={()=>{setAddHotelForm({});setAddHotelModal(true);}}>+ Add Hotel</button>
-            {filteredP.length > 0 && <button className="export-btn" onClick={exportCSV}>↓ Export CSV</button>}
-            <label className="export-btn" style={{cursor:"pointer"}} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
+            <AddHotelToolbarControl
+              ref={addHotelRef}
+              sdrName={sdrName}
+              setProspects={setProspects}
+              setTracking={setTracking}
+              onToast={showToast}
+              onOpenChange={setAddHotelModalOpen}
+            />
+            {filteredP.length > 0 && (
+              <button type="button" className="export-btn" onClick={() => exportProspectsCsv(filteredP)}>
+                ↓ Export CSV
+              </button>
+            )}
+            <label className="export-btn" style={{ cursor: "pointer" }} title="Import hotels from CSV/Excel (exported from this tool or mapped manually)">
               ↑ Import CSV
-              <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={importCSV}/>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importProspectsFromFile(file, { setProspects, sdrName });
+                  e.target.value = "";
+                }}
+              />
             </label>
             <span style={{width:1,height:24,background:"var(--border)",margin:"0 4px",flexShrink:0}}/>
             {filteredP.length > 1 && <button className="export-btn" onClick={()=>{const g=findDuplicates(filteredP).filter(g=>!groupIsDismissed(g.hotels,dismissedDupPairs));setDupGroups(g);setDupExpanded(new Set());}}>Find Duplicates</button>}
@@ -1200,17 +672,9 @@ function closeAddHotelModal() {
         setDupGroups={setDupGroups}
       />
 
-      <AddHotelModal
-        open={addHotelModal}
-        form={addHotelForm}
-        setForm={setAddHotelForm}
-        onClose={closeAddHotelModal}
-        onSave={saveManualHotel}
-      />
-
       <RejectLostModal
         open={!!rejectModal}
-        onClose={() => setRejectModal(null)}
+        onClose={closeRejectModal}
         rejectReason={rejectReason}
         setRejectReason={setRejectReason}
         rejectOtherText={rejectOtherText}

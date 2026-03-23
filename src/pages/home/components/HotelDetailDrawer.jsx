@@ -3,9 +3,9 @@ import { getProvider } from "../../../utils/hotelNormalize.js";
 import { calcLeadScore } from "../../../utils/leadScore.js";
 import { touch2Body, touch3Body, touch4Body } from "../../../utils/emailTemplates.js";
 import { uid } from "../../../utils/uid.js";
-import { LeadScoreBadge } from "../../../components/LeadScoreBadge.jsx";
-import { EditableField } from "../../../components/EditableField.jsx";
-import { EmailBody } from "../../../components/EmailBody.jsx";
+import { LeadScoreBadge } from "./LeadScoreBadge.jsx";
+import { EditableField } from "./EditableField.jsx";
+import { EmailBody } from "./EmailBody.jsx";
 
 export function HotelDetailDrawer({
   prospect,

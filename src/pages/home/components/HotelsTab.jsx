@@ -1,4 +1,4 @@
-import { LeadScoreBadge } from "../../../components/LeadScoreBadge.jsx";
+import { LeadScoreBadge } from "./LeadScoreBadge.jsx";
 import { calcLeadScore } from "../../../utils/leadScore.js";
 import {
   getProvider,
